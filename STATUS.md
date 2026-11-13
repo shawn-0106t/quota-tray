@@ -22,7 +22,7 @@ Phase 1 已落地；**Phase 2 的视觉部分已完成**——四个窗口（主
 |---|---|
 | `src/theme.css` | 重写为 D token + 共享原语：`--paper` / `--ink-1..3` / `--hair` / `--accent` / `--seg-*` / `--danger`、30/600 数字、10/500 大写微标签、4px 胶囊条、发丝线行、chip、分段控件、ghost 按钮、`.chrome-close`、焦点 ring、`prefers-reduced-motion` |
 | 主面板 `index.html` / `main.css` | D 骨架：字标 + 时间戳（`Update failed` 转红）；两列裸读数（WEEKLY / 5-HOUR，数字与 `%` 分离）；Extra usage 行（含月度条）；Kimi Code CLI 行 + Update chip；4 格 ghost footer。**去掉 header logo**（D 版只有字标） |
-| 设置窗 `settings.html` / `settings.css` | 主题 3 格 / 刷新间隔 4 格都用分段控件（替代 radio + pill）；自启改为单色开关（34×20 轨道，开启态 `--ink-1` 实心）；Save 为全宽 ghost 按钮；窗口内容自适应（404×351） |
+| 设置窗 `settings.html` / `settings.css` | 主题 3 格 / 刷新间隔 4 格都用分段控件（替代 radio + pill）；自启改为单色开关（38×20 轨道，开启态 `--ink-1` 实心）；Save 为全宽 ghost 按钮；窗口内容自适应（404×351） |
 | 技能窗 `skills.html` / `skills.css` | 卡片列表改发丝线行 + 大写 micro-label 分组；summary 行（计数 + ghost Refresh）；细滚动条 |
 | 托盘菜单 `menu.css` | 188 宽的 ghost 列表；阴影留白保持 24px（`panel.rs` 的定位公式依赖该值） |
 | 后端 | 新增 `panel_height` / `settings_height` 命令；主面板按上报高度 `LogicalSize` 改高并用 `PhysicalPosition` 把**右下角钉在距工作区 12px**，工作区高度夹取；设置窗首次打开或高度变化时重新居中（同高度重复打开只钉尺寸，不重置用户拖动过的位置）；两者都先定尺寸再显示 |

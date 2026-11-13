@@ -43,7 +43,7 @@
    Monochrome on purpose — blue stays reserved for usage (PLAN §3.5). */
 .switch {
   position: relative;
-  width: 34px;
+  width: 38px;
   height: 20px;
   flex: none;
   border: 1px solid var(--ink-2);
@@ -72,7 +72,7 @@
 }
 .switch-row input:checked + .switch::after {
   background: var(--paper);
-  transform: translateX(14px);
+  transform: translateX(18px);
 }
 .switch-row input:focus-visible + .switch {
   outline: 2px solid var(--accent-bar);

@@ -98,7 +98,7 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 | 模型行 | 名称单行省略（`min-width: 0` + `text-overflow: ellipsis`、`white-space: nowrap`），金额固定右对齐、不参与省略 —— 官方展示名可能比手写表长，不能顶掉金额 |
 | chip | radius 9999，padding `2 8`，`--tint` 底 + `--accent-ink` 字 |
 | footer | `grid 4`，`gap 2`，padding 5，按钮高 42、radius 8、图标 16、hover 底 `--seg-track` |
-| 开关 | 轨道 34×20、radius 9999、1px `--ink-2` 描边；钮 14、inset 2；开启态轨道 `--ink-1`、钮 `--paper`、位移 14px；150ms 过渡；整行是点击目标；**单色，不占蓝**（蓝只给用量） |
+| 开关 | 轨道 38×20、radius 9999、1px `--ink-2` 描边；钮 14、inset 2；开启态轨道 `--ink-1`、钮 `--paper`、位移 18px；150ms 过渡；整行是点击目标；**单色，不占蓝**（蓝只给用量） |
 | 焦点 | `outline: 2px solid --accent-bar; outline-offset: 2px` |
 
 ### 3.5 颜色语义
