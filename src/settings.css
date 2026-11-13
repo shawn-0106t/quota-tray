@@ -22,8 +22,8 @@
   margin-top: 18px;
 }
 
-/* Autostart: label left, 15px box right */
-.check-row {
+/* Autostart: label left, 34x20 switch right (whole row is the hit target) */
+.switch-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -33,41 +33,48 @@
   padding-top: 12px;
   cursor: pointer;
 }
-.check-row input {
+.switch-row input {
   position: absolute;
   opacity: 0;
   width: 0;
   height: 0;
 }
-.check-row .box {
+/* Off: outlined track + ink dot. On: ink track + paper dot shifted right.
+   Monochrome on purpose — blue stays reserved for usage (PLAN §3.5). */
+.switch {
   position: relative;
-  width: 15px;
-  height: 15px;
+  width: 34px;
+  height: 20px;
   flex: none;
-  /* ink-2, not --hair: a 21%-alpha hairline is only 1.34:1 on paper, far
-     below the 3:1 WCAG asks of a control boundary (PLAN §9). */
   border: 1px solid var(--ink-2);
-  border-radius: 4px;
+  border-radius: 9999px;
   background: transparent;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
 }
-.check-row .box::after {
-  content: '\2713'; /* ✓ */
+.switch::after {
+  content: '';
   position: absolute;
-  inset: 0;
-  font-size: 10px;
-  line-height: 13px;
-  text-align: center;
-  color: var(--ink-1);
-  visibility: hidden;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink-2);
+  transition:
+    transform 150ms ease,
+    background-color 150ms ease;
 }
-.check-row input:checked + .box {
-  background: var(--seg-on);
-  box-shadow: inset 0 0 0 1px var(--seg-ring);
+.switch-row input:checked + .switch {
+  background: var(--ink-1);
+  border-color: var(--ink-1);
 }
-.check-row input:checked + .box::after {
-  visibility: visible;
+.switch-row input:checked + .switch::after {
+  background: var(--paper);
+  transform: translateX(14px);
 }
-.check-row input:focus-visible + .box {
+.switch-row input:focus-visible + .switch {
   outline: 2px solid var(--accent-bar);
   outline-offset: 2px;
 }

@@ -22,14 +22,14 @@ Phase 1 已落地；**Phase 2 的视觉部分已完成**——四个窗口（主
 |---|---|
 | `src/theme.css` | 重写为 D token + 共享原语：`--paper` / `--ink-1..3` / `--hair` / `--accent` / `--seg-*` / `--danger`、30/600 数字、10/500 大写微标签、4px 胶囊条、发丝线行、chip、分段控件、ghost 按钮、`.chrome-close`、焦点 ring、`prefers-reduced-motion` |
 | 主面板 `index.html` / `main.css` | D 骨架：字标 + 时间戳（`Update failed` 转红）；两列裸读数（WEEKLY / 5-HOUR，数字与 `%` 分离）；Extra usage 行（含月度条）；Kimi Code CLI 行 + Update chip；4 格 ghost footer。**去掉 header logo**（D 版只有字标） |
-| 设置窗 `settings.html` / `settings.css` | 主题 3 格 / 刷新间隔 4 格都用分段控件（替代 radio + pill）；自启改为中性 ring 复选框；Save 为全宽 ghost 按钮；窗口内容自适应（404×347） |
+| 设置窗 `settings.html` / `settings.css` | 主题 3 格 / 刷新间隔 4 格都用分段控件（替代 radio + pill）；自启改为单色开关（34×20 轨道，开启态 `--ink-1` 实心）；Save 为全宽 ghost 按钮；窗口内容自适应（404×351） |
 | 技能窗 `skills.html` / `skills.css` | 卡片列表改发丝线行 + 大写 micro-label 分组；summary 行（计数 + ghost Refresh）；细滚动条 |
 | 托盘菜单 `menu.css` | 188 宽的 ghost 列表；阴影留白保持 24px（`panel.rs` 的定位公式依赖该值） |
 | 后端 | 新增 `panel_height` / `settings_height` 命令；主面板按上报高度 `LogicalSize` 改高并用 `PhysicalPosition` 把**右下角钉在距工作区 12px**，工作区高度夹取；设置窗首次打开或高度变化时重新居中（同高度重复打开只钉尺寸，不重置用户拖动过的位置）；两者都先定尺寸再显示 |
 | 行为兼容 | 所有 IPC id、事件、`settings.json` 字段不变；调试版 exe 仍走 Vite devUrl，要看渲染先 `npm run dev` |
 | 高度上报时机 | **同步**测量，不走 `requestAnimationFrame`：面板在隐藏窗口里渲染，Chromium 对隐藏页暂停 rAF，用 rAF 会让冷启动先按 520 显示一帧再跳回 |
 
-窗口尺寸：`--test-ui` 实测（无数据占位）主面板 **424×319**、设置 **404×347**、技能 **404×520**。托盘菜单的 188×160 只是 `tauri.conf.json` 的初值——`show_menu` 会按前端上报改高（菜单卡片 172 + 48 = **188×220**）。主面板有真实数据时卡片 277（窗口 333），高度随内容变化，`--test-ui` 那次是占位态。
+窗口尺寸：`--test-ui` 实测（无数据占位）主面板 **424×314**、设置 **404×351**、技能 **404×520**。托盘菜单的 188×160 只是 `tauri.conf.json` 的初值——`show_menu` 会按前端上报改高（菜单卡片 172 + 48 = **188×220**）。主面板有真实数据时卡片 277（窗口 333），高度随内容变化，`--test-ui` 那次是占位态。
 
 ## 最近一次自检（2026-11-13 第二轮，本机）
 
@@ -41,10 +41,10 @@ Phase 1 已落地；**Phase 2 的视觉部分已完成**——四个窗口（主
 | `cargo build` | 通过 |
 | `cargo test` | 5 passed（recovery ×3、skills ×2） |
 | `quota-tray.exe --test-fetch` | live JSON，`error: null` |
-| `quota-tray.exe --test-ui` | 四窗 OK，退出码 0；尺寸见上 |
+| `quota-tray.exe --test-ui` | 四窗 OK，退出码 0；尺寸见上（需 vite 在跑，否则页面不加载、窗口停在 conf 尺寸） |
 | `check_contrast.py` | 53/53 PASS |
 | 视觉对照 | 四个窗口明暗两套截图与 `demo/panel-demo-d.html` 对照：字标/微标签/数字/发丝线/footer 一致；设置窗与菜单为同一套原语的延伸 |
-| 冷启动隐藏态 | 主面板窗口在**首次显示之前**已是 424×314（位置 872,454 = 工作区右下角 12px），证明高度上报不依赖窗口可见 |
+| 冷启动隐藏态 | 主面板窗口在**首次显示之前**已是内容高度（位置 872,454 = 工作区右下角 12px），证明高度上报不依赖窗口可见 |
 
 ## 接手必须知道的六件事
 

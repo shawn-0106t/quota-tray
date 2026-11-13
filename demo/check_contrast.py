@@ -111,8 +111,8 @@ def main() -> int:
         ("D light tab active on tile", ratio(over(black, 0.90, hex_rgb("#ffffff")), hex_rgb("#ffffff")), "4.5"),
         ("D dark  tab inactive on track", ratio(over(white, 0.56, hex_rgb("#262624")), hex_rgb("#262624")), "4.5"),
         ("D dark  tab active on tile", ratio(over(white, 0.84, hex_rgb("#3a3a37")), hex_rgb("#3a3a37")), "4.5"),
-        ("D light checkbox border ink-2 60%", ratio(over(black, 0.60, d_light), d_light), "3.0"),
-        ("D dark  checkbox border ink-2 56%", ratio(over(white, 0.56, d_dark), d_dark), "3.0"),
+        ("D light switch track ink-2 60%", ratio(over(black, 0.60, d_light), d_light), "3.0"),
+        ("D dark  switch track ink-2 56%", ratio(over(white, 0.56, d_dark), d_dark), "3.0"),
     ]
 
     bad = 0

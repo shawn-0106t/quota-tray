@@ -98,6 +98,7 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 | 模型行 | 名称单行省略（`min-width: 0` + `text-overflow: ellipsis`、`white-space: nowrap`），金额固定右对齐、不参与省略 —— 官方展示名可能比手写表长，不能顶掉金额 |
 | chip | radius 9999，padding `2 8`，`--tint` 底 + `--accent-ink` 字 |
 | footer | `grid 4`，`gap 2`，padding 5，按钮高 42、radius 8、图标 16、hover 底 `--seg-track` |
+| 开关 | 轨道 34×20、radius 9999、1px `--ink-2` 描边；钮 14、inset 2；开启态轨道 `--ink-1`、钮 `--paper`、位移 14px；150ms 过渡；整行是点击目标；**单色，不占蓝**（蓝只给用量） |
 | 焦点 | `outline: 2px solid --accent-bar; outline-offset: 2px` |
 
 ### 3.5 颜色语义
@@ -202,7 +203,7 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
   - tab 活动块的 ring 用中性灰时，对轨道/活动块只有约 1.2–1.3:1，低于 WCAG 1.4.11 对状态标识的 3:1；当前靠「填充差 + 字重 + `aria-selected`」表达状态，键盘焦点另有 2px 蓝 outline（3.8:1）兜底。可选改成强调蓝 ring（对轨道 3.8:1，代价是标题区多一个蓝色元素）——待定。
   - 托盘图标是否换新（当前沿用 kimi 的 K 标）。
   - ~~skills 窗口是否也随 D 版换肤~~（已定：随 D 版，2026-11-13 落地）。
-  - **设置窗复选框边界**：`--hair` 只给到 1.34:1（未勾选边框）/ 1.04:1（勾选填充），低于 WCAG 1.4.11 的 3:1。已改为 `--ink-2` 描边（5.6:1），勾选态仍靠 ✓ 字形表达；同一取舍与 tab ring 一致：状态不靠填色差，靠字形与焦点 ring。
+  - **设置窗开关边界**：`--hair` 只给到 1.34:1（轨道描边），低于 WCAG 1.4.11 的 3:1。已改为 `--ink-2` 描边（5.67:1 亮 / 6.26:1 暗），开启态是 `--ink-1` 实心轨道，两态都能分辨；与 tab ring 同一取舍：状态不靠填色差，靠形状与位置。
 
 ## 10. 设计审阅工具（`demo/`）
 
