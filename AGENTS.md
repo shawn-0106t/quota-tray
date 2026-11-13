@@ -38,9 +38,8 @@ src/                  # vanilla TS frontend (Vite multi-page build)
   common.ts           # shared DTO types + formatting helpers
   theme.css           # D tokens + shared primitives (PLAN §3.2, §3.4)
   main.css / settings.css / skills.css / menu.css   # layout only
-  assets/kimi-logo.png  # inlined as a data URI by Vite
   vite-env.d.ts
-vite.config.ts        # 4-page rollup input; inlines the logo (100 KB limit)
+vite.config.ts        # 4-page rollup input; 100 KB asset inlining budget
 tsconfig.json / package.json / package-lock.json
 src-tauri/            # Rust backend (Tauri 2)
   Cargo.toml          # crate quota-tray, lib quota_tray_lib

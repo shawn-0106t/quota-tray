@@ -7,6 +7,7 @@ import {
   ExtraInfo,
   QuotaResult,
   QuotaSegment,
+  SHADOW_ROOM,
   UpdateStatus,
   clampPercent,
   fmtYuan,
@@ -81,30 +82,26 @@ function renderQuota(r: QuotaResult | null): void {
     lastUpdated.textContent = `Updated ${hh}:${mm}`;
     lastUpdated.classList.remove('bad');
   }
-  scheduleHeightReport();
+  reportHeight();
 }
 
 function renderVersion(u: UpdateStatus): void {
   el('cli-version').textContent = u.localVersion ?? 'Not detected';
   el('badge').hidden = !u.updateAvailable;
-  scheduleHeightReport();
+  reportHeight();
 }
 
 // ---- Content height reporting (PLAN §4) ----
 
-// The backend keeps the window's bottom-right corner pinned when it resizes,
-// so the frontend only has to report content height + shadow fade room. Runs
-// after a frame so the DOM change has been laid out.
-let heightFrame = 0;
-function scheduleHeightReport(): void {
-  if (heightFrame) cancelAnimationFrame(heightFrame);
-  heightFrame = requestAnimationFrame(() => {
-    heightFrame = 0;
-    const root = document.getElementById('root');
-    if (!root) return;
-    const height = root.offsetHeight + 56; // + 2 * 28px margin
-    invoke('panel_height', { height }).catch(() => undefined);
-  });
+// Measured synchronously, never through requestAnimationFrame: the panel
+// renders while its window is still hidden (startup, and every quota-updated
+// tick while hidden), and Chromium pauses rAF for hidden pages — an rAF-based
+// report would only land after the window became visible, so the first show
+// would use a stale height. Reading offsetHeight forces the layout we need.
+function reportHeight(): void {
+  const root = document.getElementById('root');
+  if (!root) return;
+  invoke('panel_height', { height: root.offsetHeight + SHADOW_ROOM }).catch(() => undefined);
 }
 
 // ---- Show/hide animation (SPEC 15.1 / 15.2) ----
@@ -120,7 +117,7 @@ function playShow(): void {
   // Force reflow so the enter transition always restarts from the initial state
   void document.body.offsetWidth;
   document.body.classList.add('enter');
-  scheduleHeightReport(); // keep the bottom-anchored size in step with content
+  reportHeight(); // keep the bottom-anchored size in step with content
 }
 
 function playHide(): void {
@@ -155,7 +152,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   renderVersion(state.update);
   // Re-report once fonts have settled: the first measurement can precede the
   // final line heights and leave the window a few pixels off.
-  window.setTimeout(scheduleHeightReport, 120);
+  window.setTimeout(reportHeight, 120);
 
   el('btn-console').addEventListener('click', () => {
     invoke('open_console').catch(() => undefined);

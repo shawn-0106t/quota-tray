@@ -15,7 +15,7 @@
 > | 7 Build, Test, and Release | Build and self-check commands apply; the release pipeline is redefined by `PLAN.md` §8 P5 |
 > | 8 Runtime Requirements | Applies |
 > | 9 Maintenance Boundaries and Documentation Map | Replaced by this repository's `AGENTS.md` / `PLAN.md` / `STATUS.md` |
-> | 10 Window Specifications | Sizes follow `PLAN.md` §4 (panel height is content-driven; Settings and Skills keep theirs for now) |
+> | 10 Window Specifications | Sizes follow `PLAN.md` §4 (the panel and the settings window are content-sized; Skills stays 404x520) |
 > | 11 Color Scheme | Replaced by `PLAN.md` §3.2 |
 > | 12 Panel UI Structure | Replaced by `PLAN.md` §3 and `demo/panel-demo-d.html`; rewritten as two tabs in P2 |
 > | 13 Settings Window UI Structure | Applies; P4 adds the DeepSeek credentials section |

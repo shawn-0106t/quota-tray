@@ -15,7 +15,8 @@ export default defineConfig({
   },
   build: {
     target: 'es2021',
-    // Inline small assets (the logo) as data URIs so no asset:// protocol is needed
+    // Inline small assets as data URIs so no asset:// protocol is needed
+    // (nothing qualifies today; the 100 KB budget stays for future icons)
     assetsInlineLimit: 100 * 1024,
     rollupOptions: {
       input: {

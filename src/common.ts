@@ -46,6 +46,10 @@ export interface AppStateDto {
   theme: string; // effective theme: light | dark
 }
 
+/** Transparent shadow-fade room around a window card: the #root margin is
+    28px on each side. Must match PANEL_MARGIN in src-tauri/src/panel.rs. */
+export const SHADOW_ROOM = 56;
+
 // ---- Theme ----
 
 export function applyTheme(theme: string): void {
@@ -88,11 +92,6 @@ export function fmtYuan(cents: number): string {
   const yuan = Math.floor(cents / 100);
   const frac = cents % 100;
   return '¥' + yuan + (frac > 0 ? '.' + String(frac).padStart(2, '0') : '');
-}
-
-/** {Percent:0}% — display uses the raw (unclamped) percent. */
-export function fmtPercent(percent: number): string {
-  return `${Math.round(percent)}%`;
 }
 
 export function clampPercent(percent: number): number {

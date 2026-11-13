@@ -37,6 +37,9 @@ pub struct AppState {
     /// Content-measured settings-window height in DIP (card + shadow fade
     /// room). The window is centred, so this only drives the size (PLAN §4).
     pub settings_height: Mutex<f64>,
+    /// Height last applied to the settings window; a repeat does not re-centre
+    /// it, so a position the user dragged to survives a close/reopen.
+    pub settings_applied_height: Mutex<f64>,
     /// Fired when the polling schedule must restart (settings saved)
     pub reschedule: Arc<Notify>,
     /// Fired by every safe_refresh (manual, hover, or scheduled) to move the
@@ -66,6 +69,7 @@ impl AppState {
             menu_height: Mutex::new(160.0),
             panel_height: Mutex::new(520.0),
             settings_height: Mutex::new(360.0),
+            settings_applied_height: Mutex::new(0.0),
             reschedule: Arc::new(Notify::new()),
             retime: Arc::new(Notify::new()),
             retime_delay: Mutex::new(None),

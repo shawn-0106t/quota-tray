@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import './theme.css';
 import './settings.css';
-import { AppStateDto, initTheme } from './common';
+import { AppStateDto, SHADOW_ROOM, initTheme } from './common';
 
 function el<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
@@ -13,7 +13,9 @@ function el<T extends HTMLElement>(id: string): T {
 function reportHeight(): void {
   const root = document.getElementById('root');
   if (!root) return;
-  invoke('settings_height', { height: root.offsetHeight + 56 }).catch(() => undefined);
+  invoke('settings_height', { height: root.offsetHeight + SHADOW_ROOM }).catch(
+    () => undefined,
+  );
 }
 
 /** Backfill the current settings into the controls (SPEC 13.2: every open). */

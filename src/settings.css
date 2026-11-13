@@ -44,7 +44,9 @@
   width: 15px;
   height: 15px;
   flex: none;
-  border: 1px solid var(--hair);
+  /* ink-2, not --hair: a 21%-alpha hairline is only 1.34:1 on paper, far
+     below the 3:1 WCAG asks of a control boundary (PLAN §9). */
+  border: 1px solid var(--ink-2);
   border-radius: 4px;
   background: transparent;
 }

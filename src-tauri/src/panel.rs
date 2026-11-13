@@ -89,7 +89,7 @@ pub fn show_panel(app: &AppHandle) {
 }
 
 /// Content height reported by the frontend (card + both shadow fade margins).
-pub(crate) fn panel_height(app: &AppHandle) -> f64 {
+fn panel_height(app: &AppHandle) -> f64 {
     *app.state::<AppState>().panel_height.lock().unwrap()
 }
 
@@ -97,13 +97,16 @@ pub(crate) fn panel_height(app: &AppHandle) -> f64 {
 const SETTINGS_W: f64 = 404.0;
 
 /// Content height reported for the settings window (card + margins).
-pub(crate) fn settings_height(app: &AppHandle) -> f64 {
+fn settings_height(app: &AppHandle) -> f64 {
     *app.state::<AppState>().settings_height.lock().unwrap()
 }
 
-/// Size the settings window to its reported content height and keep it
-/// centred on the primary work area (it is opened from the panel, so the
-/// user's focus is already there; no anchoring rule applies).
+/// Size the settings window to its reported content height, and centre it the
+/// first time (or whenever the height changes).
+///
+/// Re-centring on every open would throw away a position the user dragged the
+/// sheet to — the title bar is draggable — so a repeated same-height apply only
+/// re-pins the size (the DPI guard) and leaves the position alone.
 pub(crate) fn apply_settings_size(app: &AppHandle) {
     let Some(w) = app.get_webview_window("settings") else {
         return;
@@ -114,6 +117,13 @@ pub(crate) fn apply_settings_size(app: &AppHandle) {
     let max_h = ((bottom - top) / s) * 0.9;
     let h = settings_height(app).clamp(120.0, max_h.max(120.0));
     let _ = w.set_size(LogicalSize::new(SETTINGS_W, h));
+    let st = app.state::<AppState>();
+    let mut applied = st.settings_applied_height.lock().unwrap();
+    if (*applied - h).abs() < 0.5 {
+        return;
+    }
+    *applied = h;
+    drop(applied);
     let _ = w.set_position(PhysicalPosition::new(
         left + ((right - left) - SETTINGS_W * s) / 2.0,
         top + ((bottom - top) - h * s) / 2.0,
@@ -145,6 +155,12 @@ pub(crate) fn apply_panel_size(app: &AppHandle) {
     let (_, _, wa_right, wa_bottom) = work_area_phys();
     // Window edges = card edges + the transparent margin; the card's visible
     // right/bottom edges sit PANEL_GAP inside the work area.
+    //
+    // Consequence (accepted, PLAN §4): the window itself ends
+    // PANEL_MARGIN - PANEL_GAP = 16px past the work-area corner. That strip is
+    // transparent but still hit-tested, so while the panel is open a click on
+    // the taskbar's bottom-right corner lands on us (and only blurs the panel).
+    // Clamping the window instead would move the card's visible edge inward.
     let _ = w.set_position(PhysicalPosition::new(
         wa_right - (PANEL_W + PANEL_GAP - PANEL_MARGIN) * s,
         wa_bottom - (h + PANEL_GAP - PANEL_MARGIN) * s,
