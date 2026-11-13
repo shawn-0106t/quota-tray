@@ -143,7 +143,9 @@ New in this project:
 ## Security considerations
 
 - The Kimi OAuth token / API key is read-only and goes **only** to `https://api.kimi.com/coding/v1/usages` as a Bearer token. Never log, persist elsewhere, or send to any other endpoint.
-- DeepSeek credentials stay in `~/.deepseek-planbar/credentials.json`; the app talks only to `api.deepseek.com` and `platform.deepseek.com`. The sign-in window captures the user token from the user's own session and verifies it with a real `amount` request before saving.
+- DeepSeek credentials live in `config_dir()/deepseek-credentials.json` (portable mode: next to the exe), not in the parent app's `~/.deepseek-planbar/` directory. Values are DPAPI-protected with a `dpapi:` prefix; key names stay readable. The old file is imported **once** and never written back, so the parent app keeps working. The app talks only to `api.deepseek.com` and `platform.deepseek.com`. The sign-in window captures the user token from the user's own session and verifies it with a real `amount` request before saving.
+- Never log, print or transmit the API key or user token — `--test-deepseek --verbose` may print `credential source: env | file | imported | none | undecryptable`, never a value. A field without the `dpapi:` prefix is accepted as plaintext (debug escape hatch); decryption failure means "not configured", never an error dialog.
+- Portable mode is user-bound on purpose: a DPAPI blob copied to another Windows account does not decrypt, and re-entry is the expected fix.
 - Autostart writes HKCU only — never HKLM, never elevation. Keep the non-affiliation notice and `LICENSE` / `NOTICE` intact.
 - Repo hygiene: no absolute local paths, no secrets, no real personal or customer data in tracked files; `*.example` templates only.
 

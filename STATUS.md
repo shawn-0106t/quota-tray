@@ -61,6 +61,7 @@ P1（基线导入 + 改名）和 P2 的视觉部分（四窗统一 D 版 + 内�
 ## 环境现状（2026-11-14）
 
 - **Kimi 配额取数当前返回 `no-token`**：凭证链拿不到可用 token（大概率已过期）。验面板前先跑一次 `kimi` 或重新登录让 CLI 刷新；`--test-update` 正常（`local=2.6.1 latest=2.6.1`）。
+- **DeepSeek 旧凭证已就位**：`~/.deepseek-planbar/credentials.json`（8 月 10 日）与 `cache.json` 存在；环境变量未设置。P3 首次运行会把它导入到 `config_dir()/deepseek-credentials.json`，旧文件保持不动——8 月的 user token 大概率已过期，届时表现为「余额正常、用量 `token-expired`」，属预期，P4 的登录窗修复。
 - **旧的 `KimiPlanbarTray-rust.exe` 可能仍在跑**，托盘里会出现两个一样的 K 图标；悬停区分（`Quota Tray …` vs `Kimi Planbar Tray …`）。
 - 单实例互斥锁 `QuotaTray.SingleInstance` 与两个父版互不干扰，可以同时运行。
 
@@ -86,15 +87,17 @@ P1（基线导入 + 改名）和 P2 的视觉部分（四窗统一 D 版 + 内�
 
 **建议的落地顺序**：
 
-1. `src-tauri/src/deepseek/`：凭证（`DEEPSEEK_API_KEY` / `DEEPSEEK_USER_TOKEN` 环境变量 → `~/.deepseek-planbar/credentials.json`）、余额（`api.deepseek.com/user/balance`）、用量（`platform.deepseek.com/api/v0/usage/{amount,cost}`，Bearer user token + `x-app-version` + Chrome UA）、解析、`cache.json` 原子写 + 保留上次成功值。
-2. 候选端点链（`/api/v0/usage` → `/api/v1/usage`），404/410 逐个试，成功写 `~/.deepseek-planbar/endpoints.json`；本阶段可只做常量 + 候选，登录窗学习留 P4。
-3. 展示名：静态表 → `GET api.deepseek.com/models` 的 `name` → 规则派生 → 原始 id；缓存 `models.json` TTL 24h，失败静默回落（`PLAN.md` §6.1）。
+1. `src-tauri/src/deepseek/`：凭证、余额（`api.deepseek.com/user/balance`）、用量（`platform.deepseek.com/api/v0/usage/{amount,cost}`，Bearer user token + `x-app-version` + Chrome UA）、解析、缓存原子写 + 保留上次成功值。
+
+   **凭证存储已定（2026-11-14，PLAN §2 / §5.2）**：`config_dir()/deepseek-credentials.json`（`%APPDATA%\QuotaTray`，便携模式 exe 同级），文件形如 `{"v":1,"apiKey":"dpapi:<b64>","userToken":"dpapi:<b64>","importedFrom":"~/.deepseek-planbar/credentials.json"}` —— 键名明文、值用 DPAPI 加密。优先级 `env → 新文件 → 旧文件一次性导入（只读不写）→ 未配置`；解密失败 = 未配置；`--test-deepseek --verbose` 只打印 `credential source`，永不打印密钥。缓存/展示名/端点分别是 `config_dir()/deepseek-{cache,models,endpoints}.json`。
+2. 候选端点链（`/api/v0/usage` → `/api/v1/usage`），404/410 逐个试，成功写 `config_dir()/deepseek-endpoints.json`；本阶段可只做常量 + 候选，登录窗学习留 P4。
+3. 展示名：静态表 → `GET api.deepseek.com/models` 的 `name` → 规则派生 → 原始 id；缓存 `config_dir()/deepseek-models.json` TTL 24h，失败静默回落（`PLAN.md` §6.1）。
 4. 双 poller：`polling.rs` 目前只服务 Kimi，需要拆成两个独立 poller，共用间隔与失败语义，但**各存各的 last-good**。
 5. IPC：把 DeepSeek 状态加进 `get_state`（或新增 `get_deepseek`），DTO 与 TS 类型同步。
 6. `--test-deepseek`（`--verbose` 打印端点、响应顶层键、每模型聚合、`/models` 命中情况），在 `main.rs` 里排在互斥锁之前。
 7. 测试：把 4 个 fixture 拷进 `src-tauri/tests/fixtures/`，把 `FixtureTests.cs` 的断言翻成 Rust（`tests/` 集成测试或 `#[cfg(test)]`）。
 
-**P3 验收**（`PLAN.md` §8）：`cargo test` 通过；同机对比旧版 `--test-fetch` 逐字段一致；`--test-deepseek` 通过。注意本机当前没有 DeepSeek 凭证，开工前需确认 `DEEPSEEK_API_KEY` 或 `~/.deepseek-planbar/credentials.json` 可用。
+**P3 验收**（`PLAN.md` §8）：`cargo test` 通过；同机对比旧版 `--test-fetch` 逐字段一致；`--test-deepseek` 通过。本机已有旧版 `~/.deepseek-planbar/credentials.json`，P3 会导入；先跑一次 `--test-deepseek --verbose` 看 `credential source` 与 `token-expired` 情况，再决定要不要用环境变量临时覆盖。
 
 ## P3 之后：P2 剩余（tab）
 

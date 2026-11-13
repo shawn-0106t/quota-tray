@@ -31,6 +31,7 @@
 | 产品名 | **Quota Tray**；`com.shawnqi.quotatray`；`quota-tray.exe` | — |
 | 版本 | 0.1.0 起 | — |
 | DeepSeek 登录捕获 | 进 v1 | 与现版功能对齐；代价是 WebView2 COM 互操作是本项目风险最高的一块 |
+| DeepSeek 凭证存储 | `config_dir()/deepseek-credentials.json`，值用 Windows DPAPI 加密（`dpapi:` 前缀），旧版文件首次运行一次性导入 | API Key 能花钱，不该落明文盘；存储跟着 `config_dir()` 走，便携模式才带得走；旧文件只读不写，旧应用不受影响 |
 
 ## 3. 设计定稿（D 版）
 
@@ -144,7 +145,11 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 - 余额：`GET https://api.deepseek.com/user/balance`（Bearer API Key）。
 - 模型元数据（**仅供展示名**，不参与用量口径）：`GET https://api.deepseek.com/models`（Bearer 同一 API Key）；回落顺序与缓存策略见 §6。
 - 用量：`GET https://platform.deepseek.com/api/v0/usage/{amount,cost}?month=&year=`（Bearer userToken + `x-app-version: 1.0.0` + Chrome UA + `Accept: */*`）。
-- 凭证：`DEEPSEEK_API_KEY` / `DEEPSEEK_USER_TOKEN` 环境变量优先 → `~/.deepseek-planbar/credentials.json`（**沿用旧路径，老用户零重填**）；缓存 `~/.deepseek-planbar/cache.json`（原子写，保留上次成功值）。
+- 凭证链：`DEEPSEEK_API_KEY` / `DEEPSEEK_USER_TOKEN` 环境变量优先（命中即用，不读也不写文件）→ `config_dir()/deepseek-credentials.json` → 首次运行时从旧版 `~/.deepseek-planbar/credentials.json` **一次性导入**（旧文件只读不写）→ 未配置。
+  文件格式 `{"v":1,"apiKey":"dpapi:<base64>","userToken":"dpapi:<base64>","importedFrom":"~/.deepseek-planbar/credentials.json"}`：**键名明文、值加密**，值用 Windows DPAPI（`CryptProtectData` + `CRYPTPROTECT_UI_FORBIDDEN`）逐字段保护。
+  读取按前缀判断：带 `dpapi:` 的解密，不带的按明文接受（手工调试与「退回明文」的逃生口，结构不用改）。解密失败按「未配置」处理，`--test-deepseek --verbose` 必须区分 `credential source: env | file | imported | none | undecryptable`，且**永不打印密钥**。
+  有意的取舍：密钥绑当前 Windows 账号，便携盘插到别的账号下解不开（重填即可）；迁移期新旧两版不再共用凭证（旧版读不了密文，新版也不再回写旧文件）。
+- 缓存：`config_dir()/deepseek-cache.json`（原子写 temp + rename，失败保留上次成功值）。
 - 错误码：`key-invalid` / `token-expired` / `rate-limited` / `server-error` / `http-N` / `network-error` / `parse-error`；余额与用量两类错误互相独立。
 - 解析：`data.biz_data` 既可能是对象也可能是数组（取 `[0]`）；`total[]` 按模型聚合，`REQUEST` 计请求不计 token，`PROMPT_CACHE_HIT/MISS_TOKEN` 算命中率；`days[]` 只取本地今天；金额保 double 精度、token 取整；过滤全零占位模型；按本月消费降序取前 4。
 - 阈值：命中率 <60% 标红（不含琥珀档）；余额 < ¥10 或 `is_available=false` 标红。
@@ -161,11 +166,11 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 模型名本来就是数据（`usage[].model`），新模型只会显示原始 ID，官方另有公开端点可提供展示名称；接口路径/参数则是硬编码常量。四层加固：
 
 1. **零成本 + 官方命名元数据**：显示名按四段回落 —— 静态表（已知 id，离线兜底）→ 官方 `GET https://api.deepseek.com/models` 的 `name`（Bearer 同一 API Key，按 id 精确匹配）→ 规则派生（去 `deepseek-` 前缀、`v4-pro` → `V4 Pro`、剥离 `-0`/日期后缀）→ 原始 id。
-   刷新与缓存：启动后首次校验抓一次；出现未知 id 时补抓一次（每次启动最多一次）；结果写 `~/.deepseek-planbar/models.json`，TTL 24 小时；无 API Key、请求失败或 `name` 缺失都静默回落到下一段。只取 `id` 与 `name`，其余字段（`context_window` / `effort` / `api_capabilities`）与额度面板无关，不解析、不落盘。
+   刷新与缓存：启动后首次校验抓一次；出现未知 id 时补抓一次（每次启动最多一次）；结果写 `config_dir()/deepseek-models.json`，TTL 24 小时；无 API Key、请求失败或 `name` 缺失都静默回落到下一段。只取 `id` 与 `name`，其余字段（`context_window` / `effort` / `api_capabilities`）与额度面板无关，不解析、不落盘。
    注意：该端点属于 `api.deepseek.com`，与用量所在的 `platform.deepseek.com` 内部接口无关，**不解决路径/参数漂移**；用量口径来自平台控制台聚合，可能出现组合行（`A & B`）或已下线模型，因此**永不因为某个 id 不在 `/models` 里就丢弃它的用量**。
    诊断：`--test-deepseek --verbose` 打印所用端点 + 响应顶层键 + 每模型聚合 + `/models` 命中情况。
-2. **候选链**：常量之外准备候选（`/api/v0/usage` → `/api/v1/usage` …），遇 404/410 逐个试，成功后写入 `~/.deepseek-planbar/endpoints.json`，之后优先用记住的。
-3. **从登录窗学习**：WebView2 hook 已经能看到控制台发出的每个请求；除 `Authorization` 外，把该请求的 `{url, 方法, 非敏感头}` 记成模板（token 仍只进 `credentials.json`），路径/参数名/`x-*` 头都能自愈。
+2. **候选链**：常量之外准备候选（`/api/v0/usage` → `/api/v1/usage` …），遇 404/410 逐个试，成功后写入 `config_dir()/deepseek-endpoints.json`，之后优先用记住的。
+3. **从登录窗学习**：WebView2 hook 已经能看到控制台发出的每个请求；除 `Authorization` 外，把该请求的 `{url, 方法, 非敏感头}` 记成模板（token 仍只进 `deepseek-credentials.json`），路径/参数名/`x-*` 头都能自愈。
 4. **兜底提示**：HTTP 200 但每个模型聚合全为 0、而响应体明显有数据时，面板显示"响应格式可能已变化，点此重新同步"。
 
 边界：若上游改为服务端签名/设备指纹/验证码，静态重放无效，只能靠同进程 WebView2 的真实会话，或改抓页面数据。
@@ -228,5 +233,6 @@ PYTHONUTF8=1 python demo/check_contrast.py # token 对的 WCAG 比值
 | exe | `quota-tray.exe` |
 | 配置目录 | `%APPDATA%\QuotaTray`（便携模式：exe 同级） |
 | 诊断覆盖变量 | `QUOTA_TRAY_APP_DATA_DIR` |
-| DeepSeek 凭证/缓存 | `~/.deepseek-planbar/{credentials,cache}.json`（沿用） |
+| DeepSeek 凭证 | `config_dir()/deepseek-credentials.json`（值 `dpapi:` 加密，键名明文） |
+| DeepSeek 缓存 / 展示名 / 端点 | `config_dir()/deepseek-{cache,models,endpoints}.json` |
 | 日志 | `config_dir()/webview.log` |
