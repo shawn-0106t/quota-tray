@@ -1,0 +1,24 @@
+Quota Tray is a merge of two first-party MIT projects:
+
+  - kimi-planbar-tray (https://github.com/shawn-0106t/kimi-planbar-tray)
+    Tray skeleton, panel/settings/skills/menu windows, WebView2 recovery,
+    and the Kimi quota endpoint + credential-loading logic.
+
+  - deepseek-planbar (https://github.com/shawn-0106t/deepseek-planbar)
+    DeepSeek balance/usage endpoints, parsing rules, credential and cache
+    layout, and the in-app WebView2 sign-in capture.
+
+Upstream attribution carried over from those projects:
+
+  - The Kimi quota-endpoint and credential-loading logic derives from
+    kimi-planbar (https://github.com/baigong-ai/kimi-planbar),
+    Copyright (c) 2026 baigong-ai, used under the MIT License.
+
+  - Additional Kimi quota handling derives from KimiCodeBar,
+    Copyright (c) 2026 xifandev, used under the MIT License.
+
+  - The DeepSeek private usage-endpoint shape was verified against
+    DeepSeekMonitorWindows (MIT) source; no code was copied.
+
+Both parent projects and this repository are unofficial tools. They are not
+affiliated with Kimi (Moonshot AI) or DeepSeek.

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quota Tray — panel design A/B/C/D</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f2f2f0;
+    --ink: #111;
+    --ink-2: #666;
+    --line: #0000001f;
+    --card: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d0d0f; --ink: #f2f2f2; --ink-2: #9a9a9a; --line: #ffffff1f; --card: #17171a; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 13px/1.5 'Segoe UI', system-ui, -apple-system, sans-serif;
+    padding: 20px 24px 40px;
+  }
+  h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; letter-spacing: -.01em; }
+  p.lead { margin: 0 0 16px; color: var(--ink-2); font-size: 12px; max-width: 74ch; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 18px; align-items: center;
+    padding: 10px 12px; margin-bottom: 18px;
+    background: var(--card); border: 1px solid var(--line);
+  }
+  .grp { display: flex; align-items: center; gap: 6px; }
+  .grp .lbl {
+    font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2);
+    font-family: Consolas, ui-monospace, monospace;
+  }
+  button {
+    font: inherit; font-size: 12px;
+    color: var(--ink); background: transparent;
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 4px 9px; cursor: pointer;
+  }
+  button[aria-pressed='true'] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .cols { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  .col { flex: 0 0 auto; }
+  .col h2 {
+    font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    margin: 0 0 6px; color: var(--ink-2);
+    font-family: Consolas, ui-monospace, monospace;
+  }
+  .col .notes { margin: 8px 0 0; font-size: 11.5px; color: var(--ink-2); width: 424px; }
+  .col .notes b { color: var(--ink); font-weight: 600; }
+  iframe { display: block; width: 424px; height: 360px; border: 0; background: transparent; }
+  .hint { margin-top: 22px; font-size: 11.5px; color: var(--ink-2); }
+  kbd {
+    font: 11px Consolas, ui-monospace, monospace; border: 1px solid var(--line);
+    border-bottom-width: 2px; border-radius: 4px; padding: 0 4px;
+  }
+</style>
+</head>
+<body>
+<h1>Quota Tray — panel design A/B/C/D</h1>
+<p class="lead">
+  Same information architecture and geometry in all four: 424px window (368px card + 28px shadow room),
+  provider tabs, shared 4-button footer, content-driven height. Only the skin differs.
+  Switch theme / provider / data state below — every iframe reloads together.
+</p>
+
+<div class="controls">
+  <div class="grp" id="theme-grp">
+    <span class="lbl">Theme</span>
+    <button data-theme="system">System</button>
+    <button data-theme="light">Light</button>
+    <button data-theme="dark">Dark</button>
+  </div>
+  <div class="grp" id="tab-grp">
+    <span class="lbl">Provider</span>
+    <button data-tab="kimi">Kimi</button>
+    <button data-tab="ds">DeepSeek</button>
+  </div>
+  <div class="grp" id="state-grp">
+    <span class="lbl">State</span>
+    <button data-state="normal">Normal</button>
+    <button data-state="four">4 models</button>
+    <button data-state="hot">High usage</button>
+    <button data-state="err">Errors</button>
+    <button data-state="nocred">Not configured</button>
+  </div>
+</div>
+
+<div class="cols">
+  <div class="col">
+    <h2>A — paper + hairline (Kimi app tokens)</h2>
+    <iframe id="frame-a" title="Design A" src="panel-demo-a.html?bare=1"></iframe>
+    <p class="notes">
+      <b>Reads as:</b> a Kimi product surface. Warm paper ground, alpha-black label tiers,
+      one hairline-separated sheet, blue reserved for the active provider + limit bars.
+      <b>Cost:</b> the two brand blues coexist in the tab bar (declared exception);
+      mono is not used, so numbers lean on weight and size only.
+    </p>
+  </div>
+  <div class="col">
+    <h2>B — dark performance spec (porsche.cn case)</h2>
+    <iframe id="frame-b" title="Design B" src="panel-demo-b.html?bare=1"></iframe>
+    <p class="notes">
+      <b>Reads as:</b> an instrument. Zero radius, 1px seams, Consolas micro-labels,
+      800-weight tabular numerals, one red accent that only appears on real signals.
+      <b>Cost:</b> square corners on a floating tray popup is an opinionated choice;
+      the light variant is a derived daylight sheet, not the case's native mode.
+    </p>
+  </div>
+  <div class="col">
+    <h2>C — engineering rationalism (claude.com structure + Kimi app palette)</h2>
+    <iframe id="frame-c" title="Design C" src="panel-demo-c.html?bare=1"></iframe>
+    <p class="notes">
+      <b>Reads as:</b> drafting paper. Etched readout fields, full-width segmented pill,
+      mono for every number and reset countdown, sans for labels, Kimi blue on limit bars and
+      the tinted chip. Health states are two-state — only failures get colour.
+      <b>Cost:</b> the two-row header makes it the tallest of the three (~45px over A),
+      and mono numerals narrow the gap between "data" and "code".
+    </p>
+  </div>
+  <div class="col">
+    <h2>D — C's structure + A's type + A's palette, slimmed</h2>
+    <iframe id="frame-d" title="Design D" src="panel-demo-d.html?bare=1"></iframe>
+    <p class="notes">
+      <b>Reads as:</b> C's two-row header and bare readout columns (no fill, no frame), A's all-sans type
+      (30px semibold tabular numerals, uppercase tracked micro-labels), and A's warm paper
+      palette cut to two hues: Kimi blue and one danger red. The tab control mirrors a reference
+      segmented control — grey track, equal cells, active tile marked by a hairline ring (no shadow).
+      DeepSeek's bars use the same Kimi blue, so the whole panel is one accent.
+      <b>Cost:</b> the biggest type of the four, so also the tallest (~10px over C on the Kimi tab);
+      usage percentages no longer turn red, so only real failures are coloured.
+    </p>
+  </div>
+</div>
+
+<p class="hint">
+  All four files are standalone (<kbd>demo/panel-demo-a.html</kbd> … <kbd>panel-demo-d.html</kbd>);
+  each opens alone with a control bar that also reports the measured card / window height.
+  Measured heights: <kbd>python demo/heights.py</kbd>.
+</p>
+
+<script>
+(function () {
+  const state = { theme: 'system', tab: 'kimi', state: 'normal' };
+  const frames = {
+    a: document.getElementById('frame-a'),
+    b: document.getElementById('frame-b'),
+    c: document.getElementById('frame-c'),
+    d: document.getElementById('frame-d'),
+  };
+
+  // Measured card heights per demo and state (demo/heights.py), tallest first:
+  //   kimi  A 262 / B 287 / C 320 / D 328   (+56 shadow => window 318 / 343 / 376 / 384)
+  //   ds    A 360 / B 373 / C 385 / D 401   four 500 / 521 / 521 / 543
+  // iframe height = tallest of the four for that state, plus slack.
+  const FRAME_H = {
+    'kimi:normal': 400, 'kimi:four': 400, 'kimi:hot': 435, 'kimi:err': 400, 'kimi:nocred': 390,
+    'ds:normal': 475, 'ds:four': 615, 'ds:err': 345, 'ds:nocred': 345, 'ds:hot': 475,
+  };
+  function heightFor() {
+    return FRAME_H[`${state.tab}:${state.state}`] ?? 460;
+  }
+
+  function apply() {
+    const q = `bare=1&theme=${state.theme}&tab=${state.tab}&state=${state.state}`;
+    for (const f of Object.values(frames)) f.src = f.dataset.base ? `${f.dataset.base}?${q}` : f.src.split('?')[0] + '?' + q;
+    const h = heightFor();
+    for (const f of Object.values(frames)) f.style.height = h + 'px';
+    document.querySelectorAll('#theme-grp button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.theme === state.theme)));
+    document.querySelectorAll('#tab-grp button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === state.tab)));
+    document.querySelectorAll('#state-grp button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.state === state.state)));
+  }
+
+  document.querySelectorAll('#theme-grp button').forEach((b) => b.addEventListener('click', () => { state.theme = b.dataset.theme; apply(); }));
+  document.querySelectorAll('#tab-grp button').forEach((b) => b.addEventListener('click', () => { state.tab = b.dataset.tab; apply(); }));
+  document.querySelectorAll('#state-grp button').forEach((b) => b.addEventListener('click', () => { state.state = b.dataset.state; apply(); }));
+
+  for (const f of Object.values(frames)) f.dataset.base = f.src.split('?')[0];
+  apply();
+})();
+</script>
+</body>
+</html>

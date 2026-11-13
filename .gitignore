@@ -1,0 +1,49 @@
+## Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+## Rust / Tauri
+target/
+src-tauri/target/
+src-tauri/gen/
+*.rs.bk
+
+## Build / release artifacts (built locally, uploaded to GitHub Releases)
+*.exe
+QuotaTray-*.zip*
+QuotaTray-*.exe
+SHA256SUMS.txt*
+
+## Portable-mode marker (user-place, never committed)
+portable.dat
+
+## OS junk
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+## Editor / IDE
+.vs/
+.idea/
+*.user
+*.suo
+
+## Sensitive local files (never commit; commit *.example templates instead)
+## Extension-scoped so source files like credentials.rs stay trackable
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*credentials*.json
+*credentials*.toml
+
+## Local tools / intermediates
+__pycache__/
+*.pyc
+*.log
+
+## Design-review scratch output (screenshots are regenerated on demand)
+.shots/

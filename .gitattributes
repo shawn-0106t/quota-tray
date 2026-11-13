@@ -1,0 +1,21 @@
+# This machine runs core.autocrlf=true, which would check out shell scripts with
+# CRLF line endings — a CRLF shebang makes `bash demo/shot.sh` fail outright.
+# Normalise everything to LF in the working tree; the project is developed in
+# Git Bash and the Rust/TS toolchains are indifferent.
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.py   text eol=lf
+*.ts   text eol=lf
+*.rs   text eol=lf
+*.html text eol=lf
+*.css  text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+
+# Binary assets stay untouched
+*.png  binary
+*.ico  binary
+*.webp binary
+*.exe  binary
