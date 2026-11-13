@@ -111,6 +111,7 @@ New in this project:
 - **Two provider pollers** share the interval and failure semantics but must not overwrite each other's last-good state.
 - **DeepSeek parsing**: `data.biz_data` is an object for `amount` and an array for `cost` — tolerate both; `REQUEST` counts requests, not tokens; new token types fall through to the total; all-zero placeholder models are filtered; top 4 by month cost.
 - **DeepSeek endpoints**: constants + candidate fallback + learn-from-login-window (`PLAN.md` §6). Model names are data — never hardcode a model list.
+- **Model names are metadata, not constants**: display name falls back static table → official `GET https://api.deepseek.com/models` `name` → derived → raw id. Never drop a model's usage because its id is missing from `/models` — the usage endpoint aggregates the platform console, which also reports combined rows (`A & B`) and retired models. Long official names must ellipsis inside the row, never push the cost out.
 - **Colour semantics**: blue = usage, red = failure only. Never colour a high-usage percentage; `Available` stays neutral.
 
 ## Security considerations

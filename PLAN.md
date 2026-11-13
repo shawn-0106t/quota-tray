@@ -95,6 +95,7 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 | 读数列 | `grid-template-columns: 1fr 1fr; gap: 24px`，列内 padding `10 0 11` |
 | 进度条 | 高 4、radius 2、轨道 `--hair-soft`、填充 `--accent-bar`、`margin-top: 9`；模型占比条高 3、`margin-top: 8` |
 | 分行 | `border-top: 1px --hair`，padding `9 0`；**最后一个子块** `padding-bottom: 10`（父容器不再加底部内边距，否则该行会光学偏上） |
+| 模型行 | 名称单行省略（`min-width: 0` + `text-overflow: ellipsis`、`white-space: nowrap`），金额固定右对齐、不参与省略 —— 官方展示名可能比手写表长，不能顶掉金额 |
 | chip | radius 9999，padding `2 8`，`--tint` 底 + `--accent-ink` 字 |
 | footer | `grid 4`，`gap 2`，padding 5，按钮高 42、radius 8、图标 16、hover 底 `--seg-track` |
 | 焦点 | `outline: 2px solid --accent-bar; outline-offset: 2px` |
@@ -136,6 +137,7 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 ### 5.2 DeepSeek
 
 - 余额：`GET https://api.deepseek.com/user/balance`（Bearer API Key）。
+- 模型元数据（**仅供展示名**，不参与用量口径）：`GET https://api.deepseek.com/models`（Bearer 同一 API Key）；回落顺序与缓存策略见 §6。
 - 用量：`GET https://platform.deepseek.com/api/v0/usage/{amount,cost}?month=&year=`（Bearer userToken + `x-app-version: 1.0.0` + Chrome UA + `Accept: */*`）。
 - 凭证：`DEEPSEEK_API_KEY` / `DEEPSEEK_USER_TOKEN` 环境变量优先 → `~/.deepseek-planbar/credentials.json`（**沿用旧路径，老用户零重填**）；缓存 `~/.deepseek-planbar/cache.json`（原子写，保留上次成功值）。
 - 错误码：`key-invalid` / `token-expired` / `rate-limited` / `server-error` / `http-N` / `network-error` / `parse-error`；余额与用量两类错误互相独立。
@@ -151,9 +153,12 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 
 ## 6. DeepSeek 漂移加固
 
-模型名本来就是数据（`usage[].model`），新模型只会显示原始 ID；接口路径/参数是硬编码常量。三层加固：
+模型名本来就是数据（`usage[].model`），新模型只会显示原始 ID，官方另有公开端点可提供展示名称；接口路径/参数则是硬编码常量。四层加固：
 
-1. **零成本**：`FriendlyName` 改为"表为主 + 规则派生兜底"（去 `deepseek-` 前缀、`v4-pro` → `V4 Pro`、剥离 `-0`/日期后缀）；新增 `--test-deepseek --verbose`，打印所用端点 + 响应顶层键 + 每模型聚合。
+1. **零成本 + 官方命名元数据**：显示名按四段回落 —— 静态表（已知 id，离线兜底）→ 官方 `GET https://api.deepseek.com/models` 的 `name`（Bearer 同一 API Key，按 id 精确匹配）→ 规则派生（去 `deepseek-` 前缀、`v4-pro` → `V4 Pro`、剥离 `-0`/日期后缀）→ 原始 id。
+   刷新与缓存：启动后首次校验抓一次；出现未知 id 时补抓一次（每次启动最多一次）；结果写 `~/.deepseek-planbar/models.json`，TTL 24 小时；无 API Key、请求失败或 `name` 缺失都静默回落到下一段。只取 `id` 与 `name`，其余字段（`context_window` / `effort` / `api_capabilities`）与额度面板无关，不解析、不落盘。
+   注意：该端点属于 `api.deepseek.com`，与用量所在的 `platform.deepseek.com` 内部接口无关，**不解决路径/参数漂移**；用量口径来自平台控制台聚合，可能出现组合行（`A & B`）或已下线模型，因此**永不因为某个 id 不在 `/models` 里就丢弃它的用量**。
+   诊断：`--test-deepseek --verbose` 打印所用端点 + 响应顶层键 + 每模型聚合 + `/models` 命中情况。
 2. **候选链**：常量之外准备候选（`/api/v0/usage` → `/api/v1/usage` …），遇 404/410 逐个试，成功后写入 `~/.deepseek-planbar/endpoints.json`，之后优先用记住的。
 3. **从登录窗学习**：WebView2 hook 已经能看到控制台发出的每个请求；除 `Authorization` 外，把该请求的 `{url, 方法, 非敏感头}` 记成模板（token 仍只进 `credentials.json`），路径/参数名/`x-*` 头都能自愈。
 4. **兜底提示**：HTTP 200 但每个模型聚合全为 0、而响应体明显有数据时，面板显示"响应格式可能已变化，点此重新同步"。
