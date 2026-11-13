@@ -11,12 +11,13 @@ Guidance for AI coding agents working in this repository. Read this first; then 
 
 This repository is the merge of two earlier first-party projects: `kimi-planbar-tray` (Tauri/rust edition) and `deepseek-planbar` (WPF edition). See `NOTICE` for lineage.
 
-**Current state: design frozen, code not yet landed.** The repository currently contains only design artifacts (`demo/`) and the plan. Phase 1 copies the `kimi-planbar-tray/rust/` source tree into the repo root — until that happens, there is nothing to build. Do not invent source files ahead of Phase 1; follow `PLAN.md` §8.
+**Current state: design frozen, code not yet landed.** The repository currently contains only design artifacts (`demo/`) and the docs (`PLAN.md`, `STATUS.md`). Phase 1 copies the `kimi-planbar-tray/rust/` source tree into the repo root — until that happens, there is nothing to build. Do not invent source files ahead of Phase 1; follow `PLAN.md` §8.
 
 ## Source of truth
 
 | Question | Answer |
 |---|---|
+| 当前进度 / 交接给新 agent | `STATUS.md` |
 | What should the UI look like? | `demo/panel-demo-d.html` — the frozen design. `demo/panel-demo-a/b/c.html` are the rejected alternatives, kept only for comparison; do not evolve them. |
 | Layout numbers, tokens, colours | `PLAN.md` §3 |
 | Behaviour (polling, credentials, failure semantics, traps) | `PLAN.md` §5, §7 |
@@ -36,6 +37,7 @@ demo/                 # frozen design demos + review tooling (self-contained, ze
   heights.py          # measured card/window height for every demo x tab x state
   check_contrast.py   # WCAG ratios for the token pairs (must stay all-pass)
 PLAN.md               # design + behaviour contract
+STATUS.md             # progress snapshot / handoff — read this first when resuming work
 AGENTS.md             # this file
 LICENSE / NOTICE      # MIT + upstream attribution
 ```
