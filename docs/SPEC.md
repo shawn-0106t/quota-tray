@@ -3,6 +3,8 @@
 > 本文档是 `kimi-planbar-tray`（rust 版）的行为规格，Phase 1 原样拷入本仓库，作为 **Kimi 一侧**继承行为的依据。
 > 权威顺序：**`PLAN.md` > 本文档**。产品范围、视觉定稿（D 版 token 与几何）、窗口矩阵、双 provider 轮询与失败语义、命名与版本，一律以 `PLAN.md` 为准；本文档仍是其所述继承行为（凭证链、API 解析、托盘/窗口生命周期、WebView2 recovery）的实现契约。代码注释里的 `SPEC x.y` 仍指本文档章节。
 >
+> **父版命名对照**：本文保留父仓库的原始命名，凡出现以下字样的地方在本仓库按右列理解——`KimiPlanbarTray` / HKCU 值名 / 配置目录 → `QuotaTray`、`%APPDATA%\QuotaTray`；`KimiPlanbarTray.SingleInstance` → `QuotaTray.SingleInstance`；`KPT_APP_DATA_DIR` → `QUOTA_TRAY_APP_DATA_DIR`；`%TEMP%\kimi-planbar-tray-testui-<pid>` → `quota-tray-testui-<pid>`；`rust/` 子目录 → 仓库根目录（构建命令不需要 `cd rust`）；`kimi-planbar-tray.exe` → `quota-tray.exe`。窗口尺寸以 `PLAN.md` §4 为准（面板与设置窗内容自适应）。
+>
 > | 章节 | 现状 |
 > |---|---|
 > | 1–2 概述 / 术语 | 产品范围以 `PLAN.md` §1 为准；术语表仍适用 |
@@ -22,7 +24,7 @@
 > | 16 数据与 API | Kimi 部分适用；DeepSeek 见 `PLAN.md` §5.2 / §6 |
 > | 17 CLI 版本检查 | 适用 |
 > | 18 设置持久化 | 适用；新增 `ActiveTab` 字段（`PLAN.md` §7） |
-> | 19 自检命令 | `--test-fetch` / `--test-update` / `--test-ui` 适用；`--test-deepseek` / `--test-login` 见 `AGENTS.md` |
+> | 19 自检命令 | `--test-fetch` / `--test-update` / `--test-ui` 适用；`--test-deepseek` / `--test-login` 属 P3/P4，尚未实现 |
 > | 20 其他实现细节 | 适用；命名互斥锁改为 `QuotaTray.SingleInstance`，配置目录改为 `%APPDATA%\QuotaTray` |
 > | 21 Skills 只读窗口 | 适用 |
 > | 22 WebView2 故障检测与恢复 | 适用 |
@@ -88,7 +90,7 @@ Windows 系统托盘常驻应用，让 Kimi Code 套餐用量一键可查：5 �
 
 ### 3.2 进程与窗口模型
 
-单进程。启动时创建全部 4 个 WebView 窗口（隐藏态），均为**单例复用**（关闭即隐藏，正常路径永不销毁；唯一的例外是 WebView2 进程故障后的自动重建，见第 22 章）；另有托盘图标、配额轮询定时器、系统主题注册表监听。单实例由命名互斥锁保证（见 20.1）。
+单进程。启动时创建全部 4 个 WebView 窗口（隐藏态），均为**单例复用**（关闭即隐藏，正常路径永不销毁；唯一的例外是 WebView2 进程故障后的自动重建，见第 22 章）；另有托盘图标、配额轮询定时器、系统主题注册表监听。单实例由命名互斥锁保证（见第 20 章）。
 
 | 窗口 | 前端页 | 逻辑尺寸 |
 |---|---|---|

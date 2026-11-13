@@ -71,14 +71,14 @@ fn main() {
         return;
     }
 
-    // Headless UI self-check: construct the three windows, print OK lines, exit
+    // Headless UI self-check: construct the four windows, print OK lines, exit
     if args.iter().any(|a| a == "--test-ui") {
         quota_tray_lib::run_ui_test();
         return;
     }
 
     if !acquire_single_instance_mutex() {
-        return; // another instance (Rust or WPF edition) is already running
+        return; // another Quota Tray instance is already running
     }
 
     quota_tray_lib::run();

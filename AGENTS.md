@@ -11,7 +11,7 @@ Guidance for AI coding agents working in this repository. Read this first; then 
 
 This repository is the merge of two earlier first-party projects: `kimi-planbar-tray` (Tauri/rust edition) and `deepseek-planbar` (WPF edition). See `NOTICE` for lineage.
 
-**Current state: Phase 1 landed; Phase 2 (panel UI rewrite) is next.** The `kimi-planbar-tray/rust/` tree now sits at the repository root, renamed Quota Tray, version 0.1.0 — the app builds and its Kimi UI runs. `docs/SPEC.md` carries the inherited behaviour spec. Do not start Phase 3+ work before Phase 2 has met its acceptance criteria; follow `PLAN.md` §8.
+**Current state: Phase 2 in progress — the D visual layer is landed, the tab bar is not.** All four windows now use the D tokens and layout (`demo/panel-demo-d.html`), both the panel and the settings window are content-sized, and the Kimi pane renders live data. What remains of P2 is the segmented Kimi/DeepSeek tab and the DeepSeek pane, which need the P3 backend. Follow `PLAN.md` §8; do not start P3+ work before that remainder is decided.
 
 ## Source of truth
 
@@ -36,8 +36,8 @@ menu.html             # tray menu window   (src/menu.ts + menu.css)
 src/                  # vanilla TS frontend (Vite multi-page build)
   main.ts / settings.ts / skills.ts / menu.ts   # per-window logic
   common.ts           # shared DTO types + formatting helpers
-  theme.css           # theme tokens — superseded by PLAN.md §3.2 in P2
-  main.css / settings.css / skills.css / menu.css
+  theme.css           # D tokens + shared primitives (PLAN §3.2, §3.4)
+  main.css / settings.css / skills.css / menu.css   # layout only
   assets/kimi-logo.png  # inlined as a data URI by Vite
   vite-env.d.ts
 vite.config.ts        # 4-page rollup input; inlines the logo (100 KB limit)
@@ -88,12 +88,13 @@ Runtime checks are command-line flags, dispatched **before** the single-instance
 
 ```bash
 quota-tray.exe --test-fetch        # Kimi quota once, JSON to stdout
-quota-tray.exe --test-deepseek     # DeepSeek balance + usage once (add --verbose for endpoint/diagnosis)
+quota-tray.exe --test-update       # CLI version check once, one line: local=… latest=… updateAvailable=… checkFailed=…
 quota-tray.exe --test-ui           # construct every window, print "… OK" lines
-quota-tray.exe --test-login        # construct the DeepSeek sign-in window, print init result
 ```
 
-`cargo test` covers pure logic only (parsers, recovery classification, skills frontmatter). DeepSeek parse tests run against the fixtures carried over from the parent repo (`tests/fixtures`).
+`--test-deepseek` and `--test-login` belong to P3 / P4 and are **not implemented yet** — an unknown flag falls through to the normal GUI launch, so do not script them before those phases land.
+
+`cargo test` covers pure logic only: today that is the recovery classifier/backoff/log-tail tests and the skills frontmatter parser (5 tests). DeepSeek parsing tests arrive with P3, against fixtures ported from `deepseek-planbar` (there is no `tests/` tree in this repository yet).
 
 Design review is part of the deliverable: after any visual change, regenerate screenshots and compare against `demo/panel-demo-d.html` at 424px, in both themes:
 
@@ -108,7 +109,7 @@ PYTHONUTF8=1 python demo/check_contrast.py
 
 ## Code style and conventions
 
-- Code, comments and commit messages in English; conversation with the user in Chinese. Docs: `PLAN.md`/`AGENTS.md` in Chinese, README bilingual.
+- Code, comments and commit messages in English; conversation with the user in Chinese. Docs: `PLAN.md` / `STATUS.md` in Chinese, `AGENTS.md` / `CHANGELOG.md` in English, README bilingual.
 - Comments cite `PLAN.md` sections (e.g. `PLAN §3.2`) the way the parent project cited its SPEC — keep citations accurate when behaviour changes.
 - **Error handling baseline**: all IO, registry, process and HTTP failures are swallowed and surfaced only as UI text or state fields. Never pop up an error dialog.
 - Frontend renders external data (skill names, model names) with `textContent` only, never `innerHTML`.
@@ -133,7 +134,7 @@ Inherited from `kimi-planbar-tray`:
 
 New in this project:
 
-- **Panel height**: content-driven and **bottom-anchored**. The frontend measures and reports; the backend resizes with `LogicalSize` and re-pins the window's bottom-right corner with `PhysicalPosition`, clamped to the work area. Never leave the pane's bottom padding to a parent container — the last row must carry it, or that row reads optically high (this was a real defect in the demos; see `PLAN.md` §3.4).
+- **Panel height**: content-driven and **bottom-anchored**. The frontend measures and reports (`panel_height`); the backend resizes with `LogicalSize` and re-pins the window's bottom-right corner with `PhysicalPosition`, clamped to the work area. The settings window is content-sized too (`settings_height`) and re-centred instead. Never leave the pane's bottom padding to a parent container — the last row must carry it, or that row reads optically high (this was a real defect in the demos; see `PLAN.md` §3.4).
 - **Two provider pollers** share the interval and failure semantics but must not overwrite each other's last-good state.
 - **DeepSeek parsing**: `data.biz_data` is an object for `amount` and an array for `cost` — tolerate both; `REQUEST` counts requests, not tokens; new token types fall through to the total; all-zero placeholder models are filtered; top 4 by month cost.
 - **DeepSeek endpoints**: constants + candidate fallback + learn-from-login-window (`PLAN.md` §6). Model names are data — never hardcode a model list.

@@ -2,11 +2,18 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import './theme.css';
 import './settings.css';
-import logoUrl from './assets/kimi-logo.png';
 import { AppStateDto, initTheme } from './common';
 
 function el<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
+}
+
+/** Report the content height so the backend can size and re-centre the
+    window (PLAN §4). The card is content-sized, so this needs no constant. */
+function reportHeight(): void {
+  const root = document.getElementById('root');
+  if (!root) return;
+  invoke('settings_height', { height: root.offsetHeight + 56 }).catch(() => undefined);
 }
 
 /** Backfill the current settings into the controls (SPEC 13.2: every open). */
@@ -38,8 +45,6 @@ async function backfill(): Promise<void> {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-  el<HTMLImageElement>('logo').src = logoUrl;
-
   // Register before any await: the window is reused (hidden, not destroyed),
   // and a settings-show emitted during initTheme must not be missed (same
   // race as panel-show in main.ts).
@@ -53,6 +58,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     /* backend unavailable: keep default theme */
   }
   await backfill();
+  reportHeight();
+  // Re-report once fonts have settled (the first measurement can precede the
+  // final line heights).
+  window.setTimeout(reportHeight, 120);
 
   el('btn-save').addEventListener('click', () => {
     const theme =

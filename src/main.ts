@@ -2,7 +2,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import './theme.css';
 import './main.css';
-import logoUrl from './assets/kimi-logo.png';
 import {
   AppStateDto,
   ExtraInfo,
@@ -10,7 +9,6 @@ import {
   QuotaSegment,
   UpdateStatus,
   clampPercent,
-  fmtPercent,
   fmtYuan,
   formatReset,
   initTheme,
@@ -32,7 +30,9 @@ function setCard(prefix: string, seg: QuotaSegment | null | undefined): void {
     reset.textContent = '';
     return;
   }
-  pct.textContent = fmtPercent(seg.percent);
+  // The unit lives in the markup next to the number (D layout), so only the
+  // rounded value is written here.
+  pct.textContent = String(Math.round(seg.percent));
   fill.style.width = `${clampPercent(seg.percent)}%`;
   reset.textContent = seg.resetAt ? formatReset(seg.resetAt) : '';
 }
@@ -70,19 +70,41 @@ function renderQuota(r: QuotaResult | null): void {
   const lastUpdated = el('last-updated');
   if (!r) {
     lastUpdated.textContent = '';
+    lastUpdated.classList.remove('bad');
   } else if (r.error) {
     lastUpdated.textContent = 'Update failed';
+    lastUpdated.classList.add('bad');
   } else {
     const d = new Date(r.fetchedAt);
     const hh = String(d.getHours()).padStart(2, '0');
     const mm = String(d.getMinutes()).padStart(2, '0');
     lastUpdated.textContent = `Updated ${hh}:${mm}`;
+    lastUpdated.classList.remove('bad');
   }
+  scheduleHeightReport();
 }
 
 function renderVersion(u: UpdateStatus): void {
   el('cli-version').textContent = u.localVersion ?? 'Not detected';
   el('badge').hidden = !u.updateAvailable;
+  scheduleHeightReport();
+}
+
+// ---- Content height reporting (PLAN §4) ----
+
+// The backend keeps the window's bottom-right corner pinned when it resizes,
+// so the frontend only has to report content height + shadow fade room. Runs
+// after a frame so the DOM change has been laid out.
+let heightFrame = 0;
+function scheduleHeightReport(): void {
+  if (heightFrame) cancelAnimationFrame(heightFrame);
+  heightFrame = requestAnimationFrame(() => {
+    heightFrame = 0;
+    const root = document.getElementById('root');
+    if (!root) return;
+    const height = root.offsetHeight + 56; // + 2 * 28px margin
+    invoke('panel_height', { height }).catch(() => undefined);
+  });
 }
 
 // ---- Show/hide animation (SPEC 15.1 / 15.2) ----
@@ -98,6 +120,7 @@ function playShow(): void {
   // Force reflow so the enter transition always restarts from the initial state
   void document.body.offsetWidth;
   document.body.classList.add('enter');
+  scheduleHeightReport(); // keep the bottom-anchored size in step with content
 }
 
 function playHide(): void {
@@ -115,8 +138,6 @@ function playHide(): void {
 // ---- Bootstrap ----
 
 window.addEventListener('DOMContentLoaded', async () => {
-  el<HTMLImageElement>('logo').src = logoUrl;
-
   // Register listeners BEFORE any other await (including initTheme's) so an
   // early backend event — panel-show, quota-updated — can never be missed.
   await listen<QuotaResult>('quota-updated', (e) => renderQuota(e.payload));
@@ -132,6 +153,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
   renderQuota(state.quota);
   renderVersion(state.update);
+  // Re-report once fonts have settled: the first measurement can precede the
+  // final line heights and leave the window a few pixels off.
+  window.setTimeout(scheduleHeightReport, 120);
 
   el('btn-console').addEventListener('click', () => {
     invoke('open_console').catch(() => undefined);

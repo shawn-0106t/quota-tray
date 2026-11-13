@@ -30,6 +30,13 @@ pub struct AppState {
     pub skills_cache: RwLock<Option<Vec<SkillInfo>>>,
     /// Content-measured menu height in DIP (WPF SizeToContent equivalent)
     pub menu_height: Mutex<f64>,
+    /// Content-measured main-panel height in DIP (card + shadow fade room).
+    /// The panel is bottom-anchored, so this drives both the window height and
+    /// the re-pinned position (PLAN §4).
+    pub panel_height: Mutex<f64>,
+    /// Content-measured settings-window height in DIP (card + shadow fade
+    /// room). The window is centred, so this only drives the size (PLAN §4).
+    pub settings_height: Mutex<f64>,
     /// Fired when the polling schedule must restart (settings saved)
     pub reschedule: Arc<Notify>,
     /// Fired by every safe_refresh (manual, hover, or scheduled) to move the
@@ -57,6 +64,8 @@ impl AppState {
             skills_open: AtomicBool::new(false),
             skills_cache: RwLock::new(None),
             menu_height: Mutex::new(160.0),
+            panel_height: Mutex::new(520.0),
+            settings_height: Mutex::new(360.0),
             reschedule: Arc::new(Notify::new()),
             retime: Arc::new(Notify::new()),
             retime_delay: Mutex::new(None),

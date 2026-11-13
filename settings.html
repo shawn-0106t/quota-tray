@@ -7,61 +7,58 @@
   </head>
   <body>
     <div id="root">
-      <div class="content">
-        <!-- Custom title bar, draggable (SPEC 13.1) -->
-        <div class="titlebar" id="titlebar">
-          <img id="logo" class="logo" alt="" />
-          <span class="title">Quota Tray Settings</span>
-          <button class="chrome-close" id="btn-close">&#10005;</button>
+      <!-- Title bar: wordmark + close, whole row draggable -->
+      <div class="hdr" id="titlebar">
+        <div class="hdr-top">
+          <span class="brand">Quota Tray Settings</span>
+          <button class="chrome-close" id="btn-close" title="Close">&#10005;</button>
         </div>
+      </div>
 
-        <!-- Settings items (SPEC 13.2) -->
-        <div class="body">
-          <div class="section-title">Theme</div>
-          <label class="radio" style="margin-top: 10px">
+      <div class="pane">
+        <div class="label">Theme</div>
+        <div class="seg" role="radiogroup" aria-label="Theme">
+          <label>
             <input type="radio" name="theme" value="system" />
-            <span class="circle"></span>
-            <span class="radio-text">System default</span>
+            <span class="seg-item">System</span>
           </label>
-          <label class="radio" style="margin-top: 8px">
+          <label>
             <input type="radio" name="theme" value="light" />
-            <span class="circle"></span>
-            <span class="radio-text">Moonlit (light)</span>
+            <span class="seg-item">Light</span>
           </label>
-          <label class="radio" style="margin-top: 8px">
+          <label>
             <input type="radio" name="theme" value="dark" />
-            <span class="circle"></span>
-            <span class="radio-text">Moondark (dark)</span>
+            <span class="seg-item">Dark</span>
           </label>
-
-          <div class="section-title" style="margin-top: 20px">Refresh interval</div>
-          <div class="pills">
-            <label class="pill">
-              <input type="radio" name="interval" value="1" />
-              <span class="pill-text">1 min</span>
-            </label>
-            <label class="pill">
-              <input type="radio" name="interval" value="5" />
-              <span class="pill-text">5 min</span>
-            </label>
-            <label class="pill">
-              <input type="radio" name="interval" value="10" />
-              <span class="pill-text">10 min</span>
-            </label>
-            <label class="pill">
-              <input type="radio" name="interval" value="30" />
-              <span class="pill-text">30 min</span>
-            </label>
-          </div>
-
-          <label class="checkbox" style="margin-top: 22px">
-            <input type="checkbox" id="autostart" />
-            <span class="box"></span>
-            <span class="checkbox-text">Launch at Windows startup</span>
-          </label>
-
-          <button class="btn" id="btn-save" style="margin-top: 26px">Save</button>
         </div>
+
+        <div class="label section-gap">Refresh interval</div>
+        <div class="seg" role="radiogroup" aria-label="Refresh interval">
+          <label>
+            <input type="radio" name="interval" value="1" />
+            <span class="seg-item">1 min</span>
+          </label>
+          <label>
+            <input type="radio" name="interval" value="5" />
+            <span class="seg-item">5 min</span>
+          </label>
+          <label>
+            <input type="radio" name="interval" value="10" />
+            <span class="seg-item">10 min</span>
+          </label>
+          <label>
+            <input type="radio" name="interval" value="30" />
+            <span class="seg-item">30 min</span>
+          </label>
+        </div>
+
+        <label class="check-row">
+          <span class="row-label">Launch at Windows startup</span>
+          <input type="checkbox" id="autostart" />
+          <span class="box"></span>
+        </label>
+
+        <button class="btn save" id="btn-save">Save</button>
       </div>
     </div>
     <script type="module" src="/src/settings.ts"></script>

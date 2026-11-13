@@ -8,9 +8,12 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition};
 
 // Window sizes include the transparent shadow fade room around the card:
-// main/settings grew by 2*22px (margin 6 -> 28), menu by 2*19px (margin 5 -> 24).
+// main/settings grew by 2*28px (margin 28), menu by 2*19px (margin 5 -> 24).
 const PANEL_W: f64 = 424.0;
-const PANEL_H: f64 = 520.0;
+/// Transparent margin around the card in #root (shadow fade room).
+const PANEL_MARGIN: f64 = 28.0;
+/// Card edge to work-area corner.
+const PANEL_GAP: f64 = 12.0;
 const MENU_W: f64 = 188.0;
 
 /// Primary-monitor work area in physical px (SPI_GETWORKAREA returns
@@ -59,7 +62,10 @@ fn work_area_dip(app: &AppHandle) -> (f64, f64, f64, f64) {
     (l / s, t / s, r / s, b / s)
 }
 
-/// ShowNearTray: bottom-right of the work area, 12px margin (SPEC 10.1).
+/// ShowNearTray: bottom-right of the work area, card edge 12px off the corner
+/// (SPEC 10.1 / PLAN §4). The size comes from the frontend-reported content
+/// height, and the position re-pins the card's bottom-right corner so resizing
+/// never moves the visible edge.
 pub fn show_panel(app: &AppHandle) {
     // Supplementary health gate (SPEC 22.3): never show a missing shell; the
     // request is replayed once the rebuild finishes.
@@ -69,25 +75,9 @@ pub fn show_panel(app: &AppHandle) {
     let Some(w) = app.get_webview_window("main") else {
         return;
     };
-    // Size stays LOGICAL (tao re-scales the physical size from the logical
-    // size on WM_DPICHANGED, so 424x520 DIP is correct on any monitor), but
-    // the position must be PHYSICAL: the window may currently sit on a
-    // different monitor than the primary (Windows places new windows on the
-    // launcher window's monitor, e.g. when the exe is started from a File
-    // Explorer window on a secondary screen), and LogicalPosition would
-    // convert using that monitor's scale instead of the primary's — which
-    // placed the first-ever show mid-screen on mixed-DPI setups. Physical
-    // units skip the window's current scale entirely.
-    let s = primary_scale(app);
-    let _ = w.set_size(LogicalSize::new(PANEL_W, PANEL_H));
-    let (_, _, right, bottom) = work_area_phys();
-    // +22 compensates the margin growth (6 -> 28, shadow fade room): the window
-    // shifts 22px left/up so the card's visible position is unchanged (card
-    // right/bottom edges still sit 18px off the work-area corner).
-    let _ = w.set_position(PhysicalPosition::new(
-        right - (PANEL_W + 12.0 - 22.0) * s,
-        bottom - (PANEL_H + 12.0 - 22.0) * s,
-    ));
+    // Size + position FIRST, so the window never becomes visible at a stale
+    // height (PLAN §4: show_panel 先按当前内容定尺寸再显示).
+    apply_panel_size(app);
     app.state::<AppState>()
         .panel_hiding
         .store(false, Ordering::SeqCst);
@@ -96,6 +86,69 @@ pub fn show_panel(app: &AppHandle) {
     let _ = app.emit("panel-show", ());
     crate::recovery::note_ui_event(app, "main", "show");
     crate::recovery::set_last_visible(app, "main", true);
+}
+
+/// Content height reported by the frontend (card + both shadow fade margins).
+pub(crate) fn panel_height(app: &AppHandle) -> f64 {
+    *app.state::<AppState>().panel_height.lock().unwrap()
+}
+
+/// Settings-window width; its height is content-measured like the panel's.
+const SETTINGS_W: f64 = 404.0;
+
+/// Content height reported for the settings window (card + margins).
+pub(crate) fn settings_height(app: &AppHandle) -> f64 {
+    *app.state::<AppState>().settings_height.lock().unwrap()
+}
+
+/// Size the settings window to its reported content height and keep it
+/// centred on the primary work area (it is opened from the panel, so the
+/// user's focus is already there; no anchoring rule applies).
+pub(crate) fn apply_settings_size(app: &AppHandle) {
+    let Some(w) = app.get_webview_window("settings") else {
+        return;
+    };
+    let s = primary_scale(app);
+    let (left, top, right, bottom) = work_area_phys();
+    // PLAN §4: never exceed 90% of the work area height.
+    let max_h = ((bottom - top) / s) * 0.9;
+    let h = settings_height(app).clamp(120.0, max_h.max(120.0));
+    let _ = w.set_size(LogicalSize::new(SETTINGS_W, h));
+    let _ = w.set_position(PhysicalPosition::new(
+        left + ((right - left) - SETTINGS_W * s) / 2.0,
+        top + ((bottom - top) - h * s) / 2.0,
+    ));
+}
+
+/// Resize the panel to the reported content height and re-pin the card's
+/// bottom-right corner at (work-area corner - PANEL_GAP).
+///
+/// Size stays LOGICAL (tao re-scales the physical size from the logical size
+/// on WM_DPICHANGED), position must be PHYSICAL: the window may currently sit
+/// on a different monitor than the primary (Windows places new windows on the
+/// launcher window's monitor), and LogicalPosition would convert using that
+/// monitor's scale instead of the primary's.
+pub(crate) fn apply_panel_size(app: &AppHandle) {
+    let Some(w) = app.get_webview_window("main") else {
+        return;
+    };
+    let s = primary_scale(app);
+    let (wa_top, wa_bottom) = {
+        let (_, top, _, bottom) = work_area_phys();
+        (top, bottom)
+    };
+    // Clamp to the work area so a long content list can never push the card's
+    // top edge above the screen (PLAN §4).
+    let max_h = ((wa_bottom - wa_top) / s) - 2.0 * PANEL_GAP;
+    let h = panel_height(app).clamp(80.0, max_h.max(80.0));
+    let _ = w.set_size(LogicalSize::new(PANEL_W, h));
+    let (_, _, wa_right, wa_bottom) = work_area_phys();
+    // Window edges = card edges + the transparent margin; the card's visible
+    // right/bottom edges sit PANEL_GAP inside the work area.
+    let _ = w.set_position(PhysicalPosition::new(
+        wa_right - (PANEL_W + PANEL_GAP - PANEL_MARGIN) * s,
+        wa_bottom - (h + PANEL_GAP - PANEL_MARGIN) * s,
+    ));
 }
 
 /// Ask the frontend to play the slide-out animation (re-entry guarded).

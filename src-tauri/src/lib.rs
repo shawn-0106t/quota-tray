@@ -1,6 +1,6 @@
-// Quota Tray — Tauri 2 shell hosting the Kimi and DeepSeek quota views.
-// Imported from kimi-planbar-tray (rust edition); startup order, window model
-// and WebView2 recovery are unchanged (docs/SPEC.md section 20).
+// Quota Tray — Tauri 2 shell hosting the Kimi quota view (the DeepSeek pane
+// lands in P3). Imported from kimi-planbar-tray (rust edition); startup order,
+// window model and WebView2 recovery are unchanged (docs/SPEC.md section 20).
 // Self-check command line args are handled in main.rs BEFORE the
 // single-instance check.
 
@@ -196,8 +196,9 @@ pub(crate) fn show_settings_window(app: &AppHandle) {
         .settings_open
         .store(true, Ordering::SeqCst);
     if let Some(w) = app.get_webview_window("settings") {
-        // Same DPI-inflation guard as show_panel: pin the size on every open.
-        let _ = w.set_size(tauri::LogicalSize::new(404.0, 464.0));
+        // Content-sized sheet (PLAN §4): pin the size from the last report
+        // before showing, so the window never flashes at a stale height.
+        panel::apply_settings_size(app);
         let _ = w.show();
         let _ = w.set_focus();
     }
@@ -341,6 +342,26 @@ fn menu_height(app: AppHandle, height: f64) {
     }
 }
 
+/// Frontend-reported content height of the main panel (PLAN §4). Applied at
+/// once so a height change while the panel is visible keeps the card's
+/// bottom-right corner pinned instead of jumping on the next show.
+#[tauri::command]
+fn panel_height(app: AppHandle, height: f64) {
+    if (80.0..2000.0).contains(&height) {
+        *app.state::<AppState>().panel_height.lock().unwrap() = height;
+        panel::apply_panel_size(&app);
+    }
+}
+
+/// Frontend-reported content height of the settings window (PLAN §4).
+#[tauri::command]
+fn settings_height(app: AppHandle, height: f64) {
+    if (80.0..2000.0).contains(&height) {
+        *app.state::<AppState>().settings_height.lock().unwrap() = height;
+        panel::apply_settings_size(&app);
+    }
+}
+
 #[tauri::command]
 fn start_drag(window: WebviewWindow) {
     let _ = window.start_dragging();
@@ -446,6 +467,8 @@ fn invoke_handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
         quit_app,
         menu_action,
         menu_height,
+        panel_height,
+        settings_height,
         start_drag,
     ]
 }

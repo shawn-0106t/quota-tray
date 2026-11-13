@@ -7,21 +7,19 @@
   </head>
   <body>
     <div id="root">
-      <div class="content">
-        <!-- Custom title bar, draggable (SPEC 21.1) -->
-        <div class="titlebar" id="titlebar">
-          <img id="logo" class="logo" alt="" />
-          <span class="title">Kimi Skills</span>
-          <button class="chrome-close" id="btn-close">&#10005;</button>
+      <!-- Title bar: wordmark + close, whole row draggable -->
+      <div class="hdr" id="titlebar">
+        <div class="hdr-top">
+          <span class="brand">Kimi Skills</span>
+          <button class="chrome-close" id="btn-close" title="Close">&#10005;</button>
         </div>
+      </div>
 
-        <!-- Summary + manual rescan (SPEC 21.2) -->
+      <div class="pane">
         <div class="summary">
-          <span id="summary-text" class="summary-text">Loading…</span>
-          <button class="btn-mini" id="btn-refresh">&#10227; Refresh</button>
+          <span class="label" id="summary-text">Loading…</span>
+          <button class="link-btn" id="btn-refresh" title="Rescan skills">Refresh</button>
         </div>
-
-        <!-- Grouped read-only skill list (SPEC 21.3) -->
         <div class="list" id="list"></div>
       </div>
     </div>

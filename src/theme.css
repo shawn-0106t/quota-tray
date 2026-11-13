@@ -1,31 +1,52 @@
-/* Quota Tray — shared theme (Moonlit light / Moondark dark)
-   1:1 port of Themes/{Light,Dark,Shared}.xaml from the WPF reference.
-   Brush key table: docs/SPEC.md section 11.1 */
+/* Quota Tray — shared tokens and window chrome.
+   Single source of colour/type primitives; the layout files (main.css,
+   settings.css, skills.css, menu.css) only place them.
+   Token table: PLAN.md section 3.2. Visual reference: demo/panel-demo-d.html. */
 
 :root[data-theme='light'] {
-  --accent: #1a88ff;
-  --window-bg: #f3f4f6;
-  --card-bg: #ffffff;
-  --text-primary: #1f2329;
-  --text-secondary: #6b7280;
-  --progress-track: #e5e7eb;
-  --button-bg: #e9ecf0;
-  --button-hover: #dce2e9;
-  --badge-bg: #fff0e0;
-  --badge-fg: #e06d00;
+  color-scheme: light;
+  --paper: #fbfaf9;
+  --ink-1: #000000e6;
+  --ink-2: #00000099;
+  --ink-3: #0000004d;
+  --hair: #00000021;
+  --hair-soft: #00000012;
+  --accent: #1783ff;
+  --accent-bar: #0d6fe8;
+  --accent-ink: #0a5fc0;
+  --tint: #1783ff1a;
+  --seg-track: #f1f0ec;
+  --seg-on: #ffffff;
+  --seg-ring: #0000001f;
+  --danger: #b42318;
+  --shadow: 0 12px 40px #00000026;
 }
 
 :root[data-theme='dark'] {
+  color-scheme: dark;
+  --paper: #181817;
+  --ink-1: #ffffffd6;
+  --ink-2: #ffffff8f;
+  --ink-3: #ffffff42;
+  --hair: #ffffff1f;
+  --hair-soft: #ffffff12;
   --accent: #1a88ff;
-  --window-bg: #17191e;
-  --card-bg: #23262d;
-  --text-primary: #f2f3f5;
-  --text-secondary: #9aa0a8;
-  --progress-track: #3a3e47;
-  --button-bg: #2c3039;
-  --button-hover: #3a404b;
-  --badge-bg: #3d2e1a;
-  --badge-fg: #f0a040;
+  --accent-bar: #1a88ff;
+  --accent-ink: #6fb4ff;
+  --tint: #1a88ff26;
+  --seg-track: #262624;
+  --seg-on: #3a3a37;
+  --seg-ring: #ffffff1a;
+  --danger: #ff6b6b;
+  --shadow: 0 12px 40px #00000073;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 html,
@@ -36,229 +57,279 @@ body {
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  color: var(--text-primary);
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    'PingFang SC',
+    'Microsoft YaHei UI',
+    'Microsoft YaHei',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-1);
 }
 
-/* ---- ActionButton (Shared.xaml) ---- */
-.btn {
-  padding: 10px 0;
-  font-size: 13px;
-  font-family: inherit;
-  color: var(--text-primary);
-  background: var(--button-bg);
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-}
-.btn:hover {
-  background: var(--button-hover);
+/* Window shell: the CSS paints the card (radius, hairline, shadow) on a
+   transparent window; Rust opts every window out of DWM auto-rounding.
+   The 28px margin is shadow fade room, not layout. */
+#root {
+  margin: 28px;
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
-/* ---- ThemeRadio (Shared.xaml): 18px circle + 8px inner dot ---- */
-.radio {
+/* ---------- header: wordmark + right-aligned meta/close ---------- */
+.hdr {
+  padding: 12px 14px 0;
+}
+.hdr-top {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 22px;
+}
+.brand {
   font-size: 13px;
-  color: var(--text-primary);
-  cursor: pointer;
+  font-weight: 500;
+  color: var(--ink-1);
+  white-space: nowrap;
 }
-.radio input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
+.stamp {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-2);
+  white-space: nowrap;
 }
-.radio .circle {
-  position: relative;
-  width: 15px; /* 18px box minus 1.5px border each side */
-  height: 15px;
-  border: 1.5px solid var(--text-secondary);
-  border-radius: 50%;
-  background: transparent;
-  flex: none;
-}
-.radio .circle::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  margin: -4px 0 0 -4px;
-  border-radius: 50%;
-  background: var(--accent);
-  visibility: hidden;
-}
-.radio input:checked + .circle::after {
-  visibility: visible;
-}
-.radio .radio-text {
-  margin-left: 8px;
-}
-.radio:hover .radio-text {
-  color: var(--accent);
+.stamp.bad {
+  color: var(--danger);
 }
 
-/* ---- PillRadio (Shared.xaml): segmented pill ---- */
-.pill {
-  cursor: pointer;
+.pane {
+  padding: 0 14px;
 }
-.pill input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
+
+/* ---------- type primitives ---------- */
+.label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  line-height: 1.2;
 }
-.pill .pill-text {
+
+.note {
+  margin-top: 7px;
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+/* ---------- readout field ---------- */
+.quota {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 10px;
+}
+.field {
+  padding: 10px 0 11px;
+}
+.num {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  margin-top: 6px;
+}
+.num b {
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+.num .unit {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.num.is-danger b,
+.num.is-danger .unit {
+  color: var(--danger);
+}
+
+/* ---------- progress bar: 4px capsule ---------- */
+.bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hair-soft);
+  margin-top: 9px;
+  overflow: hidden;
+}
+.bar > i {
   display: block;
-  padding: 6px 12px;
-  font-size: 12px;
-  color: var(--text-primary);
-  background: var(--button-bg);
-  border-radius: 9px;
-}
-.pill:hover .pill-text {
-  background: var(--button-hover);
-}
-.pill input:checked + .pill-text,
-.pill input:checked:hover + .pill-text {
-  background: var(--accent);
-  color: #ffffff;
-}
-
-/* ---- ThemeCheckBox (Shared.xaml): 18px rounded square + white tick ---- */
-.checkbox {
-  display: flex;
-  align-items: center;
-  font-size: 13px;
-  color: var(--text-primary);
-  cursor: pointer;
-}
-.checkbox input {
-  position: absolute;
-  opacity: 0;
   width: 0;
-  height: 0;
-}
-.checkbox .box {
-  position: relative;
-  width: 15px;
-  height: 15px;
-  border: 1.5px solid var(--text-secondary);
-  border-radius: 5px;
-  background: transparent;
-  flex: none;
-}
-.checkbox .box::after {
-  content: '\2713'; /* ✓ */
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
   height: 100%;
+  border-radius: 2px;
+  background: var(--accent-bar);
+  transition: width 200ms ease;
+}
+
+/* ---------- hairline rows ---------- */
+.row {
+  border-top: 1px solid var(--hair);
+  padding: 9px 0;
+}
+.pane > .row:last-child {
+  padding-bottom: 10px;
+}
+.row-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.row-label {
   font-size: 12px;
-  font-weight: bold;
-  line-height: 15px;
-  text-align: center;
-  color: #ffffff;
-  visibility: hidden;
+  font-weight: 400;
+  color: var(--ink-2);
 }
-.checkbox input:checked + .box {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.checkbox input:checked + .box::after {
-  visibility: visible;
-}
-.checkbox .checkbox-text {
-  margin-left: 8px;
-}
-
-/* ---- ChromeCloseButton (Shared.xaml) ---- */
-.chrome-close {
-  /* WPF Width=28 includes Padding=8,2 -> border-box so total width stays 28 */
-  box-sizing: border-box;
-  width: 28px;
-  padding: 2px 8px;
-  font-size: 14px;
-  font-family: inherit;
-  color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  text-align: center;
-}
-.chrome-close:hover {
-  background: var(--button-hover);
-  color: var(--text-primary);
-}
-
-/* ---- MenuItemButton (Shared.xaml) ---- */
-.menu-item {
-  display: block;
-  width: 100%;
-  padding: 9px 14px;
+.row-value {
   font-size: 13px;
-  font-family: inherit;
-  text-align: left;
-  color: var(--text-primary);
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink-1);
 }
-.menu-item:hover {
-  background: var(--button-hover);
+.row-value.muted {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.row-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-/* ---- Hover glow (SPEC 15.3) ----
-   The accent ring + halo is painted once on a pseudo-element and only its
-   opacity animates on hover: the box-shadow itself never animates, so the
-   effect stays compositor-only with no per-frame repaint. */
-.btn,
-.menu-item,
-.version,
-.btn-mini {
-  position: relative;
-  transition: background-color 140ms ease;
+/* ---------- chip ---------- */
+.badge {
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--accent-ink);
+  background: var(--tint);
+  border-radius: 9999px;
+  padding: 2px 8px;
+  white-space: nowrap;
 }
-.btn::after,
-.menu-item::after,
-.version::after,
-.btn-mini::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  box-shadow:
-    0 0 0 1px rgb(26 136 255 / 0.35),
-    0 0 8px rgb(26 136 255 / 0.18);
-  opacity: 0;
-  transition: opacity 140ms ease;
-  pointer-events: none;
-}
-.btn::after {
-  border-radius: 10px;
-}
-.menu-item::after,
-.btn-mini::after {
-  border-radius: 8px;
-}
-.version::after {
+
+/* ---------- segmented control (equal cells, hairline ring on the active one) ---------- */
+.seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--seg-track);
   border-radius: 12px;
 }
-:root[data-theme='dark'] .btn::after,
-:root[data-theme='dark'] .menu-item::after,
-:root[data-theme='dark'] .version::after,
-:root[data-theme='dark'] .btn-mini::after {
-  box-shadow:
-    0 0 0 1px rgb(26 136 255 / 0.45),
-    0 0 10px rgb(26 136 255 / 0.22);
+.seg label {
+  flex: 1;
+  display: flex;
+  min-width: 0;
 }
-.btn:hover::after,
-.menu-item:hover::after,
-.version:hover::after,
-.btn-mini:hover::after {
-  opacity: 1;
+.seg input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.seg .seg-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.seg .seg-item:hover {
+  color: var(--ink-1);
+}
+.seg input:checked + .seg-item {
+  background: var(--seg-on);
+  color: var(--ink-1);
+  font-weight: 500;
+  box-shadow: inset 0 0 0 1px var(--seg-ring);
+}
+.seg input:focus-visible + .seg-item {
+  outline: 2px solid var(--accent-bar);
+  outline-offset: 1px;
+}
+
+/* ---------- ghost button (footer actions, form actions) ---------- */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 34px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-1);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.btn:hover {
+  background: var(--seg-track);
+}
+
+/* ---------- window close (settings / skills title bar) ---------- */
+.chrome-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin-right: -4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.chrome-close:hover {
+  background: var(--seg-track);
+  color: var(--ink-1);
+}
+
+/* ---------- focus ---------- */
+:focus-visible {
+  outline: 2px solid var(--accent-bar);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
 }

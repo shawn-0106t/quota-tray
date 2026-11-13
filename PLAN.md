@@ -117,12 +117,14 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 | 窗口 | 尺寸 | 定位 | 说明 |
 |---|---|---|---|
 | `main` | 424 × 自适应（典型 330–545 + 56 留白） | 工作区右下角 12px | 无边框、透明、置顶、不占任务栏、启动时隐藏 |
-| `settings` | 404 × 自适应（上限工作区 90%） | 屏幕居中 | 分区：通用 / Kimi 只读信息 / DeepSeek 凭证 |
+| `settings` | 404 × 自适应（内容上报，上限工作区 90%；当前约 347） | 屏幕居中 | 分区：通用 / Kimi 只读信息 / DeepSeek 凭证 |
 | `skills` | 404 × 520 | 屏幕居中 | Kimi 专属、只读、零后台开销 |
 | `menu` | 188 × N | 托盘光标处 | Open / Refresh / Settings / Skills / Exit |
 | `login`（DeepSeek） | ~900 × 680 | 居中 | 临时窗，不进 recovery 集合 |
 
 面板高度由前端测量内容后上报（`panel_height`），后端用 `LogicalSize` 改高 + `PhysicalPosition` 把窗口**右下角钉回原位**，并按工作区高度夹取；`show_panel` 先按当前 tab 定尺寸再显示，避免可见跳变。tab 选择持久化到 settings.json 的 `ActiveTab`。
+
+设置窗同样内容自适应（`settings_height`），改高后按工作区重新居中；以后加分区（P4 的 DeepSeek 凭证）不需要再写死高度。
 
 ## 5. 数据契约
 
@@ -182,8 +184,8 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 | 阶段 | 内容 | 验收 |
 |---|---|---|
 | **P0（已完成）** | 四版静态 demo + 设计定稿 + 本文件 | `demo/compare.html` 可切主题/provider/状态；`heights.py` 出高度表；`check_contrast.py` 全通过 |
-| **P1** | 仓库化、拷入 `kimi-planbar-tray/rust/` 基线、改名 Quota Tray、拷入 SPEC/LICENSE | `cargo build` + `npm run build` + `tsc --noEmit` 通过；`--test-fetch` / `--test-ui` 通过；旧 UI 能跑 |
-| **P2** | 面板 UI 重写（D 版 token）+ tab + 自适应高度 | 连点 tab 30 次无跳位、底部贴边不变；`--test-ui` 通过；截图与 `panel-demo-d.html` 对照一致 |
+| **P1（已完成）** | 仓库化、拷入 `kimi-planbar-tray/rust/` 基线、改名 Quota Tray、拷入 SPEC/LICENSE | `cargo build` + `npm run build` + `tsc --noEmit` 通过；`--test-fetch` / `--test-ui` 通过；旧 UI 能跑 |
+| **P2（进行中）** | 面板 UI 重写（D 版 token）+ tab + 自适应高度。**已完成**：四个窗口统一 D 版视觉（含设置/技能/托盘菜单）、面板与设置窗内容自适应 | 连点 tab 30 次无跳位、底部贴边不变；`--test-ui` 通过；截图与 `panel-demo-d.html` 对照一致。**剩余**：分段 tab + DeepSeek 空态面板（依赖 P3 数据） |
 | **P3** | DeepSeek 后端移植 + 双 poller + fixtures 解析测试 | `cargo test` 通过；同机对比旧版 `--test-fetch` 逐字段一致；`--test-deepseek` 通过 |
 | **P4** | 设置窗（通用 / Kimi 只读 / DeepSeek 凭证）+ 托盘合并 tooltip + 登录捕获窗 | 设置落盘后重启生效；真账号走通捕获 → 验证 → 保存 → 面板出数；`--test-login` 通过 |
 | **P5** | 打包、端到端验证、README、独立 code review | `npx tauri build` 出单 exe；`--test-fetch` / `--test-deepseek` / `--test-ui` / `--test-login` 全绿；端到端脚本通过；审查报告无 Blocker |
@@ -197,7 +199,7 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 - **未决**：
   - tab 活动块的 ring 用中性灰时，对轨道/活动块只有约 1.2–1.3:1，低于 WCAG 1.4.11 对状态标识的 3:1；当前靠「填充差 + 字重 + `aria-selected`」表达状态，键盘焦点另有 2px 蓝 outline（3.8:1）兜底。可选改成强调蓝 ring（对轨道 3.8:1，代价是标题区多一个蓝色元素）——待定。
   - 托盘图标是否换新（当前沿用 kimi 的 K 标）。
-  - skills 窗口是否也随 D 版换肤（当前仍是旧皮肤，P2 一并处理）。
+  - ~~skills 窗口是否也随 D 版换肤~~（已定：随 D 版，2026-11-13 落地）。
 
 ## 10. 设计审阅工具（`demo/`）
 

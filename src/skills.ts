@@ -2,7 +2,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import './theme.css';
 import './skills.css';
-import logoUrl from './assets/kimi-logo.png';
 import { initTheme } from './common';
 
 // Mirrors skills::SkillInfo (camelCase)
@@ -64,8 +63,6 @@ async function load(refresh: boolean): Promise<void> {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-  el<HTMLImageElement>('logo').src = logoUrl;
-
   // Event-driven only: the window page loads hidden at app start, so the scan
   // must NOT run here — it runs when open_skills emits 'skills-show'
   // (SPEC 21.2: zero cost until the window is actually opened).

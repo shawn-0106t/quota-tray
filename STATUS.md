@@ -1,55 +1,48 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-13。
+> 快照：2026-11-13（第二轮）。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
 ## 一句话
 
-**Phase 1 已完成**：`kimi-planbar-tray/rust/` 基线已落到仓库根目录并改名为 Quota Tray（0.1.0），`docs/SPEC.md` 已随基线拷入。下一个工作是 Phase 2：按 D 版 token 重写面板 UI 并加 tab。
+Phase 1 已落地；**Phase 2 的视觉部分已完成**——四个窗口（主面板 / 设置 / 技能 / 托盘菜单）统一到 D 版（`demo/panel-demo-d.html`），主面板与设置窗改为内容自适应高度。P2 只剩分段 tab + DeepSeek 空态面板，等 P3 的数据接口。
 
 ## 已完成
 
 | 阶段 | 产物 |
 |---|---|
 | P0 | 四版设计探索 + A/B/C/D 并排对比；`demo/panel-demo-d.html`（定稿）；`shot.sh` / `crop_panel.py` / `heights.py` / `check_contrast.py`；`PLAN.md`、`AGENTS.md`；仓库初始化 |
-| P1 | 基线导入（`index.html`、`settings.html`、`skills.html`、`menu.html`、`src/`、`vite.config.ts`、`tsconfig.json`、`package*.json`、`src-tauri/`）、全量改名 Quota Tray、`docs/SPEC.md` + `docs/SPEC_EN.md`（首页加合并后适用范围表）、`CHANGELOG.md`（0.1.0 起） |
+| P1 | 基线导入 + 全量改名 Quota Tray（0.1.0）；`docs/SPEC.md` + `docs/SPEC_EN.md`（首页适用范围表）；`CHANGELOG.md` |
+| P2（视觉） | 四窗统一 D 版视觉；主面板 / 设置窗内容自适应高度（`panel_height` / `settings_height`） |
 
-## Phase 1 做了什么（供核对）
+## P2 视觉部分做了什么（供核对）
 
-改名覆盖的文件：
-
-| 文件 | 结果 |
+| 范围 | 结果 |
 |---|---|
-| `src-tauri/tauri.conf.json` | `productName` = Quota Tray；identifier = `com.shawnqi.quotatray`；version = 0.1.0；main/settings/menu 三窗标题（skills 窗仍是 `Kimi Skills`） |
-| `src-tauri/Cargo.toml` | crate `quota-tray`、lib `quota_tray_lib`、version 0.1.0、新描述 |
-| `package.json` / `package-lock.json` | name `quota-tray`、version 0.1.0 |
-| `src-tauri/src/main.rs` | 互斥锁 `QuotaTray.SingleInstance`；4 处 `quota_tray_lib::` |
-| `src-tauri/src/settings.rs` | 配置目录 `%APPDATA%\QuotaTray`；HKCU Run 值名 `QuotaTray`（2 处） |
-| `src-tauri/src/lib.rs` | `QUOTA_TRAY_APP_DATA_DIR`（3 处 + settings.rs 注释 1 处）；兜底退出菜单 `Quit Quota Tray` / id `quotatray-fallback-quit`；`--test-ui` 临时目录前缀 `quota-tray-testui-`；头部注释 |
-| `src-tauri/src/tray.rs` | tooltip 与菜单文案（4 处）`Quota Tray  5h … · week …` |
-| `src-tauri/src/update.rs` | `User-Agent: QuotaTray` |
-| `src-tauri/src/skills.rs` | 测试临时目录前缀 `quotatray-skills-test-` |
-| `index.html` / `settings.html` | `<title>` 与标题栏文字 |
-| `src/theme.css` | 首行注释 |
+| `src/theme.css` | 重写为 D token + 共享原语：`--paper` / `--ink-1..3` / `--hair` / `--accent` / `--seg-*` / `--danger`、30/600 数字、10/500 大写微标签、4px 胶囊条、发丝线行、chip、分段控件、ghost 按钮、`.chrome-close`、焦点 ring、`prefers-reduced-motion` |
+| 主面板 `index.html` / `main.css` | D 骨架：字标 + 时间戳（`Update failed` 转红）；两列裸读数（WEEKLY / 5-HOUR，数字与 `%` 分离）；Extra usage 行（含月度条）；Kimi Code CLI 行 + Update chip；4 格 ghost footer。**去掉 header logo**（D 版只有字标） |
+| 设置窗 `settings.html` / `settings.css` | 主题 3 格 / 刷新间隔 4 格都用分段控件（替代 radio + pill）；自启改为中性 ring 复选框；Save 为全宽 ghost 按钮；窗口内容自适应（404×347） |
+| 技能窗 `skills.html` / `skills.css` | 卡片列表改发丝线行 + 大写 micro-label 分组；summary 行（计数 + ghost Refresh）；细滚动条 |
+| 托盘菜单 `menu.css` | 188 宽的 ghost 列表；阴影留白保持 24px（`panel.rs` 的定位公式依赖该值） |
+| 后端 | 新增 `panel_height` / `settings_height` 命令；主面板按上报高度 `LogicalSize` 改高并用 `PhysicalPosition` 把**右下角钉在距工作区 12px**，工作区高度夹取；设置窗改高后重新居中；两者都先定尺寸再显示 |
+| 行为兼容 | 所有 IPC id、事件、`settings.json` 字段不变；调试版 exe 仍走 Vite devUrl，要看渲染先 `npm run dev` |
 
-未改动、仍待拍板：`src-tauri/icons/`（沿用 kimi 的 K 标）、窗口初始尺寸（424×520，P2 改自适应）、skills 窗标题与皮肤。
+窗口尺寸（`--test-ui` 实测，无数据占位）：主面板 **424×319**、设置 **404×347**、技能 **404×520**、菜单 **188×160**。主面板有真实数据后会多出 `Resets in …` 与月度说明，高度随之增长。
 
-## 最近一次自检（2026-11-13，本机）
+## 最近一次自检（2026-11-13 第二轮，本机）
 
 | 命令 | 结果 |
 |---|---|
-| `npm install` | 20 包，0 漏洞 |
-| `npm run build` | 4 页产物落 `dist/`，标题已是 Quota Tray |
-| `npx tsc --noEmit` | 通过，无输出 |
-| `cargo fmt --check`（`src-tauri/`） | 干净（改名后有两处被 rustfmt 折行，已 `cargo fmt`） |
-| `cargo build` | 通过；`target/debug/quota-tray.exe` 已生成（首编 5m43s） |
+| `npx tsc --noEmit` | 通过 |
+| `npm run build` | 通过（4 页） |
+| `cargo fmt --check` | 干净 |
+| `cargo build` | 通过 |
 | `cargo test` | 5 passed（recovery ×3、skills ×2） |
-| `quota-tray.exe --test-fetch` | 真机凭证打通，返回 live JSON，`error: null` |
-| `quota-tray.exe --test-ui` | `MainWindow / SettingsWindow / SkillsWindow / TrayMenuWindow OK`，退出码 0；四窗尺寸与标题正确（424×520 / 404×464 / 404×520 / 188×160） |
-| 旧 UI 渲染 | `dist` 经本地 http 服务在 Edge headless 424px 下截图：卡片、双读数区、Extra Usage、CLI 行、四个 ghost 按钮均正常，标题已显示 Quota Tray（`--` 占位是因为浏览器里没有 Tauri IPC） |
-
-注：`--test-ui` 会在屏幕上真实弹出四个窗口约 6 秒；调试版 exe 走 Vite devUrl，要看渲染内容需先 `npm run dev`。`--test-deepseek` / `--test-login` 尚未实现（P3/P4）。
+| `quota-tray.exe --test-fetch` | live JSON，`error: null` |
+| `quota-tray.exe --test-ui` | 四窗 OK，退出码 0；尺寸见上 |
+| `check_contrast.py` | 53/53 PASS |
+| 视觉对照 | 四个窗口明暗两套截图与 `demo/panel-demo-d.html` 对照：字标/微标签/数字/发丝线/footer 一致；设置窗与菜单为同一套原语的延伸 |
 
 ## 接手必须知道的六件事
 
@@ -71,23 +64,18 @@
 | tab 控件 | 灰底轨道 radius 12 + 等宽格 radius 8 + 活动格 1px 内描边 ring（**无投影**） |
 | 高度（实测） | Kimi tab 330 · DeepSeek 2 模型 403 · 4 模型 545（卡片高；窗口高 = +56） |
 
-## 下一步：Phase 2 可执行清单
+## 下一步
 
-按 `PLAN.md` §8：
-
-1. 用 D 版 token 重写 `src/theme.css` / `main.css` / `index.html` 结构：双行 header、分段 tab、两列裸读数区、发丝线、ghost footer。
-2. `src/common.ts` 的格式化函数对齐 `PLAN.md` §3（`tabular-nums`、10.5px 说明行、`Resets in …`）。
-3. tab 状态与 `ActiveTab` 持久化（`settings.json`，`PLAN.md` §7）；窗口高度由前端测量上报、后端 `LogicalSize` + `PhysicalPosition` 右下角钉回（`PLAN.md` §4）。
-4. 托盘 tooltip 与面板文案统一切到 D 版；skills 窗皮肤待定（先不动）。
-5. 验收：连点 tab 30 次不跳位、窗口底边与右边缘不动；`bash demo/shot.sh …` + `crop_panel.py` 424px、明暗两套与 `panel-demo-d.html` 逐屏比对；`--test-ui` 通过；`heights.py` 仍是 330 / 403 / 545。
+1. **P2 剩余**：分段 tab（Kimi / DeepSeek）+ DeepSeek 空态面板 + `settings.json` 的 `ActiveTab`；验收是连点 tab 30 次不跳位、底边与右边缘不动。tab 需要 P3 的数据源才有真实内容，是否先做空态由你拍板。
+2. **P3**：移植 DeepSeek 后端（余额 + 用量 + `/models` 展示名）、双 poller、`tests/fixtures` 解析测试、`--test-deepseek`。
+3. **P4**：设置窗增补 Kimi 只读信息与 DeepSeek 凭证分区（窗口已内容自适应，加分区不用改高度常量）、托盘合并 tooltip、登录捕获窗。
 
 ## 未决（等你拍板）
 
 1. **tab 活动块的 ring 对比度**：中性灰对轨道只有约 1.2–1.3:1，低于 WCAG 对状态标识的 3:1；可选改成强调蓝 ring（对轨道 3.8:1，代价是标题区多一个蓝元素）。当前保留中性。
-2. **skills 窗口**是否随 D 版换肤（现在还是旧皮肤）。
-3. **托盘图标**是否换新（当前沿用 kimi 的 K 标）。
-4. **GitHub 仓库名 / 是否建 remote**（建议 `quota-tray`）。目前无 remote。
+2. **托盘图标**是否换新（当前沿用 kimi 的 K 标）。
+3. **GitHub 仓库名 / 是否建 remote**（建议 `quota-tray`）。目前无 remote。
 
 ## 新对话开场建议
 
-> 接手 Quota Tray（当前目录已是 git repo）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`，视觉基准是 `demo/panel-demo-d.html`。Phase 1 已落地，从上面的 Phase 2 清单开始，完成后按 `PLAN.md` §8 的验收项自检。
+> 接手 Quota Tray（当前目录已是 git repo）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`，视觉基准是 `demo/panel-demo-d.html`。Phase 1 与 Phase 2 的视觉部分已完成，下一步是 P2 剩余的分段 tab（或直接进 P3 DeepSeek 后端），完成后按 `PLAN.md` §8 的验收项自检。

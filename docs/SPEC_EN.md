@@ -3,6 +3,8 @@
 > This is the behaviour specification of `kimi-planbar-tray` (rust edition), carried into this repository as-is by Phase 1. It is the authoritative reference for the **Kimi** side of the app.
 > Precedence: **`PLAN.md` > this document**. Product scope, the frozen visual design (D-version tokens and geometry), the window matrix, the two-provider polling and failure semantics, and naming/versioning all follow `PLAN.md`; this document remains the implementation contract for the inherited behaviour it describes (credential chain, API parsing, tray/window lifecycle, WebView2 recovery). `SPEC x.y` citations in code still refer to this document.
 >
+> **Parent-repository names**: this document keeps the parent project's names. Read them as follows here — `KimiPlanbarTray` / HKCU value name / config directory → `QuotaTray`, `%APPDATA%\QuotaTray`; `KimiPlanbarTray.SingleInstance` → `QuotaTray.SingleInstance`; `KPT_APP_DATA_DIR` → `QUOTA_TRAY_APP_DATA_DIR`; `%TEMP%\kimi-planbar-tray-testui-<pid>` → `quota-tray-testui-<pid>`; the `rust/` subdirectory → the repository root (no `cd rust` for build commands); `kimi-planbar-tray.exe` → `quota-tray.exe`. Window sizes follow `PLAN.md` §4 (the panel and the settings window are content-sized).
+>
 > | Chapter | Status |
 > |---|---|
 > | 1–2 Overview / Terminology | Product scope follows `PLAN.md` §1; the glossary still applies |
@@ -22,7 +24,7 @@
 > | 16 Data and API | Kimi half applies; DeepSeek is specified in `PLAN.md` §5.2 / §6 |
 > | 17 CLI Version Check | Applies |
 > | 18 Settings Persistence | Applies; adds the `ActiveTab` field (`PLAN.md` §7) |
-> | 19 Test/Self-Check Commands | `--test-fetch` / `--test-update` / `--test-ui` apply; `--test-deepseek` / `--test-login` are described in `AGENTS.md` |
+> | 19 Test/Self-Check Commands | `--test-fetch` / `--test-update` / `--test-ui` apply; `--test-deepseek` / `--test-login` belong to P3/P4 and are not implemented |
 > | 20 Other Implementation Details | Applies; the named mutex is now `QuotaTray.SingleInstance` and the config directory is `%APPDATA%\QuotaTray` |
 > | 21 Skills Read-Only Window | Applies |
 > | 22 WebView2 Failure Detection and Recovery | Applies |
@@ -88,7 +90,7 @@ A resident Windows system tray app that puts Kimi Code plan quota one click away
 
 ### 3.2 Process and window model
 
-Single process. All 4 WebView windows are created at startup (hidden) and are all **singletons, reused** (closing hides them; they are never destroyed on the normal path — the only exception is the automatic rebuild after a WebView2 process failure, see chapter 22); there are also a tray icon, the quota polling timer, and a system-theme registry watcher. Single instance is guaranteed by a named mutex (see 20.1).
+Single process. All 4 WebView windows are created at startup (hidden) and are all **singletons, reused** (closing hides them; they are never destroyed on the normal path — the only exception is the automatic rebuild after a WebView2 process failure, see chapter 22); there are also a tray icon, the quota polling timer, and a system-theme registry watcher. Single instance is guaranteed by a named mutex (see chapter 20).
 
 | Window | Frontend page | Logical size |
 |---|---|---|
