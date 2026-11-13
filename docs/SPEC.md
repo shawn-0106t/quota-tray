@@ -1,0 +1,717 @@
+> **合并后适用范围（Quota Tray，2026-11-13 起）**
+>
+> 本文档是 `kimi-planbar-tray`（rust 版）的行为规格，Phase 1 原样拷入本仓库，作为 **Kimi 一侧**继承行为的依据。
+> 权威顺序：**`PLAN.md` > 本文档**。产品范围、视觉定稿（D 版 token 与几何）、窗口矩阵、双 provider 轮询与失败语义、命名与版本，一律以 `PLAN.md` 为准；本文档仍是其所述继承行为（凭证链、API 解析、托盘/窗口生命周期、WebView2 recovery）的实现契约。代码注释里的 `SPEC x.y` 仍指本文档章节。
+>
+> | 章节 | 现状 |
+> |---|---|
+> | 1–2 概述 / 术语 | 产品范围以 `PLAN.md` §1 为准；术语表仍适用 |
+> | 3 系统架构 | 3.1（monorepo 四版本）作废——本仓库只有一条 Tauri 实现线；3.2–3.4 的窗口与模块划分仍适用 |
+> | 4 技术栈与依赖 | 适用 |
+> | 5 数据流 | Kimi 部分适用；DeepSeek 见 `PLAN.md` §5.2 |
+> | 6 安全与隐私 | 适用 |
+> | 7 构建、测试与发布 | 构建与自检命令适用；发布流水线待 `PLAN.md` §8 P5 重新定义 |
+> | 8 运行环境要求 | 适用 |
+> | 9 维护边界与文档地图 | 由本仓库 `AGENTS.md` / `PLAN.md` / `STATUS.md` 取代 |
+> | 10 窗口规格 | 尺寸以 `PLAN.md` §4 为准（面板自适应高度；设置窗、Skills 窗暂沿用） |
+> | 11 配色方案 | 由 `PLAN.md` §3.2 取代 |
+> | 12 面板 UI 结构 | 由 `PLAN.md` §3 与 `demo/panel-demo-d.html` 取代；P2 重写为双 tab |
+> | 13 设置窗 UI 结构 | 适用，P4 增补 DeepSeek 凭证区 |
+> | 14 托盘行为 | 适用；合并版 tooltip 覆盖两个 provider（P4） |
+> | 15 动画 | 适用（`PLAN.md` §3.6 复述同套时序） |
+> | 16 数据与 API | Kimi 部分适用；DeepSeek 见 `PLAN.md` §5.2 / §6 |
+> | 17 CLI 版本检查 | 适用 |
+> | 18 设置持久化 | 适用；新增 `ActiveTab` 字段（`PLAN.md` §7） |
+> | 19 自检命令 | `--test-fetch` / `--test-update` / `--test-ui` 适用；`--test-deepseek` / `--test-login` 见 `AGENTS.md` |
+> | 20 其他实现细节 | 适用；命名互斥锁改为 `QuotaTray.SingleInstance`，配置目录改为 `%APPDATA%\QuotaTray` |
+> | 21 Skills 只读窗口 | 适用 |
+> | 22 WebView2 故障检测与恢复 | 适用 |
+
+---
+
+# Kimi Planbar Tray — 项目技术规格（SPEC）
+
+> English version: [SPEC_EN.md](SPEC_EN.md)（章节编号一致，可交叉对照）
+>
+> 本文档是整个项目的**唯一权威规格**（single source of truth），分两篇：
+> - **第一篇 项目规格**（第 1–9 章）：目标、架构、数据流、安全、构建发布、维护边界
+> - **第二篇 UI 与行为规格**（第 10–21 章）：窗口、配色、布局、动画、API 解析、持久化等全部数值细则（原 `docs/UI-SPEC.md` 并入，已删除独立文件）
+>
+> 代码注释中的 `SPEC x.y` 引用均指本文档章节号；修改行为前必须先查第二篇对应章节，改行为必须同步改对应章节。
+
+---
+
+# 第一篇 项目规格
+
+## 1. 概述
+
+### 1.1 目标
+
+Windows 系统托盘常驻应用，让 Kimi Code 套餐用量一键可查：5 小时窗口与每周用量卡片、重置倒计时、Extra Usage（加油包）余额与月度用量，以及 Kimi Code CLI 版本更新提示、Skills 只读速览、Console / Releases 浏览器跳转。
+
+### 1.2 功能范围
+
+- 读取本机 Kimi Code CLI 凭证，调用 `GET https://api.kimi.com/coding/v1/usages` 获取配额
+- 主面板（托盘左键）、设置窗、托盘右键菜单窗、Skills 只读窗口
+- 主题跟随系统（Moonlit 亮 / Moondark 暗）、可配置刷新间隔、开机自启（HKCU）、便携模式（portable.dat）
+- CLI 版本检查（changelog 优先，GitHub API 兜底）
+- 无头自检命令（`--test-fetch` / `--test-update` / `--test-ui`）
+
+### 1.3 非目标
+
+- **非官方社区工具**，与 Moonshot AI 无隶属关系（logo 版权归 Moonshot AI）
+- 不修改 Kimi Code CLI 的任何文件（凭证只读）
+- 无遥测、无数据上报、无第三方分析
+- 仅 Windows 10/11，不做 macOS / Linux
+- `wpf/` 曾冻结于 v1.5.0，自 v1.7.3 起复活对齐并恢复随 Releases 分发（见 1.1）
+
+## 2. 术语
+
+| 术语 | 含义 |
+|---|---|
+| Moonlit / Moondark | 亮 / 暗双主题（色值见第 11 章） |
+| Extra Usage / booster wallet | 加油包钱包；余额单位陷阱见 16.3 |
+| portable mode | exe 旁存在空 `portable.dat` 时设置文件改存 exe 目录（见 18.1） |
+| `SPEC x.y` | 代码注释对本文档章节号的引用 |
+
+## 3. 系统架构
+
+### 3.1 仓库结构（monorepo 四版本）
+
+- `rust/` — **活跃开发线之一（与 `qt/` 双轨并行）**：Tauri 2 + Rust 后端 + vanilla HTML/CSS/TS 前端（Vite 多页构建，无框架）
+- `qt/` — **活跃开发线之一（已完成，实验性质）**：C++ Qt6 + Qt Widgets，无 WebView 依赖；已达到与 rust/ 1.7.3 的 parity；架构方案与模块映射见 `docs/archive/QT-MIGRATION.md`（已归档）
+- `egui/` — **活跃开发线之一（已完成，实验性质——仅供测试：可从源码构建独立 exe，不随 Releases 分发）**：Rust egui + tray-icon，无 WebView 依赖、无 Node 工具链；已达到与 rust/ 的 SPEC parity（Phase 4 审计 99 PASS / 2 项轻微偏差 / 6 项环境不可测）；版本随主清单同步（1.9.0）；方案与 Phase 记录见 `docs/archive/EGUI-MIGRATION.md`（已归档）
+- `wpf/` — 原生 .NET 8 / WPF 版（零第三方 NuGet 依赖），曾冻结于 v1.5.0，现已对齐 rust/ 1.9.0（Skills 窗口、图标动作行、hover glow、1.7.1 加固回移植），恢复随 Releases 分发双 exe（framework-dependent + self-contained）
+- `docs/` — 本规格、截图基准、归档历史
+- 脚本均在 `scripts/` 下：`scripts/release/`（`make_release_zip.py` 发布打包、`make_screenshots.py` README 截图生成、`verify_icons.py` 图标与库逐字节比对）、`scripts/diagnostics/`（一次性诊断/测量脚本）
+- `.github/` — GitHub Actions 持续集成与依赖更新：`.github/workflows/ci.yml` 在每次 push 到 main 与每个 PR 上跑 `gitleaks` 全历史密钥扫描 job 与 windows-latest 构建门禁 job（内容与边界见 7.2）；`.github/dependabot.yml` 为 cargo/npm/github-actions 三生态开 weekly 依赖更新（见 7.2）
+
+### 3.2 进程与窗口模型
+
+单进程。启动时创建全部 4 个 WebView 窗口（隐藏态），均为**单例复用**（关闭即隐藏，正常路径永不销毁；唯一的例外是 WebView2 进程故障后的自动重建，见第 22 章）；另有托盘图标、配额轮询定时器、系统主题注册表监听。单实例由命名互斥锁保证（见 20.1）。
+
+| 窗口 | 前端页 | 逻辑尺寸 |
+|---|---|---|
+| main 主面板 | `index.html` + `main.ts` | 424×520 |
+| settings 设置 | `settings.html` + `settings.ts` | 404×464 |
+| skills 速览 | `skills.html` + `skills.ts` | 404×520 |
+| menu 托盘菜单 | `menu.html` + `menu.ts` | 188×160 |
+
+### 3.3 后端模块（`rust/src-tauri/src/`）
+
+| 模块 | 职责 |
+|---|---|
+| `main.rs` | 入口；`--test-*` 自检先于单实例检查；命名互斥锁 `KimiPlanbarTray.SingleInstance` |
+| `lib.rs` | Tauri builder、全部 IPC 命令、窗口事件路由（失焦收起 / 关闭即隐藏）、DWM 圆角禁用 |
+| `credentials.rs` | 凭证链（credentials json → config.toml 兜底），只读 |
+| `quota.rs` | usages API 拉取 + 防御性 JSON 解析 |
+| `polling.rs` | 刷新调度：启动 2s 首刷、失败 30s 快重试、成功回正常间隔、保留上次成功数据 |
+| `tray.rs` | 托盘图标、左键 toggle、右键菜单、tooltip、悬停预取 |
+| `panel.rs` | 面板/菜单定位（物理像素）、焦点行为、300ms 重入守卫 |
+| `settings.rs` | settings.json 持久化、portable.dat 探测、HKCU 自启 |
+| `skills.rs` | 本地 skills 只读扫描（首开扫描一次并缓存） |
+| `update.rs` | `kimi --version` + changelog Range 请求 + GitHub API 兜底 |
+| `theme_watch.rs` | 注册表监听系统亮暗主题切换 |
+| `recovery.rs` | WebView2 ProcessFailed 检测、webview.log 诊断日志、进程内窗口重建与限流（第 22 章） |
+| `state.rs` | AppState 共享状态（RwLock、缓存、调度通知） |
+
+> Qt 版（`qt/`）：上述后端模块与 4 个前端页面合并进同一 C++ 进程，无前后端边界与 IPC；模块与文件映射见 `docs/archive/QT-MIGRATION.md` 第 3 节。
+
+> egui 版（`egui/`）：同一批业务模块（credentials / quota / polling / settings / skills / update / theme_watch / state）拷贝进同一 Rust 进程并去除 Tauri 依赖——AppHandle / emit 换成进程内 `AppCtx`（共享状态 + `AppEvent` 事件总线）；映射与实施状态见 `docs/archive/EGUI-MIGRATION.md` 第 2、6 节。
+
+### 3.4 前后端边界（Tauri IPC，仅 rust/ 版）
+
+命令（`lib.rs` 注册，前端 `invoke`）：
+
+| 命令 | 用途 |
+|---|---|
+| `get_state` / `refresh_now` | 读全量状态 / 立即刷新 |
+| `open_settings` / `close_settings` | 设置窗显隐 |
+| `open_skills` / `close_skills` / `get_skills` | Skills 窗显隐与数据（`refresh=true` 强制重扫） |
+| `save_settings` | 保存设置并应用（主题/自启/重排刷新） |
+| `open_releases` / `open_console` | 浏览器打开 GitHub Releases / Kimi Code Console |
+| `finish_hide_panel` | 收起动画结束后真正隐藏面板 |
+| `quit_app` / `menu_action` / `menu_height` | 退出 / 菜单点击 / 菜单高度自适应 |
+| `start_drag` | 无边框窗口拖动 |
+
+事件（后端 emit，前端 `listen`）：`quota-updated`、`update-status`、`panel-show`、`panel-hide`、`settings-show`、`skills-show`。
+
+### 3.5 前端
+
+4 个页面共用 `common.ts`（DTO 类型 + 格式化 helper + 主题初始化）与 `theme.css`（全部主题色的唯一来源）。外部数据（skills 名称/描述等）一律 `textContent` 渲染，禁止 `innerHTML`。
+
+## 4. 技术栈与关键依赖
+
+**rust/ 版**：
+
+- **Tauri 2**（含 opener / single-instance 插件）— 窗口、托盘、IPC
+- **tokio / reqwest / serde** — 异步运行时、HTTP、JSON
+- **windows 0.62 / winreg** — Win32（工作区、DPI、DWM、互斥锁）与注册表
+- **regex / chrono** — 版本号解析、重置倒计时计算
+- **Vite + TypeScript** — 前端构建；无运行时框架
+
+**qt/ 版**：C++17 + **Qt 6**（仅 Widgets / Network / Svg，无第三方库）；**CMake + MSVC** 构建；windeployqt 动态链接分发（LGPL 合规路线，目录形态，无单 exe）；一键打包 `PYTHONUTF8=1 python qt/package_release.py` → `qt/dist/`。与 Rust 栈的逐项对比见 `docs/archive/QT-MIGRATION.md` 第 2 节。
+
+**egui/ 版**：**egui 0.37.0（eframe 锁定 `=0.37.0`，glow 为主渲染后端、wgpu 备选；`default_fonts` 为显式 feature）+ tray-icon 0.26.1**——纯 Rust 即时模式自绘 UI，无 WebView、无 Node 工具链；业务栈（tokio / reqwest / serde / regex / chrono / winreg / windows）与 rust/ 版同源同版本。选型对比、目标架构与 Phase 记录见 `docs/archive/EGUI-MIGRATION.md`。
+
+## 5. 数据流
+
+```
+~/.kimi-code 凭证（只读）
+   → credentials.rs 取 token
+   → quota.rs 拉取 + 解析（陷阱见 16.3）
+   → AppState（保留上次成功值）
+   → emit quota-updated
+   → 前端渲染卡片 / 托盘 tooltip
+```
+
+- 设置：前端 → `save_settings` → `settings.rs` 写 JSON（路径见 18.1）→ 应用主题/自启/重排定时器
+- Skills：前端开窗 → `get_skills` → 首次扫描本地目录并缓存于 AppState；不写回任何文件
+- 版本检查：后台异步，结果经 `update-status` 事件推送到版本行
+
+## 6. 安全与隐私
+
+- OAuth token / api_key 仅从本机 Kimi Code CLI 文件**只读**，仅作为 Bearer 发往 `https://api.kimi.com/coding/v1/usages`；不打印日志、不另行持久化、不发往任何其他端点
+- 不需要管理员权限：自启仅写 `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`（键 `KimiPlanbarTray`），不碰 HKLM / Program Files
+- exe 未代码签名，SmartScreen 提示属预期（README 已注明）
+- 图标为 Kimi 官方 logo（版权归 Moonshot AI）；保留 `LICENSE`（MIT © Shawn Qi）与 `NOTICE`（部分 © baigong-ai / kimi-planbar）归属声明，不可移除
+
+## 7. 构建、测试与发布
+
+### 7.1 构建
+
+前提：Windows + Rust stable（MSVC）+ Node.js 18+ + WebView2 Runtime。
+
+```bash
+cd rust
+npm install
+npm run dev          # 仅前端；完整应用用 npx tauri dev
+npx tauri build      # release exe → src-tauri/target/release/kimi-planbar-tray.exe
+```
+
+注意：裸 `cargo build` 的 debug exe **不内嵌前端**（窗口指向 Vite devUrl），不起 dev server 直接运行会显示 WebView2 "localhost ERR_CONNECTION_REFUSED" 页，且 debug 构建带控制台窗口。`--test-*` 自检不加载 Web 内容，debug exe 可用。
+
+**qt/ 版**：前提 Windows + MSVC（VS 生成工具 2026）+ Qt 6（MSVC 2022 64-bit kit，推荐 aqtinstall 免管理员安装）+ CMake。
+
+```bash
+cd qt
+cmake -B build -G "Visual Studio 18 2026" -A x64 -DCMAKE_PREFIX_PATH=C:/Qt/6.9.3/msvc2022_64
+cmake --build build --config Release
+PYTHONUTF8=1 python package_release.py   # 一键重建 Release + windeployqt 到 qt/dist/（目录形态分发）
+```
+
+注意：Qt 版为 GUI 子系统 exe，`--test-*` 自检输出直接 `WriteFile(GetStdHandle(STD_OUTPUT_HANDLE))`（Git Bash 管道与 cmd 控制台均覆盖），AttachConsole + `CONOUT$` 仅作兜底。构建前需先按 PID/路径结束 qt GUI 进程（exe 文件锁；与 rust 版同名 `kimi-planbar-tray.exe`，勿用 `taskkill /IM`）。
+
+**egui/ 版**：前提 Windows + Rust stable（MSVC）。
+
+```bash
+cd egui
+cargo build --release   # release exe → target/release/kimi-planbar-tray-egui.exe
+```
+
+注意：debug 构建为控制台子系统（带控制台窗口），release 构建为 GUI 子系统（不弹控制台）；`--test-*` 自检输出走 qt/ 版同款 `WriteFile(GetStdHandle(STD_OUTPUT_HANDLE))` 模式，两种构建下均可用。egui 版已全部完结（实验性质、仅供测试），实施记录见 `docs/archive/EGUI-MIGRATION.md` §6。
+
+**wpf/ 版**：前提 Windows + .NET 8 SDK。
+
+```bash
+cd wpf
+dotnet build -c Release   # CI 跑的编译级门禁
+dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o publish                                              # framework-dependent exe（~0.3 MB，需 .NET 8 桌面运行时）
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o publish-sc   # self-contained exe（~65 MB，零前提）
+```
+
+注意：`--test-*` 自检输出走 `Console.WriteLine`——WinExe 无控制台，仅在 stdout 被重定向（Git Bash 管道、`> file`）时可见，裸跑（双击/资源管理器启动）输出丢弃；`--screenshot` 为本版独有。
+
+### 7.2 测试
+
+除 `skills.rs` frontmatter 解析的单元测试（`cargo test` 仅跑这部分）外无单元测试套件。验证手段（详见第 19 章）：
+
+- `--test-fetch` / `--test-update` / `--test-ui` 无头自检（先于互斥锁执行，可与运行中实例并存）
+- egui/ 版实现同名 `--test-*` 参数，输出与 rust/ 版逐字段一致（同一台机器可直接 diff）；skills frontmatter 解析单测随 `cd egui && cargo test` 运行（`--test-ui` 已实装：构造并显示全部四窗后输出 `MainWindow OK` / `SettingsWindow OK` / `SkillsWindow OK` / `TrayMenuWindow OK` 四行，约 6s 自动退出）
+- 视觉验证：`PYTHONUTF8=1 python scripts/release/make_screenshots.py`（headless Chrome/Edge 渲染 dist，`KPT_CHROME` 可指定浏览器，重拍 `docs/screenshot-*.png`）或与 `docs/*.png` 基准对比
+- 手动 headless Chrome 截图配方（检查 `rust/dist/index.html`）：去掉 `crossorigin` 属性（file:// 会拦截），`<html>` 上设 `data-theme="light|dark"`，`<body>` 加 `class="enter"`（面板在收到后端 `panel-show` 事件前保持 `opacity:0`），并钉死 `body{width:424px;height:520px;overflow:hidden}`（headless Chrome 会把过小的窗口钳到约 534 px 宽）。rust/ 版**没有 `--screenshot` 参数**（仅冻结的 wpf/ 版有）；未识别的参数会回落为正常启动 GUI
+- 交付前按用户全局规范派独立 subagent 做 code review
+- 持续集成：`.github/workflows/ci.yml`（GitHub Actions）两个 job——`gitleaks`（ubuntu-latest，全历史密钥扫描，`GITLEAKS_VERSION` 钉 8.29.1 避开 8.30.x 检出回归）与 `build-and-test`（windows-latest，`npm ci` + `npx tsc --noEmit` + `npm run build` 前端类型检查与打包，及 `cargo fmt --check` + `cargo clippy --all-targets --locked -- -D warnings` + `cargo build --locked` + `cargo test --locked` skills 解析单测，egui/ crate 上亦跑同款 fmt/clippy/build/test（`--locked`），wpf/ 上跑编译级 `dotnet build -c Release`）；`--test-*` 自检与 `verify_icons.py` 依赖本机凭据/交互桌面/仓库外图标库，**不在 CI 执行**，仍为本地检查；push 到 main 的纯文档变更（`**.md`、`docs/`）不触发 CI（`paths-ignore` 仅挂在 `push` 触发器上），PR 一律触发以保证 required check 回报；main 分支受保护（两个 CI job 均为 required check，含管理员），改动一律走 PR
+- 依赖更新：`.github/dependabot.yml` 为 cargo（`/rust/src-tauri`）、npm（`/rust`）、github-actions 三生态开 weekly Dependabot（minor+patch 按生态合组单 PR、major 单开）；repo 已开 Dependabot alerts 与 security updates
+
+### 7.3 发布
+
+1. 版本号同步（12 处）：`rust/package.json`、`rust/src-tauri/Cargo.toml`、`rust/src-tauri/tauri.conf.json`、`rust/src-tauri/Cargo.lock` 的 `kimi-planbar-tray` 条目、`rust/package-lock.json` 的根版本（顶层与 `packages[""]` 两处；`cd rust && npm install` 可让 npm 自行同步）、`scripts/release/make_release_zip.py` 的 `VERSION`、`qt/CMakeLists.txt` 的 `project(VERSION ...)`、`qt/src/main.cpp` 的 `setApplicationVersion`、`qt/resources.rc` 的 `FILEVERSION`/`PRODUCTVERSION` 与 `FileVersion`/`ProductVersion` 字符串、`egui/Cargo.toml` 的 `version`、`egui/Cargo.lock` 的 `kimi-planbar-tray-egui` 条目（cargo 随 `Cargo.toml` 一并重写）、`wpf/KimiPlanbarTray.csproj` 的 `<Version>`；另同步 `AGENTS.md` 顶部 "Current version" 行、`CHANGELOG.md`（双语条目——英文 + 中文，从 `Unreleased` 移出定稿）、`README.md` / `README_CN.md` 中的版本/对齐引用与本清单（qt 版仅实验性质，不纳入 `make_release_zip.py`，不随 release 分发——用户已定；egui/ 版同理：experimental 测试版，不纳入发布流程——用户已定，但其版本号随主清单同步，在上述 12 处内；wpf/ 版自 1.7.3 复活起随 release 分发）
+2. **自动路径（首选）**：push `v<x.y.z>` tag——`.github/workflows/release.yml`（`v*` tag 触发）在 windows runner 上构建 rust release exe 与 WPF 双 exe（framework-dependent + self-contained）、运行打包脚本并创建挂好五件资产（`KimiPlanbarTray-rust.exe`、`KimiPlanbarTray-wpf.exe`、`KimiPlanbarTray-wpf-selfcontained.exe`、源码快照 zip、`SHA256SUMS.txt`）的 **draft** Release；正文由 workflow 从 `CHANGELOG.md` 对应版本段自动生成（英文正文 + 中文镜像 + 完整 CHANGELOG 链接，维护者清单为 HTML 注释；找不到该版本段时 job 直接失败），核对标题与五件资产后手动 Publish。第 3-4 步即该 workflow 自动化的内容，保留为手动兜底
+3. `npx tauri build` 出 release exe（手动兜底）
+4. `python scripts/release/make_release_zip.py` 打源码快照 + 二进制的 zip，并生成 `SHA256SUMS.txt`：两者各先写 `<name>.part`，校验和文件先改名、zip 最后改名，zip 改名失败会把旧校验和原样写回，故失败后留下的始终是**上一轮一致的那一对**（只读目标、占位目录或只读的残留 `.part` 会在构建前被指名拒绝；源码集为空则直接报错不产包；残留窗口只有两处——两次改名之间被杀进程、改名瞬间被别的进程独占）
+5. zip 与校验和已 gitignore，经 draft 资产或手动上传至 GitHub Releases；**不要把二进制提交进仓库**。本地校验：把二进制按发布名（如 `KimiPlanbarTray-rust.exe`）放在仓库根，直接 `sha256sum -c SHA256SUMS.txt`——该名已被 `.gitignore` 与打包脚本排除，不会被收进 zip（`__pycache__` / `*.pyc` 同理）
+6. 若打算发版回原仓库（shawn-0106t/kimi-planbar-tray），先与用户确认提 PR 还是另开仓库
+
+> 检查类 CI（`ci.yml`）只做检查（构建、静态 lint、密钥扫描），不产出发布物；发布物仅由 tag 触发的 `release.yml` 以 draft 形式产出并挂载——publish 仍为手动决策（见本节步骤 2）。
+
+## 8. 运行环境要求
+
+- Windows 10 / 11（含 WebView2 Runtime，Win11 自带）
+- 已安装并登录 Kimi Code CLI，且为 Kimi For Coding 套餐用户
+- 网络可达 `api.kimi.com`
+
+## 9. 维护边界与文档地图
+
+- 新功能进 `rust/`、`qt/`、`egui/`、`wpf/` 活跃线（功能基线以第二篇为准；qt/egui 为实验线，`wpf/` 自 1.7.3 复活起与 rust/ 同步维护）；egui 版（实验性质、仅供测试）的行为一致性由 `docs/archive/EGUI-MIGRATION.md` 的 Phase 验收记录把关（已完结归档）
+- 行为歧义时：第二篇为契约，`rust/` 为当前实现基准（`wpf/` 与之对齐）；Qt 版架构方案与模块映射见 `docs/archive/QT-MIGRATION.md`；egui 版架构方案与 Phase 记录见 `docs/archive/EGUI-MIGRATION.md`
+
+| 文档 | 定位 |
+|---|---|
+| `README.md` / `README_CN.md` | 面向用户：功能、下载、使用、构建 |
+| `docs/SPEC.md`（本文档） | 唯一权威规格：项目级 + UI/行为细则 |
+| `docs/SPEC_EN.md` | 本文档的英文版（章节编号一致，便于交叉对照） |
+| `docs/WEBVIEW2-RECOVERY.md` | WebView2 故障恢复方案与落地记录（第 22 章的设计背景/差异说明） |
+| `docs/archive/QT-MIGRATION.md` | Qt 版（C++ Qt6 Widgets）迁移规划（已归档，开发完成）：案例调研、栈对比、模块映射、分阶段计划 |
+| `docs/archive/EGUI-MIGRATION.md` | egui 版（Rust egui + tray-icon）迁移规划（已归档，开发完成）：选型、目标架构、Phase 计划与实施状态 |
+| `docs/archive/WPF-REVIVAL.md` | WPF 版复活计划（已归档，执行完成）：差距分析、分阶段工作说明书、执行决策与两轮 review 记录、验收结果 |
+| `AGENTS.md` | AI 编码助手上手索引（结构、命令、陷阱摘要） |
+| `.github/workflows/ci.yml` | GitHub Actions 检查：gitleaks 全历史密钥扫描 + 构建门禁（push/PR 触发，见 7.2） |
+| `.github/dependabot.yml` | Dependabot weekly 依赖更新：cargo/npm/github-actions（见 7.2） |
+| `docs/screenshot-*.png` | 视觉基准（由 `scripts/release/make_screenshots.py` 生成） |
+| `docs/archive/HANDOFF.md` | 已归档的 WPF→Rust 重写接力手册（历史，不再更新） |
+
+---
+
+# 第二篇 UI 与行为规格
+
+> 本篇由原 `docs/UI-SPEC.md` 并入（章节号 1–12 → 10–21）。所有坐标单位均为 DIP（逻辑像素），DPI 感知模式为系统级（SystemAware）。
+> 数值基准最初提取自 WPF 参考实现（`wpf/`，当时冻结于 v1.5.0）；当前实现以 `rust/` 为准（`wpf/` 自 v1.7.3 复活起与之对齐），行为变更必须同步更新本篇。
+
+---
+
+## 10. 窗口规格
+
+三个窗口均为：**无边框**（`WindowStyle=None`）、**透明背景 + AllowsTransparency**（自绘圆角窗口）、**置顶**（`Topmost=True`）、**不显示在任务栏**（`ShowInTaskbar=False`）、**禁止缩放**（`ResizeMode=NoResize`）。窗口本体背景为 `Transparent`，实际可视外观由内部 `Border`（圆角 + 背景色 + 阴影）承担，四周 Margin 为阴影空间。
+
+### 10.1 主用量面板（MainWindow）
+- 尺寸：`Width=424, Height=520`
+- 根 Border：`CornerRadius=14`，`Margin=28`（阴影衰减空间，窗口比可视卡片每侧大 22px），背景 `WindowBgBrush`
+- 阴影：`DropShadowEffect BlurRadius=24, ShadowDepth=2, Opacity=0.25, Color=#000000`
+- 内容 Grid：`Margin=16`，5 行（Auto / * / Auto / Auto / Auto）
+- 位置逻辑（`ShowNearTray`）：右下对齐工作区
+  ```
+  Left = WorkArea.Right  - Width  - 12 + 22
+  Top  = WorkArea.Bottom - Height - 12 + 22
+  ```
+  （`WorkArea` = 排除任务栏的屏幕工作区；`+22` 补偿 Margin 6→28 的阴影空间扩展，使可视卡片距屏幕右/下边缘仍各 12px。WPF 未处理任务栏在其他边的情况，复刻时可保持同样行为。）
+- 失焦行为：`Deactivated` 时自动 `HideAnimated()` 收起；settings 或 skills 窗口打开期间抑制（WPF 另有 `_suppressDeactivate` 覆盖打开设置窗的瞬间；rust 为 `settings_open`/`skills_open` 标志）。
+- 窗口复用：单例 `_popup`，已可见时再次触发 = 收起（toggle）。
+- 收起动画守卫：挂起的收起完成回调必须比对代际计数器，期间有新 show/hide 则作废，不得隐藏新显示的窗口（rust `panel.rs finish_hide` + 前端 `hideGen`；WPF `_animGen`）。
+
+### 10.2 设置窗口（SettingsWindow）
+- 尺寸：`Width=404, Height=464`
+- 启动位置：`CenterScreen`
+- 根 Border：`CornerRadius=14`，`Margin=28`（阴影衰减空间，窗口比可视卡片每侧大 22px），背景 `WindowBgBrush`，阴影同主面板（BlurRadius=24, Depth=2, Opacity=0.25）
+- 内容 Grid：`Margin=16`，2 行（Auto / *）
+- 自定义标题栏：整行 `MouseLeftButtonDown` 时 `DragMove()` 可拖动
+- 行为：失焦不自动关闭；仅 ✕ 按钮或 "Save" 关闭。单例复用。
+- 回填容忍损坏持久化值：theme 不匹配任何选项回落 `system`（四版一致）；`RefreshMinutes` 不匹配任何丸选项时 WPF 与 egui 版回落选中 `5 min` 丸，rust 与 qt 前端留空不回落、仅 Save 时按 5 兜底（持久化结果一致），不出现无选中态。
+
+### 10.3 托盘右键菜单（TrayMenuWindow）
+- 尺寸：`Width=188`，高度 `SizeToContent=Height`（5 项自适应；v1.6 起菜单含 Skills 项，见 21.3）
+- 根 Border：`CornerRadius=12`，`Margin=24`（阴影衰减空间，窗口比可视卡片每侧大 19px），`Padding=4`，背景 `WindowBgBrush`
+- 阴影：`DropShadowEffect BlurRadius=20, ShadowDepth=2, Opacity=0.3, Color=#000000`
+- 定位（`ShowAtCursor`；以"可视卡片"（窗口减去两侧 Margin）为参照，坐标与旧 150 宽/5 Margin 布局完全一致）：
+  - 取光标物理像素坐标 `Cursor.Position`，用光标所在屏的 DPI（`GetDpiForMonitor`，多屏异 DPI 时不能取窗口自身系数）换算成 DIP（`scale<=0` 时按 1 处理）
+  - `cardX = min(cursorX_dip + 5, WorkArea.Right - cardW - 13)`，窗口 `Left = cardX - 24`（卡片左缘随光标偏右 5，右缘保持收进工作区 13px）
+  - 垂直方向：若 `cursorY + cardH + 34 > WorkArea.Bottom`（光标贴近底部）则向上弹出 `cardY = cursorY - cardH - 13`，否则向下 `cardY = cursorY + 13`；窗口 `Top = cardY - 24`
+  - `Show()` 后必须 `Activate()` + P/Invoke `SetForegroundWindow(hwnd)` 抢前台，否则菜单拿不到焦点会立刻被 Deactivated 关闭
+- 失焦关闭：`Deactivated` → `Dispatcher.BeginInvoke` 延迟判断 `if (IsVisible) Close()`（延迟是为避免 Close 期间 Deactivated 同步重入崩溃）
+- 每次右键新建实例（先关旧菜单再 new）
+
+---
+
+## 11. 配色方案
+
+### 11.1 画刷键值表（ARGB hex，源码原文）
+
+| 画刷 Key | Light（Moonlit） | Dark（Moondark） |
+|---|---|---|
+| `AccentBrush`（强调色/进度条） | `#FF1A88FF` | `#FF1A88FF` |
+| `WindowBgBrush`（窗口底） | `#FFF3F4F6` | `#FF17191E` |
+| `CardBgBrush`（卡片底） | `#FFFFFFFF` | `#FF23262D` |
+| `TextPrimaryBrush`（主文字） | `#FF1F2329` | `#FFF2F3F5` |
+| `TextSecondaryBrush`（次文字） | `#FF6B7280` | `#FF9AA0A8` |
+| `ProgressTrackBrush`（进度条轨道） | `#FFE5E7EB` | `#FF3A3E47` |
+| `ButtonBgBrush`（按钮底） | `#FFE9ECF0` | `#FF2C3039` |
+| `ButtonHoverBrush`（按钮悬停） | `#FFDCE2E9` | `#FF3A404B` |
+| `BadgeBgBrush`（新版本徽标底） | `#FFFFF0E0` | `#FF3D2E1A` |
+| `BadgeFgBrush`（新版本徽标字） | `#FFE06D00` | `#FFF0A040` |
+
+- 强调色（Moonshot 蓝）两主题相同：`#1A88FF`。
+- 选中态单选丸 / 复选框勾的文字色固定为 `White`，不随主题变。
+- 托盘图标兜底蓝球：`RGB(0x1A, 0x88, 0xFF)` + 高光 `rgba(255,255,255,90/255)`。
+
+### 11.2 进度条颜色
+- **无用量区间变色逻辑**：进度条填充恒为 `AccentBrush`（`#1A88FF`），轨道恒为 `ProgressTrackBrush`。不存在按百分比切换绿/黄/红的代码。
+- 填充宽度通过两列 `GridLength(p, Star)` / `GridLength(100-p, Star)` 实现，`p = clamp(percent, 0, 100)`。
+
+---
+
+## 12. 面板 UI 结构（MainWindow）
+
+整体：`Grid Margin=16`，5 行。所有文案为英文（术语对齐 Kimi console：Weekly usage / 5-hour usage / Extra Usage）。
+
+### 12.1 头部（Row 0）
+- `DockPanel Margin=2,0,2,16`
+- 左：logo 图片 `kimi-logo.png`，`20x20`
+- 标题：`"Kimi Planbar Tray"`，`FontSize=17`，`FontWeight=SemiBold`，`TextPrimaryBrush`，`Margin=10,0,0,0`，垂直居中
+- 右侧（Dock Right）：`LastUpdated`，`FontSize=11`，`TextSecondaryBrush`，`Margin=12,0,0,0`
+  - 无数据：空字符串
+  - 有错误：`"Update failed"`
+  - 正常：`"Updated HH:mm"`（`FetchedAt` 本地时间，24 小时制）
+
+### 12.2 用量卡片区（Row 1）
+- `UniformGrid Columns=2`，两张卡片：左卡 `Margin=0,0,6,0`，右卡 `Margin=6,0,0,0`（卡间距 12）
+- 卡片样式：`CardBgBrush`，`CornerRadius=12`，`Padding=16`
+- 左卡「Weekly usage」（week）/ 右卡「5-hour usage」（5h），结构相同：
+  - 标题：`"Weekly usage"` / `"5-hour usage"`，`FontSize=13`，`TextSecondaryBrush`
+  - 百分比大字：默认 `"--"`，`FontSize=32`，`FontWeight=Bold`，`Margin=0,10,0,10`，`TextPrimaryBrush`；数据到达后为 `$"{Percent:0}%"`（显示用原始 Percent 未 clamp，进度条用 clamp 后值）
+  - 进度条：`Grid Height=6`，两列（填充列起始 `0*` / 剩余列起始 `100*`）；底层 `Border CornerRadius=3` 跨两列 `ProgressTrackBrush`，上层填充 `Border CornerRadius=3 AccentBrush`（高 6、圆角 3 的胶囊条）
+  - 重置倒计时：`FontSize=11`，`Margin=0,12,0,0`，`TextSecondaryBrush`
+
+### 12.3 重置倒计时格式（`FormatReset`，`span = at - now`）
+- `span < 0`：`"Resets soon"`
+- `>= 1 天`：`"Resets in {int(TotalDays)}d {Hours}h"`（例：`Resets in 4d 3h`）
+- `>= 1 小时`：`"Resets in {int(TotalHours)}h {Minutes}m"`
+- `< 1 小时`：`"Resets in {max(1, Minutes)}m"`（至少显示 1 分钟）
+- 无 `resetTime`：空字符串
+
+### 12.4 Extra Usage 卡片（Row 2）
+- `Margin=0,12,0,0`，`Padding=16,12`，`CornerRadius=12`，`CardBgBrush`
+- 第一行 DockPanel：左 `"Extra Usage"`（`FontSize=13`，`TextSecondaryBrush`），右 `ExtraBalance`（默认 `"--"`，`FontSize=18`，`FontWeight=Bold`，`TextPrimaryBrush`，右对齐）
+- 余额文案三态（`ExtraState`）：
+  - `Ready`：有 `BalanceCents` 显示 `FmtYuan`（见 12.5），否则 `"--"`
+  - `NoData`：`"No data"`
+  - 其他（`NotActivated`）：`"Not activated"`
+- 月度子面板 `ExtraMonthlyPanel`（`Margin=0,8,0,0`，默认 `Collapsed`）：仅当 `MonthlyEnabled && MonthlyLimitCents > 0 && MonthlyUsedCents.HasValue` 时显示
+  - 同款进度条（高 6、圆角 3），`p = clamp(used/limit*100, 0, 100)`
+  - 文本：`"Used {FmtYuan(used)} this month / {FmtYuan(limit)} limit"`，`FontSize=11`，`Margin=0,8,0,0`，`TextSecondaryBrush`
+
+### 12.5 金额格式化（`FmtYuan`，单位：分 → 元）
+- 负数：`"-" + FmtYuan(-cents)`
+- `¥{cents/100}`，余数 > 0 时追加 `.{frac:00}`；整元省略小数。例：`1234 → "¥12.34"`，`10000 → "¥100"`
+
+### 12.6 版本行（Row 3）
+- 整行可点击卡片：`Margin=0,12,0,12`，`Padding=14,10`，`CornerRadius=12`，`Cursor=Hand`，`ToolTip="View Kimi Code releases"`
+- 点击打开浏览器：`https://github.com/MoonshotAI/kimi-code/releases`（异常静默吞掉）
+- DockPanel：左 `"Kimi Code CLI"`（`FontSize=13`，`TextPrimaryBrush`）；右侧水平排列：
+  - `CliVersion`：默认 `"--"`，显示本地版本号或 `"Not detected"`，`FontSize=13`，`TextSecondaryBrush`
+  - 新版本徽标 `NewVersionBadge`：默认 `Collapsed`；`CornerRadius=8`，`Padding=8,2`，`Margin=8,0,0,0`，底 `BadgeBgBrush`，文字 `"Update available"` `FontSize=11` `BadgeFgBrush`
+
+### 12.7 底部按钮（Row 4）
+- 4 个按钮均分一行，样式 `ActionButton`（见 13.3）但**背景改用 `CardBgBrush`**（与卡片同色，弱化底部按钮的视觉权重，突出上方信息区；hover 仍为 `ButtonHoverBrush`）；每个按钮为**图标在上、文字在下**的两行布局：图标 16px（inline SVG，fill 风格，24×24 grid，`currentColor` 跟随主题文字色），与文字间距 2px，按钮 `Padding=0,5,0,6`，文字 `FontSize=12`
+- 图标来源：Console=`Browser`、Refresh=`Refresh`、Settings=`Setting`（均引自 kimi-widget 图标库）；Exit=手绘电源 glyph（圆环顶部开口 + 顶部圆角竖条，同 fill 风格）
+  - `"Console"` `Margin=0,0,6,0` → 打开浏览器 `https://www.kimi.com/code/console?from=kfc_overview_topbar`（异常静默吞掉），`ToolTip="Open Kimi Code Console"`
+  - `"Refresh"` `Margin=3,0` → `SafeRefresh()` + `CheckAsync()`
+  - `"Settings"` `Margin=3,0` → 打开设置窗（期间抑制失焦收起）
+  - `"Exit"` `Margin=6,0,0,0` → `Application.Current.Shutdown()`
+- 手动刷新带 **2 秒防抖**（四版一致）：面板 Refresh 按钮与托盘菜单 "Refresh" 均走同一入口（rust `refresh_now`；WPF `App.ManualRefreshAsync`），距上次手动刷新不足 2 秒的重复触发被静默忽略。
+
+---
+
+## 13. 设置窗 UI 结构（SettingsWindow）
+
+### 13.1 标题栏（Row 0）
+- `DockPanel Margin=2,0,2,16`，整行可拖动
+- logo `18x18` + 标题 `"Kimi Planbar Tray Settings"`（`FontSize=15`，`SemiBold`，`TextPrimaryBrush`，`Margin=10,0,0,0`）
+- 右侧关闭按钮 `"✕"`，样式 `ChromeCloseButton`
+
+### 13.2 设置项（Row 1，`StackPanel Margin=6,0,4,0`）
+| 设置项 | 控件 | 选项 | 默认值 |
+|---|---|---|---|
+| 「Theme」小标题（`FontSize=13 SemiBold TextSecondaryBrush`） | — | — | — |
+| 主题单选 | `RadioButton` x3，`GroupName="theme"`，样式 `ThemeRadio`；间距 `Margin=0,10,0,0` / `0,8,0,0` / `0,8,0,0` | `"System default"`=system、`"Moonlit (light)"`=light、`"Moondark (dark)"`=dark | `"system"` |
+| 「Refresh interval」小标题（`Margin=0,20,0,0`） | — | — | — |
+| 刷新间隔 | 水平 `StackPanel Margin=0,10,0,0`，`RadioButton` x4，`GroupName="interval"`，样式 `PillRadio`，前三个 `Margin=0,0,6,0` | `"1 min"`(Tag=1)、`"5 min"`(Tag=5)、`"10 min"`(Tag=10)、`"30 min"`(Tag=30) | `5`（XAML 中 5 min `IsChecked=True`） |
+| 开机自启 | `CheckBox "Launch at Windows startup"`，样式 `ThemeCheckBox`，`Margin=0,22,0,0` | bool | `false` |
+| 保存 | `Button "Save"`，样式 `ActionButton`，`Margin=0,26,0,0` | — | — |
+
+- 保存动作：写 `settings.json` → `ApplyAutoStart()` → `Theme.Apply(theme)` → `Quota.Reschedule()` → `Close()`。
+- 打开窗口时按当前设置回填勾选状态；`RefreshMinutes` 通过 Tag 字符串匹配。回填容忍损坏的持久化值：theme 无匹配回落 `system`（四版一致）；间隔无匹配时 WPF 与 egui 版选中 `5 min` 丸，rust 与 qt 前端留空、仅 Save 按 5 兜底（持久化结果一致），不出现无选中态（保存链路对 `RefreshMinutes` 另有 clamp 1–30）。
+
+### 13.3 共享控件样式（`Themes/Shared.xaml`）
+- **ActionButton**：`Padding=0,10`，`FontSize=13`，前景 `TextPrimaryBrush`，背景 `ButtonBgBrush`，无边框，手型光标；模板 `Border CornerRadius=10`，悬停背景 `ButtonHoverBrush`
+- **ThemeRadio**：`FontSize=13`，`Cursor=Hand`；`18x18` 圆形外框（`Stroke=TextSecondaryBrush, StrokeThickness=1.5`，透明填充），选中时内显 `8x8` 圆点（`Margin=3`，`Fill=AccentBrush`）；文字距圆 `Margin=8,0,0,0`；悬停时文字变 `AccentBrush`
+- **PillRadio**（分段丸）：`FontSize=12`，`Padding=12,6`，模板 `Border CornerRadius=9`；未选中底 `ButtonBgBrush` 字 `TextPrimaryBrush`；选中底 `AccentBrush` 字 `White`；悬停底 `ButtonHoverBrush`（选中+悬停时保持 `AccentBrush`）
+- **ThemeCheckBox**：`FontSize=13`；`18x18` 方块 `CornerRadius=5`，边框 `TextSecondaryBrush 1.5`，透明底；选中时底与边框变 `AccentBrush`，显示白色 `"✓"`（`FontSize=12 Bold`）；文字距框 `Margin=8,0,0,0`
+- **ChromeCloseButton**：`Width=28`，`Padding=8,2`，`FontSize=14`，右对齐，前景 `TextSecondaryBrush`，透明底，模板 `Border CornerRadius=6`；悬停底 `ButtonHoverBrush` 字 `TextPrimaryBrush`
+- **MenuItemButton**（托盘菜单项）：`Padding=14,9`，`FontSize=13`，`TextPrimaryBrush`，透明底，左对齐，模板 `Border CornerRadius=8`；悬停底 `ButtonHoverBrush`
+
+---
+
+## 14. 托盘行为（TrayManager）
+
+- 实现：`System.Windows.Forms.NotifyIcon`；图标静态不变，刷新只更新 tooltip 文字。
+- **悬停（MouseMove）→ hover-to-refresh**：节流 **10 秒**（距上次 hover 刷新 <10s 则跳过），触发 `Quota.SafeRefresh()`（异步，不等待）。
+- **Qt 版偏差**：`QSystemTrayIcon` 无 hover 事件，hover-to-refresh 落地为 500ms 轮询 `QSystemTrayIcon::geometry()`——光标在图标矩形内且自上次 tick 有移动才算一次 hover（与 rust 的 Enter/Move 事件语义一致，停放不重触发），10s 节流不变（方案 A nativeEventFilter 实测抓不到 Qt 内部托盘窗的 WM_MOUSEMOVE，已放弃）。
+- **左键（MouseUp，Left）**：toggle 主面板。防重入：面板刚因失焦自动隐藏后的 **300 毫秒** 内的左键点击被忽略（`_lastHide` 判定，避免同一次点击先触发失焦隐藏又立刻弹回）。面板已可见 → `HideAnimated()`；不可见 → 单例复用 `ShowNearTray()`。
+- **右键（MouseUp，Right）**：关闭旧菜单实例，新建 `TrayMenuWindow` 并 `ShowAtCursor()`。
+  - 菜单项："Open" → 关菜单 + `TogglePopup()`；"Refresh" → 关菜单 + `SafeRefresh()` + `CheckAsync()`；"Settings" → 关菜单 + `ShowSettings()`；"Exit" → `Shutdown()`。
+  - 用 `MouseUp` 而非 `MouseClick`（右键在无 ContextMenuStrip 时更可靠）。
+- **Tooltip（NotifyIcon.Text）**：
+  - 无数据：`"Kimi Planbar Tray"`
+  - 有数据：`"Kimi Planbar Tray  5h {x}% · week {y}%"`（两个空格分隔；段缺失显示 `"?"`；`Percent:0` 格式）
+  - 有错误时尾部追加 `" (update failed)"`，失败时仍展示保留的上次数据
+- 图标加载：优先内嵌 `kimi-logo.png` 手工包装为 ICO（ICONDIR：reserved=0, type=1, count=1；入口 width=0/height=0 表示 256，32bpp，planes=1，payload offset=22）保留 alpha；资源缺失或异常时回退程序绘制的 32x32 蓝色圆球（圆 `(1,1,30,30)` 填充 `#1A88FF`，高光椭圆 `(7,5,10,7)` 填充 `rgba(255,255,255,90)`）。
+
+---
+
+## 15. 动画
+
+### 15.1 面板滑入（`ShowNearTray`）
+- 注释明确：AllowsTransparency 分层窗口上 `AnimateWindow` 不可靠，故用 WPF 动画（GPU 合成）
+- 初始状态：`RootBorder.RenderTransform = TranslateTransform(0, 16)`，`Window.Opacity = 0`
+- 淡入：`Opacity 0 → 1`，**160ms**，线性
+- 滑入：`TranslateTransform.Y 16 → 0`（自下而上 16px），**220ms**，`CubicEase EaseOut`
+- 两动画同时开始
+
+### 15.2 面板滑出（`HideAnimated`）
+- 防重入标志 `_hiding`
+- 淡出：`Opacity → 0`，**130ms**，线性
+- 滑出：`TranslateTransform.Y → 12`（向下 12px），**160ms**，`CubicEase EaseIn`
+- 淡出完成后：`Hide()`、`Opacity = 1`（复位）、通知 `Tray.NotifyPopupHidden()`（记录 `_lastHide` 供 300ms 防重入）
+
+### 15.3 其他
+- **悬停光晕**（SPEC 15.3，四版一致）：可点击控件（动作按钮 ×4、托盘菜单项、版本行卡片、Skills 的 Refresh 小按钮）悬停时淡入强调色外发光——1px 35% 透明 accent 描边 + 8px 18% 透明光晕（暗色主题为 45% / 22%、10px），背景色切换同步过渡，均为 **140ms ease**。实现上光晕预绘制在伪元素 `::after` 上、仅过渡其 `opacity`（box-shadow 本身不做动画，compositor-only，无逐帧 repaint）。
+- **悬停光晕（Qt 版偏差）**：同等视觉目标用自绘实现（`windows/hoverglow.h`：顶层窗的独立 halo 子 widget，目标控件矩形外扩 8/10px，同心圆角描边 alpha 由内向外递减，140ms OutCubic 渐显渐隐），完全不触碰目标控件自身的 QSS 绘制；`QGraphicsDropShadowEffect` 方案已废弃（blurRadius=0 启用会把整个 widget 渲染消失，且在无边框透明窗里 enable/disable 切换渲染路径会闪烁）。
+- **悬停光晕（egui 版偏差）**：同等视觉目标由 egui painter 自绘（`ui/widgets.rs` 的 `GlowTracker`：动画式 1px accent 描边圈 + 向外 alpha 递减 halo，140ms CSS ease 渐显渐隐，即即时模式逐帧重绘），视觉与 CSS 伪元素方案等价。
+- **悬停光晕（WPF 版偏差）**：CSS 伪元素对应物为控件模板内的常驻装饰层——每个可点控件的 `ControlTemplate` 根 `Grid` 叠层：静止底色圆角 `Border`（仅静止底不透明的控件有此层——动作按钮 `CornerRadius=10` / 版本行 12 / Skills 的 Refresh 8；`Grid` 直角背景会在 `WindowBg` 上露出直角。托盘菜单项静止底透明，无此层）→ hover 背景覆盖 `Border`（`ButtonHoverBrush`，`Opacity` 0→1）→ 光晕 `Border`（`BorderThickness=1`，`BorderBrush=GlowStrokeBrush`（主题字典：亮 35% / 暗 45% accent），`DropShadowEffect`（accent 色、`ShadowDepth=0`，`BlurRadius` 8/10 与 `Opacity` 0.18/0.22 亦出自主题字典），`Opacity` 0→1，`IsHitTestVisible=False`）→ 内容层；`IsMouseOver` 触发器的 `EnterActions`/`ExitActions` 各跑一个 140ms `DoubleAnimation`（只动 `Opacity`）。光晕层只挂装饰 Border、永不挂内容控件本体（`BlurRadius=0` 的 Effect 会把整个控件渲染消失——Qt 版同款陷阱）；hover 背景走独立覆盖层而非直接动画主题笔刷颜色（DynamicResource 笔刷是共享实例，改色会跨控件串色）。
+- 其余控件（主题单选、间隔丸、复选框、标题栏 ✕）悬停态切换为瞬时。进度条宽度变化无动画（直接设宽度）。
+
+---
+
+## 16. 数据与 API（QuotaService）
+
+### 16.1 请求
+- URL：`GET https://api.kimi.com/coding/v1/usages`
+- 头：`Authorization: Bearer {token}`、`Accept: application/json`
+- HTTP 超时 **10 秒**；非 2xx → 进入失败路径
+
+### 16.2 凭证读取优先级链（`LoadToken`，与 quota-status.py 对齐）
+- `<kimi_home>` 默认为 `%USERPROFILE%/.kimi-code/`，支持 `KIMI_CODE_HOME` 环境变量覆盖（与 21.2 同一约定）。
+1. **`<kimi_home>/credentials/kimi-code.json`**：
+   - 读取 `access_token`（字符串）
+   - 校验 `expires_at`（Unix 秒，数字）> 当前 UTC 时间 + **30 秒**余量，过期则视为无效继续下一步
+   - 解析异常静默吞掉
+2. **兜底 `<kimi_home>/config.toml`**（手写逐行解析，非完整 TOML parser）：
+   - 按 `[section]` 分节；正则 `^(base_url|api_key)\s*=\s*"([^"]*)"` 提取键值
+   - 匹配条件（`MatchProvider`）：节名以 `"providers."` 开头 **且** `base_url` 包含 `"api.kimi.com/coding"` **且** `api_key` 非空 → 返回该 `api_key`
+   - 遇到新节时先结算上一节；文件结束再结算最后一节
+3. 两者皆无 → 返回 `QuotaResult{ Error = "no-token" }`
+
+### 16.3 响应 JSON 解析
+- **5 小时段**：`root.limits`（数组，取第 0 个元素的 `detail` 对象）→ `ParseSegment`
+- **周段**：`root.usage`（对象）→ `ParseSegment`
+- `ParseSegment`：`percent = used/limit*100`（`used`、`limit` 兼容数字或数字字符串，缺失按 0；`limit<=0` 时按 1 防除零）；**非有限百分比归零**——敌意字符串（如 `"1e999"`、`"NaN"`）可解出 inf/NaN，非 `IsFinite` 的百分比一律置 0；`resetTime`（字符串，`DateTimeOffset.TryParse`）→ `ResetAt`
+- **Extra Usage**：`root.boosterWallet`（对象）：
+  - 非对象/缺失 → `State = NotActivated`（"Not activated"）
+  - `isEnabled == false` → `NotActivated`（防御：booster 未启用时 `amountLeft` 是"月度上限-已用"估算值而非真实余额，必须视为未开通——借鉴 KimiCodeBar v1.1.1 的 bug）
+  - `balance.amountLeft`（字符串数字，兼容数字型）可解析 → `State = Ready`；单位 **1e-8 元**，换算分：`BalanceCents = saturating_add(raw, 500000) / 1000000`（四舍五入；加法饱和防溢出，接近 `i64.MaxValue` 的畸形值不得回绕）
+  - 否则 → `State = NoData`（"No data"）
+  - `monthlyChargeLimitEnabled == true` → `MonthlyEnabled=true`，`monthlyUsed.priceInCents` → `MonthlyUsedCents`，`monthlyChargeLimit.priceInCents` → `MonthlyLimitCents`（单位分，字符串数字）
+- **注意：服务端 JSON 数字一律按字符串建模**，解析时容忍数字型兜底。
+
+### 16.4 数据模型（等价 Rust struct）
+```
+QuotaSegment { percent: f64, reset_at: Option<DateTimeOffset> }
+ExtraState   { NotActivated, NoData, Ready }
+ExtraInfo    { state, balance_cents: Option<i64>, monthly_enabled: bool,
+               monthly_used_cents: Option<i64>, monthly_limit_cents: Option<i64> }
+QuotaResult  { five_hour: Option<QuotaSegment>, week: Option<QuotaSegment>,
+               extra: Option<ExtraInfo>, fetched_at: DateTimeOffset, error: Option<String> }
+```
+（错误时 `Error` = 异常类型名，如 `"HttpRequestException"` / `"TaskCanceledException"` / `"no-token"`）
+
+### 16.5 刷新调度与失败重试（`SafeRefresh` / `Reschedule`）
+- `Reschedule()`：周期 = `max(1, RefreshMinutes)` 分钟（毫秒换算饱和防溢出）；定时器首次延迟 **2 秒**（启动后 2s 首刷），之后按周期；每次 `Reschedule` 递增调度代际
+- `SafeRefresh()`：
+  1. `FetchAsync()`（开始时记录当前调度代际）
+  2. **失败时保留上次成功数据**：若 `r.Error != null && Last != null`，用 `Last` 补齐 `FiveHour`/`Week`/`Extra` 中的 null 字段（界面不清空，仅状态行提示）
+  3. **失败后 30 秒快速重试**：定时器下一次触发改为 `Error != null ? 30_000ms : periodMs`，周期本身不变（成功则回到正常周期）；定时器已 Dispose 的竞态异常吞掉；**期间发生过 `Reschedule`（代际变化）则跳过本轮重排**——刷新进行中保存设置时，新装的 2s 首刷 tick 不得被在途刷新的周期重排覆盖（rust `polling.rs` 在 reschedule 时清空残留 retime hint 的同款语义）
+  4. 触发 `Updated` 事件（UI 线程）
+
+---
+
+## 17. CLI 版本检查（UpdateService）
+
+### 17.1 本地版本（`DetectLocalVersion`）
+- 起子进程：`kimi --version`（`UseShellExecute=false, CreateNoWindow=true`，stdout/stderr 均重定向）
+- **5000ms** 超时等待退出，超时 `Kill()` 返回 null
+- 先 `WaitForExit` 再读输出（输出仅一行不会撑满管道缓冲）
+- 对 stdout+stderr 合并文本正则取首个 `\d+\.\d+\.\d+`
+- 任何异常 → null（面板显示 `"Not detected"`）
+
+### 17.2 最新版本（两级 fallback）
+1. **官方文档站 changelog**（优先，英文版最及时；绕开 GitHub API 限流与 hosts 屏蔽）：
+   - `GET https://moonshotai.github.io/kimi-code/en/release-notes/changelog.md`
+   - 请求头 `Range: bytes=0-4095`（只取前 4KB；GitHub Pages 可能忽略 Range 返回 200 全量，两种响应均兼容）
+   - 正则 `^## (\d+\.\d+\.\d+)`（Multiline）首个匹配即最新版
+2. **GitHub Releases API fallback**：
+   - `GET https://api.github.com/repos/MoonshotAI/kimi-code/releases/latest`
+   - 头 `User-Agent: KimiPlanbarTray`（必须，否则 GitHub 拒绝）
+   - 取 `tag_name`（形如 `"@moonshot-ai/kimi-code@0.31.1"`），正则提取 `\d+\.\d+\.\d+`
+- HTTP 超时 10 秒；两者皆失败 → `LatestVersion = null`
+
+### 17.3 比较与状态
+- `UpdateAvailable = latest != null && 两者均可解析为语义化版本 && latest > local`
+- `CheckFailed = latest == null`（网络不可达时静默降级，UI 不提示）
+- 完成后触发 `Updated` 事件
+- 触发时机：启动时后台执行；面板 "Refresh" 按钮、托盘菜单 "Refresh" 同步触发
+
+### 17.4 UI 表现
+- 版本行显示 `LocalVersion ?? "Not detected"`
+- `UpdateAvailable == true` 时显示橙色徽标「Update available」（颜色见 11.1 BadgeBg/BadgeFg）
+- 整行点击跳转 `https://github.com/MoonshotAI/kimi-code/releases`
+
+---
+
+## 18. 设置持久化（SettingsService）
+
+### 18.1 配置文件路径（便携模式逻辑）
+- **诊断覆盖**：`KPT_APP_DATA_DIR`（绝对路径）存在时优先于以下两种模式，配置目录 = 该目录（见 22.5）
+- **便携模式**：exe 同目录存在 `portable.dat` 文件（内容任意，仅检测存在性）→ 配置目录 = exe 所在目录
+- **否则**：`%APPDATA%\KimiPlanbarTray\`
+- 配置文件：`<ConfigDir>\settings.json`
+
+### 18.2 JSON schema（`SettingsData`，缩进格式序列化）
+```json
+{
+  "Theme": "system",
+  "RefreshMinutes": 5,
+  "AutoStart": false
+}
+```
+- `Theme`：`"system" | "light" | "dark"`，默认 `"system"`
+- `RefreshMinutes`：int，可选值 1/5/10/30，默认 5
+- `AutoStart`：bool，默认 false
+- 加载：文件不存在或反序列化失败 → 全部回落默认值（异常静默吞掉）
+- 保存：先 `CreateDirectory` 再整体覆写（异常静默吞掉）
+
+### 18.3 开机自启（`ApplyAutoStart`）
+- 注册表：`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`（per-user，不触发 UAC）
+- 键名：`KimiPlanbarTray`
+- `AutoStart=true` → 值 = `"{exe 完整路径}"`（带引号）
+- `AutoStart=false` → 删除该值（不存在不报错）
+- 异常静默吞掉
+
+---
+
+## 19. 测试/自检命令（App.OnStartup 命令行参数）
+
+所有自检模式均**先于单实例 Mutex 检查**执行（保证有 GUI 实例运行时自检仍可用），打印到 stdout 后退出。子进程调用放线程池脱离 UI 线程避免死锁。
+
+| 参数 | 行为 | 输出 |
+|---|---|---|
+| `--test-fetch` | 拉取一次额度，打印 JSON | `QuotaResult` 的 JSON（缩进格式、不转义非 ASCII） |
+| `--test-update` | 执行一次版本检查 | 单行：`local={x} latest={y} updateAvailable={bool} checkFailed={bool}` |
+| `--test-ui` | 应用当前主题后依次构造各窗口验证资源解析与页面加载 | 每窗一行 `MainWindow OK` / `SettingsWindow OK` / `SkillsWindow OK` / `TrayMenuWindow OK`（四版一致；rust/egui/qt 版还会实际显示窗口供目检约 6s 后退出，WPF 版自 1.7.3 复活起同款，菜单窗以当前光标位置落位）；异常时 `UI-FAIL: {异常类型}: {消息}` + InnerException 消息 |
+| `--test-skills`（Qt / WPF 版） | 解析五个内置 frontmatter 测试夹具（移植 rust 版 `skills.rs` 的两个 cargo 单测：缺字段/引号剥离 + BOM/GBK 字节容忍） | 通过打印 `skills parser: PASS (5 fixture skills)`，失败打印差异详情并非零退出 |
+| `--screenshot <path> [--dark] [--mock]`（仅 WPF 版） | 真实（或模拟）额度数据 + 指定主题渲染主面板为 PNG（README 用） | `saved: <path>` |
+
+- `--test-ui`（rust/ 版）在隔离的 app-data 根目录下运行（见 22.5），不会与正在使用的实例共享 WebView2 数据目录。
+- `--screenshot`（仅 WPF 版；Rust 版无此参数，截图验证见 7.2）：默认 light 主题，`--dark` 切 dark；`--mock` 注入固定数据（5h=42% 3.5 小时后重置，week=68% 4 天后重置，Extra：余额 1234 分、月度已用 4567/上限 10000 分）；否则真实拉取。渲染为 96 DPI Pbgra32 PNG，自动创建输出目录。
+
+---
+
+## 20. 其他实现细节
+
+- **单实例**：命名 Mutex `"KimiPlanbarTray.SingleInstance"`，未抢到直接退出；退出时释放（异常吞掉）。关窗口不退进程（`ShutdownMode=OnExplicitShutdown`）。
+- **启动顺序**：加载设置 → 构造 Theme/Quota/Update 服务 →（自检分支）→ 单实例检查 → 应用主题 → 挂系统主题事件 → 创建托盘 → 启动自动刷新（2s 后首刷）→ 后台版本检查。WebView2 恢复：窗口创建完成后、托盘创建之前，为四个 webview 订阅 ProcessFailed 并启动恢复协调器（第 22 章）。
+- **失焦收起**：仅主面板有；settings 或 skills 窗口打开期间抑制（WPF 判 `Tray.IsSettingsOpen`/`IsSkillsOpen`，另有 `_suppressDeactivate` 覆盖打开设置窗的瞬间；rust 为 `settings_open`/`skills_open` 原子标志）。
+- **系统主题实时跟随**：读注册表 `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize` 的 `AppsUseLightTheme`（DWORD，0=dark，1=light，缺失默认 1）；通过 `SystemEvents.UserPreferenceChanged` 事件监听，仅当设置为 `"system"` 时重新应用（切回 UI 线程）。Tauri 复刻可用 `dark-light` crate 或自读注册表 + 监听 `WM_SETTINGCHANGE`。
+- **主题切换实现**：清空应用级资源字典，依次加入 Shared + Light/Dark。所有颜色经动态资源引用，切换即时生效无需重建窗口。Shared 样式字典只加载一次。
+- **DPI**：锁定系统级 DPI 感知（SystemAware）。托盘菜单定位依赖 `Cursor.Position`（物理像素）÷ `GetDpiForWindow/96` 换算 DIP，高 DPI 下缺此换算菜单会偏出屏幕。
+- **DPI 陷阱（Tauri/tao 复刻）**：tao 在 app 启动时就创建全部 HWND（隐藏），位置为 `CW_USEDEFAULT`——Windows 会把新窗口放在**启动者所在屏**（例如从副屏的资源管理器窗口双击 exe，隐藏窗口就挂在副屏，带上副屏的 scale）。之后跨屏定位时若用 `LogicalPosition`/`LogicalSize`，换算用的是窗口当前所在屏的 scale 而非目标屏，多屏异 DPI 下首开必偏。**规则：跨屏落位一律用 `PhysicalPosition`（面板按主屏工作区物理像素、菜单按光标所在屏物理像素）；尺寸保持 `LogicalSize`**——tao 在 `WM_DPICHANGED` 时会用逻辑尺寸 × 新 scale 重算物理尺寸，尺寸给物理值反而会被二次放大。WPF 版无此问题：`Window` 的 HWND 在 `Show()` 时才创建，`Left`/`Top` 已先设好，换算天然用目标屏 DPI。
+- **Qt 版差异注记**（`qt/`，完整方案见 `docs/archive/QT-MIGRATION.md` 第 4 节）：
+  - Qt 6 默认 Per-Monitor DPI Awareness V2，`QCursor::pos()` / `QScreen::availableGeometry()` / `move()` / `resize()` 均为逻辑像素（DIP）——上述 tao 物理/逻辑双轨陷阱在 Qt 下天然不存在，面板与菜单直接用逻辑坐标定位。本机 225% 缩放实测通过（四窗物理尺寸/位置逐一核对精确匹配）；100% 及其他档位未实测，按 PerMonitorV2 逻辑坐标语义属安全；多屏异 DPI 的 `screenAt()` 归属同样未实测（QT-MIGRATION.md 7.2）。
+  - 系统主题监听用 `QStyleHints::colorSchemeChanged`（Qt ≥6.5），Windows 上读的正是 `AppsUseLightTheme`，替代注册表监听 + `WM_SETTINGCHANGE`。
+  - GUI 子系统 exe 无挂载控制台，`--test-*` 输出用 `WriteFile(GetStdHandle(STD_OUTPUT_HANDLE))`（Git Bash 管道与 cmd 控制台均覆盖），AttachConsole + `CONOUT$` 仅兜底；`--test-ui` 的 6s 退出用 `QThread::sleep + QCoreApplication::exit`（`QTimer::singleShot` 在该路径不触发）。
+  - QSS `border-radius` 只对子容器可靠：顶层窗体圆角 = 窗口透明（`WA_TranslucentBackground`）+ 子容器 QSS 圆角自绘；DWM 圆角禁用（`DWMWA_WINDOW_CORNER_PREFERENCE`）与 rust 版相同。
+  - Qt 采用动态链接分发（windeployqt 随包 DLL，LGPL 合规），不做静态单 exe；托盘图标生命周期内只 `show()` 一次（反复 hide→show 是已知 Qt/Windows 兼容性问题）。
+  - `QSystemTrayIcon` 无 hover（MouseMove）事件：SPEC 14 hover-to-refresh 最终落地为 500ms 轮询 `QSystemTrayIcon::geometry()`（见 14 章偏差注记）；SPEC 15.3 光晕为自绘近似（见 15.3）。
+  - 构建/样式坑：QPushButton 的样式 sizeHint 不看子布局，动作按钮行的 IconButton 需 `setMinimumHeight(45)` + 纵向 Fixed，否则被压塌；header-only 类加 `Q_OBJECT` 必须把头文件列进 CMakeLists 源清单，否则 AUTOMOC 不处理（链接找不到 staticMetaObject）；构建前必须先按 PID/路径结束 qt GUI 进程（exe 文件锁，与 rust 版同名）。
+- **图标资源**：`kimi-logo.png` 嵌入程序集，用于：面板 logo（20x20）、设置窗 logo（18x18）、托盘图标（手工 PNG→ICO 包装，Vista+ 原生支持且保留 alpha）。Tauri 复刻需将同一 PNG 嵌入并提供 ICO（可用 `ico` crate 预生成，或直接内嵌 PNG 进 ICO 容器，同参考实现思路）。
+- **事件订阅生命周期**：主面板构造时订阅 `Quota.Updated`/`Updates.Updated`，关闭时取消订阅（窗口实际只 Hide 不 Close，单例复用）；托盘订阅 `Quota.Updated` 更新 tooltip，退出时退订并销毁托盘图标。
+- **异常处理基调**：所有 IO、注册表、外部进程、HTTP 调用均 try/catch 静默吞掉，失败路径以 UI 文案（"Update failed"/"Not detected"）或状态字段表达，绝不弹窗报错。
+- **金额单位陷阱**：`amountLeft` 是 1e-8 元（换算分需 `(raw + 500000) / 1000000` 四舍五入），`priceInCents` 才是分；JSON 中数字均为字符串。
+- **`isEnabled=false` 陷阱**：booster 未启用时 `amountLeft` 并非真实余额，必须整体判为 "Not activated"。
+- **退出清理**：隐藏并销毁托盘图标 → 停刷新定时器 → 释放单实例 Mutex。
+
+---
+
+## 21. Skills 只读窗口（v1.6 新增；四版均实现）
+
+借鉴 [kimi-code-dashboard](https://github.com/perinchiang/kimi-code-dashboard) 的 `/api/skills` 思路，裁剪为纯只读展示。
+
+### 21.1 窗口
+
+- 范式完全复用设置窗：无边框透明、`margin: 28px` 阴影留白、自定义标题栏（logo 18×18 + 标题 "Kimi Skills" + ✕ 关闭，可拖动）、居中、置顶、跳过任务栏、不可缩放。
+- 尺寸：404×520（卡片可视区 348×464）。
+- 单例复用：关闭只 hide；打开时 pin 尺寸（同 show_panel 的 DPI 守卫）并 emit `skills-show` 让前端回填。
+- 打开期间置 `skills_open`，与 `settings_open` 一样抑制主面板失焦自动隐藏。
+
+### 21.2 数据源与性能
+
+- 三处根目录：`<kimi_home>/skills`（标签 "Kimi Code"）、`~/.agents/skills`（"Agents"）、`<kimi_home>/plugins/managed/<plugin>/skills`（"Plugin: <名>"）；`<kimi_home>` 支持 `KIMI_CODE_HOME` 覆盖。
+- 每个 `<dir>/<id>/SKILL.md` 只读前 4 KiB 解析 YAML frontmatter 的 `name` / `description`（手写行解析、去首尾引号，缺省回退目录名；不引 YAML 依赖）。字节读取后 `from_utf8_lossy` 解码，容忍 4 KiB 截断处切断的多字节字符与 GBK 混杂字节，并剥离 `---` 前的 UTF-8 BOM。
+- 前端纯事件驱动：skills 页面启动时（窗口隐藏）**不**加载数据，扫描完全由 `open_skills` 发出的 `skills-show` 事件触发（listener 在 `initTheme` 前注册防竞态）。
+- 无启用/禁用状态可展示：Kimi Code 不持久化 per-skill 禁用状态（kimi.exe 二进制中无任何相关持久化）；`~/.agents/.skill-lock.json` 是 lark-cli 的安装锁文件（`{version, skills, dismissed}`，无 `disabled` 键），一律不读取。
+- **零后台开销**：不轮询、不监视文件；只在窗口首次打开时扫描一次并缓存进 `AppState`，`get_skills(refresh=false)` 直接回缓存；窗口上的 Refresh 按钮传 `refresh=true` 强制重扫。
+
+### 21.3 呈现
+
+- 顶部汇总行：`N skills` + Refresh 按钮。
+- 列表按来源分组（组内按名称不区分大小写排序），可滚动；每项为卡片：名称（SemiBold、单行省略）+ 描述（12px、2 行 clamp，完整描述放卡片 tooltip）。
+- 全部颜色走 `theme.css` 变量，自动跟随 Moonlit/Moondark。
+- 前端渲染一律 `textContent`（skill 描述是外部输入，不用 innerHTML）。
+- 入口：托盘右键菜单新增 "Skills"（位于 Settings 与 Exit 之间），菜单高度由前端内容自适应上报，无需改定位逻辑。
+
+---
+
+## 22. WebView2 故障检测与恢复（v1.9 新增，仅 rust/ 版）
+
+### 22.1 诊断
+
+- 每个 webview 创建后通过 `WebviewWindow::with_webview` 取得原生 `ICoreWebView2Controller`，订阅 `CoreWebView2.ProcessFailed`；重建出的新 webview 必须重新订阅。
+- 事件回调只做 COM 读取与非阻塞入队（label、generation、kind、reason、exit code、process description），不在回调里调用窗口命令或做 IO。
+- 每次失败写一行 `config_dir()/webview.log`（便携模式跟随 exe）：时间、label、kind、reason、exit code、process description、PID、HWND、窗口可见性、DPI（`GetDpiForWindow`）、WebView2 Runtime 版本、应用运行时长、最近 8 条 UI 事件（show / hide / scale / wake-gap）、恢复动作与结果。
+- 日志超过 256 KB 时按行边界截断到后 128 KB；不得包含 OAuth token、API key、完整凭据路径或配额响应正文。
+- 刷新循环把墙钟跳变（实际等待 > 预期间隔 + 60s）记为 wake-gap 诊断事件，仅用于日志，不改变调度。
+
+### 22.2 分级策略
+
+| ProcessFailedKind | 动作 |
+|---|---|
+| `RenderProcessExited` / `RenderProcessUnresponsive` / `FrameRenderProcessExited` | 先对受影响窗口 `reload()` 一次；同一 label 120s 内再次失败 → 重建该窗口 |
+| `BrowserProcessExited` | 隐藏并销毁四个窗口，统一重建 |
+| `GPUProcessExited` | 只记录，交给 WebView2 自身恢复 |
+| 其余（utility / sandbox helper / PPAPI / unknown） | 只记录 |
+
+- 失败事件带 generation：重建开始时递增，旧 webview 的迟到事件按 stale 丢弃。
+- 打开窗口时的健康检查是补充信号：`recovery::gate_show` 在窗口缺失或其 webview 已报故障（dead 标记）时记录 `pending_show` 并等待/触发重建，避免把操作落到空壳上；`ProcessFailed` 仍是主信号。托盘菜单窗是 Settings / Skills / Exit 的唯一入口，因此菜单缺失或已死时也会触发一次重建（菜单本身不自动弹出，重建后再次右键即可）。
+
+### 22.3 进程内重建
+
+1. 快照受影响窗口的可见性以及 `settings_open` / `skills_open`（主面板若正处于收起动画中，视为不可见）。
+2. 先 `hide()`，再递增 generation，再 `destroy()`（`destroy` 不触发 `CloseRequested`，不受“关闭即隐藏”拦截）。
+3. 轮询 `get_webview_window(label)` 直到 label 从 manager 移除（上限 3s，超时则放弃本轮并记录）。
+4. 用 `WebviewWindowBuilder::from_config` + 同一 `tauri.conf.json` WindowConfig 重建（同 label、同 URL、同尺寸/透明/置顶/跳过任务栏配置），立即重新应用 DWM 无圆角并重新订阅 ProcessFailed。
+5. 等待页面 `PageLoadEvent::Finished`（上限 2s）后恢复：`main` 走 `show_panel`（重新 pin 尺寸、定位、emit `panel-show`），`settings` / `skills` 走原打开路径（pin 尺寸 + `settings-show` / `skills-show`）；`menu` 是瞬态窗口，一律保持隐藏；此前隐藏的窗口保持隐藏。
+6. 托盘、轮询、主题监听与 `AppState` 一律复用，不重新执行 `run()`，不创建第二个托盘或第二组轮询任务。
+7. 重建必须在后台线程执行：`WebviewWindowBuilder::build` 在主线程会自锁。
+8. `BrowserProcessExited` 会一次性销毁全部四窗，Tauri 在最后一个窗口销毁时会请求退出；`run()` 的 `RunEvent::ExitRequested` 回调必须对 `code == None`（隐式退出）调用 `api.prevent_exit()`，否则进程在重建前退出。`app.exit(code)`（`code = Some`）不受影响，退出菜单仍正常。
+
+### 22.4 限流与降级
+
+- single-flight：同一时刻只允许一轮恢复；期间到达的事件入队，本轮结束后按 generation 合并处理。
+- 退避：第 1/2/3 次重建前分别等待 1s / 2s / 5s。
+- 上限：滑动 30s 内最多 3 次重建；超限后停止自动重建（`disabled`），记录日志并保留托盘与最后已知数据，不弹错误对话框、不删除 WebView2 用户数据目录。达到上限且 webview 菜单已不可用（缺失或已报故障）时，额外安装一个原生 quit-only 托盘菜单（菜单项 id `kpt-fallback-quit`），保证仍能退出；`show_menu` 检测到该状态后不再显示 webview 菜单。菜单健康时不会安装，避免一次短时崩溃风暴永久失去 Open/Refresh/Settings/Skills。
+
+### 22.5 自检隔离
+
+- `--test-ui` 在 build 前通过 `context.config_mut().app.app_directories_override = Root(...)` 把 app data 根目录指向 `%TEMP%\kimi-planbar-tray-testui-<pid>`，WebView2 用户数据目录随之隔离，可与正式实例同时运行。
+- 正常退出后尝试删除本轮目录（WebView2 子进程释放文件可能延迟约 10s，删除带重试；失败则保留用于诊断，下次启动清理超过 10 分钟的陈旧目录）。
+- 诊断/测试钩子：设置 `KPT_APP_DATA_DIR`（必须是绝对路径）可把正式 GUI 的 app data 根目录整体重定向到指定目录——含 WebView2 数据目录、`settings.json` 与 `webview.log`，并跳过 HKCU 自启写入——用于在隔离环境中跑第二实例或复现验证；未设置时行为不变。
+- 四条 OK 行输出与退出时长保持不变（SPEC 19）。

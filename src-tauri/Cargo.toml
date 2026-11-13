@@ -1,0 +1,44 @@
+[package]
+name = "quota-tray"
+version = "0.1.0"
+description = "Quota Tray — Kimi Code and DeepSeek quota in one Windows tray panel"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "quota_tray_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "sync"] }
+reqwest = { version = "0.13", features = ["json"] }
+regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+winreg = "0.56"
+# Direct dependency for the WebView2 ProcessFailed event (SPEC 22). Must match
+# the version tauri-runtime-wry resolves (0.39) so the COM types are identical.
+webview2-com = "0.39"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_HiDpi",
+] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
