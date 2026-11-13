@@ -11,7 +11,7 @@ Guidance for AI coding agents working in this repository. Read this first; then 
 
 This repository is the merge of two earlier first-party projects: `kimi-planbar-tray` (Tauri/rust edition) and `deepseek-planbar` (WPF edition). See `NOTICE` for lineage.
 
-**Current state: Phase 2 in progress — the D visual layer is landed, the tab bar is not.** All four windows now use the D tokens and layout (`demo/panel-demo-d.html`), both the panel and the settings window are content-sized, and the Kimi pane renders live data. What remains of P2 is the segmented Kimi/DeepSeek tab and the DeepSeek pane, which need the P3 backend. Follow `PLAN.md` §8; do not start P3+ work before that remainder is decided.
+**Current state: Phase 3 (DeepSeek backend) is next.** P1 (baseline import) and the visual half of P2 are landed: all four windows use the D tokens and layout (`demo/panel-demo-d.html`), the panel and the settings window are content-sized, and the Kimi pane renders live data. The segmented Kimi/DeepSeek tab is deliberately sequenced **after** P3 (user decision, 2026-11-14) so it can be built against real DeepSeek data instead of an empty placeholder. Follow `PLAN.md` §8.
 
 ## Source of truth
 

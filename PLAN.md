@@ -188,10 +188,12 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 |---|---|---|
 | **P0（已完成）** | 四版静态 demo + 设计定稿 + 本文件 | `demo/compare.html` 可切主题/provider/状态；`heights.py` 出高度表；`check_contrast.py` 全通过 |
 | **P1（已完成）** | 仓库化、拷入 `kimi-planbar-tray/rust/` 基线、改名 Quota Tray、拷入 SPEC/LICENSE | `cargo build` + `npm run build` + `tsc --noEmit` 通过；`--test-fetch` / `--test-ui` 通过；旧 UI 能跑 |
-| **P2（进行中）** | 面板 UI 重写（D 版 token）+ tab + 自适应高度。**已完成**：四个窗口统一 D 版视觉（含设置/技能/托盘菜单）、面板与设置窗内容自适应 | 连点 tab 30 次无跳位、底部贴边不变；`--test-ui` 通过；截图与 `panel-demo-d.html` 对照一致。**剩余**：分段 tab + DeepSeek 空态面板（依赖 P3 数据） |
-| **P3** | DeepSeek 后端移植 + 双 poller + fixtures 解析测试 | `cargo test` 通过；同机对比旧版 `--test-fetch` 逐字段一致；`--test-deepseek` 通过 |
+| **P2（视觉与高度已完成，tab 顺延）** | 面板 UI 重写（D 版 token）+ tab + 自适应高度。**已完成**：四个窗口统一 D 版视觉（含设置/技能/托盘菜单）、面板与设置窗内容自适应、kimi-cu 端到端验过 | 连点 tab 30 次无跳位、底部贴边不变；`--test-ui` 通过；截图与 `panel-demo-d.html` 对照一致。**剩余**：分段 tab + DeepSeek 面板（见下方顺序调整） |
+| **P3（下一个）** | DeepSeek 后端移植 + 双 poller + fixtures 解析测试 | `cargo test` 通过；同机对比旧版 `--test-fetch` 逐字段一致；`--test-deepseek` 通过 |
 | **P4** | 设置窗（通用 / Kimi 只读 / DeepSeek 凭证）+ 托盘合并 tooltip + 登录捕获窗 | 设置落盘后重启生效；真账号走通捕获 → 验证 → 保存 → 面板出数；`--test-login` 通过 |
 | **P5** | 打包、端到端验证、README、独立 code review | `npx tauri build` 出单 exe；`--test-fetch` / `--test-deepseek` / `--test-ui` / `--test-login` 全绿；端到端脚本通过；审查报告无 Blocker |
+
+**顺序调整（2026-11-14 决定）**：P2 剩余的分段 tab 移到 P3 之后。理由是先让 DeepSeek 有真实数据，tab 一次做对，不做空态占位面板；tab 落地时的验收仍是「连点 30 次不跳位、底边与右边缘不动」。
 
 ## 9. 风险与未决
 
