@@ -1,0 +1,168 @@
+name: Release (draft)
+
+# Pushing a v* tag builds the release assets on a runner and opens a DRAFT
+# release with all three assets attached; publishing stays a manual decision
+# (review the notes against CHANGELOG.md, then hit Publish).
+on:
+  push:
+    tags: ['v*']
+
+# contents:write is required to create the draft release and upload its assets;
+# the scan job keeps read
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Tag pushes bypass ci.yml's branch trigger, so scan here too before anything
+  # gets a release attached to its name
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          # gitleaks-action@v3 needs no license secret on personal public repos
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pin below 8.30.x: that line has a detection regression (gitleaks
+          # #2170: rules load but never match). Drop the pin once verified fixed.
+          GITLEAKS_VERSION: 8.29.1
+
+  draft-release:
+    name: Build & draft release (windows-latest)
+    needs: gitleaks
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout (tag)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust (stable)
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
+        with:
+          # the action denies cargo warnings by default; this is a build, not a lint gate
+          build-warnings: warn
+          cache: false
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # The tag names a version; tauri.conf.json decides which version gets
+      # built. A mismatch would publish an exe whose file properties lie.
+      - name: Verify tag against tauri.conf.json
+        shell: bash
+        run: |
+          version=$(python -c "import json;print(json.load(open('src-tauri/tauri.conf.json', encoding='utf-8'))['version'])")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match tauri.conf.json version $version" >&2
+            exit 1
+          fi
+
+      # beforeBuildCommand (npm run build) runs as part of tauri build; the NSIS
+      # bundler (tauri.conf.json -> bundle.targets) also downloads its toolchain
+      - name: Build release exe + installer
+        run: npx tauri build
+
+      - name: Package source snapshot + checksums
+        env:
+          PYTHONUTF8: "1"
+        run: python scripts/release/make_release_zip.py
+
+      # Seed the draft body from the CHANGELOG version section (English notes
+      # followed by the Chinese mirror, as that file keeps them together) so
+      # publishing does not depend on hand-copying notes. An unreleased or
+      # missing section fails the job: the changelog is finalized before the tag.
+      - name: Compose release notes
+        shell: bash
+        env:
+          # The notes carry the CHANGELOG's Chinese half; without this the
+          # redirected stdout on a Windows runner falls back to the ANSI code
+          # page and either raises UnicodeEncodeError or writes mojibake
+          PYTHONUTF8: "1"
+        run: |
+          python - "${{ github.ref_name }}" "${{ github.repository }}" > "$RUNNER_TEMP/notes.md" <<'PY'
+          import sys
+          from pathlib import Path
+
+          tag, repo = sys.argv[1], sys.argv[2]
+          version = tag[1:] if tag.startswith("v") else tag
+          text = Path("CHANGELOG.md").read_text(encoding="utf-8")
+
+          out = []
+          capturing = False
+          for line in text.splitlines():
+              if line.startswith("## ["):
+                  if capturing:
+                      break
+                  if line.startswith(f"## [{version}]"):
+                      capturing = True
+                      out.append(line)
+                      continue
+              if capturing:
+                  out.append(line)
+
+          section = "\n".join(out).strip()
+          if not section:
+              sys.exit(f"CHANGELOG.md has no '## [{version}]' section — finalize the changelog before tagging")
+          if "Unreleased" in section.splitlines()[0]:
+              sys.exit(f"CHANGELOG.md section {version} still says Unreleased — date it before tagging")
+          print("\n".join([
+              section,
+              "",
+              f"Full bilingual changelog: https://github.com/{repo}/blob/{tag}/CHANGELOG.md",
+              "",
+              "Assets: `QuotaTray.exe` (portable, Windows 10/11 x64), "
+              f"`QuotaTray_{version}_x64-setup.exe` (per-user NSIS installer, same exe), "
+              f"`QuotaTray-v{version}.zip` (source snapshot, portable exe at the zip root) "
+              "and `SHA256SUMS.txt` (`sha256sum -c` compatible).",
+              "",
+              "The exe is unsigned — SmartScreen may warn on first launch (More info → Run anyway).",
+              "",
+              "<!-- Maintainer checklist: review the four assets, verify SHA256SUMS.txt, then publish. -->",
+          ]))
+          PY
+          test -s "$RUNNER_TEMP/notes.md"
+
+      - name: Create draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # Exact names, no glob: a version mismatch fails loudly here instead of
+          # attaching a stale asset
+          test -f "QuotaTray.exe"
+          test -f "QuotaTray_${version}_x64-setup.exe"
+          test -f "QuotaTray-v${version}.zip"
+          test -f "SHA256SUMS.txt"
+          # gh release create is not idempotent: a failed earlier run may leave
+          # a draft behind. Clean only DRAFTS — never touch a published release.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null | grep -q true; then
+            gh release delete "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --yes
+          fi
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --draft --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" \
+            QuotaTray.exe "QuotaTray_${version}_x64-setup.exe" \
+            "QuotaTray-v${version}.zip" SHA256SUMS.txt

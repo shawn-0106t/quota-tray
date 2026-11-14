@@ -48,6 +48,14 @@ mkdir -p "$(dirname "$OUT")" .shots
 PROFILE="$(mktemp -d .shots/prof-XXXXXX)"
 trap 'rm -rf "$PROFILE"' EXIT
 
+# The browser needs a Windows path, so the output has to be anchored to $PWD -
+# but only when it is relative; a caller that passed an absolute path would
+# otherwise get "C:/repo/C:/elsewhere/x.png".
+case "$OUT" in
+  /*|[A-Za-z]:/*) OUT_ABS="$OUT" ;;
+  *) OUT_ABS="$PWD/$OUT" ;;
+esac
+
 "$BROWSER" \
   --headless=new \
   --disable-gpu \
@@ -59,7 +67,7 @@ trap 'rm -rf "$PROFILE"' EXIT
   --window-size="$WIDTH,$HEIGHT" \
   --virtual-time-budget=4000 \
   --user-data-dir="$(win "$PWD/$PROFILE")" \
-  --screenshot="$(win "$PWD/$OUT")" \
+  --screenshot="$(win "$OUT_ABS")" \
   "$URL" >/dev/null 2>&1 || { echo "browser failed" >&2; exit 1; }
 
 [ -f "$OUT" ] || { echo "no screenshot produced" >&2; exit 1; }

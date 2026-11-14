@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # keep in-progress runs on main alive for bisect integrity; cancel superseded PR runs
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Least privilege for both jobs; npm/rust caches use the Actions Runtime Token,
+# which is unaffected by GITHUB_TOKEN scope
+permissions:
+  contents: read
+
+jobs:
+  # Second line of defense for secrets: the local pre-commit gitleaks scan can
+  # be bypassed (--no-verify, other machines, web edits), so scan the full
+  # commit history here
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          # gitleaks-action@v3 needs no license secret on personal public repos
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pin below 8.30.x: that line has a detection regression (gitleaks
+          # #2170: rules load but never match). Drop the pin once verified fixed.
+          GITLEAKS_VERSION: 8.29.1
+
+  build-and-test:
+    name: Build & test (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust (stable)
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
+        with:
+          # the action denies cargo warnings by default; this is a build check, not a lint gate
+          build-warnings: warn
+          cache: false
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Frontend type-check
+        run: npx tsc --noEmit
+
+      # beforeBuildCommand, i.e. the multi-page bundle the release exe embeds
+      - name: Frontend build
+        run: npm run build
+
+      - name: Cargo fmt
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      - name: Cargo clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Cargo build
+        working-directory: src-tauri
+        run: cargo build --locked
+
+      # Pure logic only, exactly the local contract: the --test-* self-checks
+      # need real credentials and an interactive desktop, so they stay local
+      - name: Cargo test
+        working-directory: src-tauri
+        run: cargo test --locked
