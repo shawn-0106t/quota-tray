@@ -47,6 +47,32 @@ the English notes first, then the Chinese mirror.
 - Thresholds from `PLAN.md` §5.2 are live in the pane: a cache hit rate under
   60% and a balance under ¥10 (or `is_available=false`) turn red. They only
   colour output and live in the frontend, so no unused Rust is shipped.
+- The settings window gained the two read-only sections from `PLAN.md` §4: CLI
+  version (with the newer release when one exists), Kimi credential source and
+  OAuth expiry, and the DeepSeek credential statuses. Statuses only — the IPC
+  payload has no field that could carry a token or a key.
+- The DeepSeek sign-in window (`login.rs`): the console itself, with an injected
+  hook that watches the `Authorization` header the page already sends (and
+  `localStorage.userToken` as the fallback). It reports a candidate through a
+  navigation to `quotatray://capture` that the host cancels, so the remote page
+  gets no Tauri IPC surface — no `remote` capability, no ACL entry. The window
+  is temporary: destroyed on close, outside the recovery set, built again for
+  the next sign-in.
+- A candidate token is verified with one real `amount` request before it
+  replaces the stored one; a rejected candidate leaves the credential alone and
+  the window open with the reason in its title. `Clear` empties the credential
+  file but keeps it, so the one-time legacy import cannot resurrect what the
+  user just removed.
+- The manual fallback survived: a collapsed "Paste a credential instead" block
+  in the settings window verifies each non-empty field and saves only what
+  passes.
+- `--test-login [--verbose]`: credential source, a real token verification, then
+  the sign-in window plus a probe fired through the injected hook — `LoginWindow
+  capture channel OK` proves injection, the cancelled-navigation channel and the
+  host parser without a human signing in.
+- The sign-in hook also reports the shape of the console's own usage request, so
+  a moved endpoint and a bumped `x-app-version` are learned from the live page
+  and remembered in `deepseek-endpoints.json` (`PLAN.md` §6.3).
 
 ### Changed
 
@@ -86,6 +112,12 @@ the English notes first, then the Chinese mirror.
   diagnostic override variable is now `QUOTA_TRAY_APP_DATA_DIR`.
 - Tray tooltip, window titles, fallback quit menu and the GitHub `User-Agent`
   now say Quota Tray.
+- The tray tooltip carries both providers on their own lines (`Quota Tray` /
+  `Kimi 5h 31% · week 12%` / `DeepSeek ¥46.81`), each with its own
+  ` (fetch failed)` suffix, and either poller renews the whole text.
+- The settings sheet's Save button is now `Save settings`, next to the
+  credentials block's own `Save credentials`: the two actions write different
+  things and no longer share a verb.
 - The failure hint reads `Fetch failed` (panel header) and ` (fetch failed)`
   (tray tooltip) instead of `Update failed`, which read like the CLI version
   check had failed — that is a separate path.
@@ -108,6 +140,23 @@ the English notes first, then the Chinese mirror.
 - The ring lives in `--seg-ring`, so the settings window's segmented control is
   ringed the same way the panel tab is: one token, one look, and no second way
   to express "selected". `demo/seg-ring-problem.html` records why.
+- The inherited Kimi "K" mark is replaced by Quota Tray's own icon: two accent
+  bars on a transparent field, i.e. the panel's progress-bar motif. It is
+  generated from geometry by `demo/make_icon.py` (256 PNG, eight-size ICO, and
+  the 48px cut the tray embeds), never hand-drawn, and the tray's programmatic
+  fallback draws the same bars instead of the old blue ball.
+- A Kimi cache / decode block in the panel (`PLAN.md` §5.1):
+  two readout columns (`Cache 7d · local`, `Cache today`) with bars and request
+  counts, plus `Decode 135.7 tok/s` and the mean time to first token. The numbers
+  come from the CLI's own session logs — the quota API has no token data — so the
+  label says `local`. Hidden entirely until a scan finds prompt tokens.
+- `--test-usage`: scans the session logs twice (walk, then stat-only) and prints
+  the aggregated JSON; the two passes report the same counts, which is the
+  incremental-scan proof.
+- `demo/ui-demo.html`: every window on one page - both panel tabs, the settings
+  sheet, the skills window, the tray menu, the notification area and the
+  sign-in title bar - generated from the shipped markup and stylesheets by
+  `demo/build_ui_demo.py`, so it cannot drift from the product.
 
 ### 中文
 
@@ -141,6 +190,24 @@ the English notes first, then the Chinese mirror.
   同一个 provider。
 - **新增**：`PLAN.md` §5.2 的两个阈值落地——命中率 <60% 标红、余额 <¥10 或
   `is_available=false` 标红；只决定颜色，放在前端，不往 Rust 里塞死代码。
+- **新增**：设置窗加上 `PLAN.md` §4 的两个只读分区——CLI 版本（有新版时一并显示）、
+  Kimi 凭证来源与 OAuth 到期时间、DeepSeek 两个凭证的状态。只报状态：IPC 载荷
+  里没有任何能带出 token 或密钥的字段。
+- **新增**：DeepSeek 登录窗（`login.rs`）——窗口本身就是 console，注入的 hook 监听
+  页面自己发出的 `Authorization` 头（兜底读 `localStorage.userToken`），把候选 token
+  通过一次被宿主取消的 `quotatray://capture` 导航送出来，远程页面拿不到任何 Tauri
+  IPC 命令面（因此不需要 `remote` capability，也不需要 ACL 条目）。窗口是临时的：
+  关闭即销毁、不在 recovery 集合里，下次登录重新创建。
+- **新增**：候选 token 先用一次真实 `amount` 请求验证，通过才替换已存的凭证；被拒的
+  候选保持窗打开、原因写在窗口标题上，已存凭证不受影响。`Clear` 把凭证文件写成空值
+  而不删除它，否则一次性旧版导入会把刚清掉的凭证导回来。
+- **新增**：手工兜底保留——设置窗里折叠的「Paste a credential instead」会逐个验证
+  非空字段，只有通过的才落盘。
+- **新增**：`--test-login [--verbose]`——先报凭证来源并做一次真实验证，再建登录窗并用
+  注入的 hook 自己打一发 probe；`LoginWindow capture channel OK` 即「注入生效 +
+  导航被拦 + 宿主解析」三件事的证据，不需要真人登录。
+- **新增**：登录窗的 hook 还上报 console 自己用量请求的形状，端点搬家与
+  `x-app-version` 升版都能从活页面学到并记进 `deepseek-endpoints.json`（`PLAN.md` §6.3）。
 - **变更**：header 时间戳跟着当前 tab 走（`Updated HH:MM` / `Fetch failed` /
   `Not configured`）；DeepSeek 缓存跨天时显示 `Updated M/D HH:MM`，避免把前一天的
   数据读成刚取的。
@@ -165,6 +232,11 @@ the English notes first, then the Chinese mirror.
   `%APPDATA%\QuotaTray`，自启值名 `QuotaTray`，诊断覆盖变量改为
   `QUOTA_TRAY_APP_DATA_DIR`；托盘 tooltip、窗口标题、兜底退出菜单与
   GitHub `User-Agent` 统一为 Quota Tray。
+- **变更**：托盘 tooltip 改为两个 provider 各占一行（`Quota Tray` /
+  `Kimi 5h 31% · week 12%` / `DeepSeek ¥46.81`），各自带自己的
+  ` (fetch failed)` 后缀；任一侧刷新都会重算整段文字。
+- **变更**：设置窗底部按钮改名 `Save settings`，与凭证区自己的
+  `Save credentials` 并列——两者写的是不同的东西，不再共用一个动词。
 - **变更**：失败文案改为 `Fetch failed`（面板 header）与 ` (fetch failed)`
   （托盘 tooltip），原来的 `Update failed` 读起来像 CLI 版本检查失败，
   而那是另一条独立的路。
@@ -182,3 +254,16 @@ the English notes first, then the Chinese mirror.
 - **变更**：ring 落在 `--seg-ring` 上，设置窗的分段控件与面板 tab 从此共用同一个
   值——一个 token、一种观感，不再有第二处「只靠填充差表达选中」。
   `demo/seg-ring-problem.html` 记录了这个取舍的前后对比。
+- **变更**：图标从继承来的 Kimi「K」标换成 Quota Tray 自己的双条配额条（透明底、
+  紫 `#8c74b1`）——就是面板进度条的语言。三件套由 `demo/make_icon.py` 用几何生成
+  （256 PNG、8 尺寸 ICO、托盘用的 48px），不手绘；托盘失败兜底也改成同样的双条，
+  不再是那颗蓝球。
+- **新增**：Kimi 面板的缓存 / 解码块（`PLAN.md` §5.1）——
+  两列读数（`Cache 7d · local` / `Cache today`，各带条与请求数），下面一行
+  `Decode 135.7 tok/s` 与平均首 token 时间。数字来自 CLI 自己的会话日志（额度接口
+  没有 token 数据），所以标签写 `local`；扫不到数据时整块隐藏。
+- **新增**：`--test-usage`——把会话日志扫两遍（先走树、再只 stat）并打印聚合 JSON；
+  两遍请求数一致即证明增量扫描没有重复计数。
+- **新增**：`demo/ui-demo.html`——所有窗口一页看全（两个面板 tab、设置窗、技能窗、
+  托盘菜单、通知区、登录窗标题栏），由 `demo/build_ui_demo.py` 从真实 HTML/CSS
+  生成，不会与产品走样。

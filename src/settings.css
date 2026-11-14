@@ -80,5 +80,101 @@
 }
 
 .save {
-  margin-top: 14px;
+  margin-top: 16px;
+}
+
+/* ---------- sections (PLAN §4: general / Kimi read-only / DeepSeek) ----------
+   A hairline opens each section, the label names it, and the first row sits
+   directly under the label — no second hairline there. */
+.sect {
+  margin-top: 18px;
+  border-top: 1px solid var(--hair);
+  padding-top: 12px;
+}
+/* The first row sits under the section label, not under a hairline of its own:
+   `:first-of-type` cannot express that here — the label is a div too. */
+.sect > .label + .row {
+  border-top: 0;
+  padding-top: 6px;
+}
+.row-value.bad {
+  color: var(--danger);
+}
+
+/* Sign in / Clear side by side under the status rows */
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+/* Manual fallback: a disclosure, closed by default so the window stays short */
+.more {
+  margin-top: 12px;
+  border-top: 1px solid var(--hair);
+  padding-top: 10px;
+}
+.more summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+  list-style: none;
+}
+.more summary::-webkit-details-marker {
+  display: none;
+}
+.more summary::after {
+  content: '+';
+  font-size: 12px;
+}
+.more[open] summary::after {
+  content: '\2212';
+}
+.more summary:hover {
+  color: var(--ink-1);
+}
+
+/* Grid, not block: an inline-block input inside a label adds the 16px strut
+   and its descender, which read as random vertical gaps. */
+.cred-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+.cred-field input {
+  width: 100%;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-1);
+  font-family: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+/* ink-2, not ink-3: a placeholder is text, and ink-3 is icons only (PLAN §3.2) */
+.cred-field input::placeholder {
+  color: var(--ink-2);
+  opacity: 0.75;
+}
+.cred-field input:focus-visible {
+  outline: 2px solid var(--accent-bar);
+  outline-offset: 1px;
+}
+.more .btn {
+  width: 100%;
+  margin-top: 10px;
+}
+.more .btn:disabled {
+  color: var(--ink-2);
+  cursor: default;
+}
+.note.bad {
+  color: var(--danger);
 }

@@ -1,10 +1,11 @@
 use crate::deepseek::DeepseekResult;
+use crate::kimi_usage::KimiUsage;
 use crate::quota::QuotaResult;
 use crate::recovery::RecoveryState;
 use crate::settings::SettingsData;
 use crate::skills::SkillInfo;
 use crate::update::UpdateStatus;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
@@ -71,13 +72,41 @@ impl Schedule {
     }
 }
 
+/// DeepSeek sign-in state (PLAN §5.2). The window is temporary, so nothing here
+/// outlives it: `reset` runs on every open and on close.
+#[derive(Default)]
+pub struct LoginState {
+    /// A candidate token is being verified right now (single flight)
+    pub verifying: AtomicBool,
+    /// A candidate passed verification and was saved
+    pub accepted: AtomicBool,
+    /// `--test-login` saw the injected hook's probe arrive (channel proof)
+    pub probe: AtomicBool,
+    /// `--test-login` saw the hook lift a token off a real `fetch` call
+    pub candidate: AtomicBool,
+}
+
+impl LoginState {
+    pub fn reset(&self) {
+        self.verifying.store(false, Ordering::SeqCst);
+        self.accepted.store(false, Ordering::SeqCst);
+        self.probe.store(false, Ordering::SeqCst);
+        self.candidate.store(false, Ordering::SeqCst);
+    }
+}
+
 /// Shared application state (managed by Tauri).
 pub struct AppState {
     pub settings: RwLock<SettingsData>,
-    pub last_quota: RwLock<Option<QuotaResult>>,
+    /// DeepSeek sign-in window state (temporary window, PLAN §4)
+    pub login: LoginState,    pub last_quota: RwLock<Option<QuotaResult>>,
     /// Last-known-good DeepSeek payload; kept apart from `last_quota` so a
     /// failure on one provider never blanks the other (PLAN §5.3)
     pub last_deepseek: RwLock<Option<DeepseekResult>>,
+    /// Kimi prompt-cache / decode-speed statistics read from the local session
+    /// logs (PLAN §5.1). Independent of the quota fetch: one has nothing to do
+    /// with the other.
+    pub kimi_usage: RwLock<Option<KimiUsage>>,
     pub update: RwLock<UpdateStatus>,
     /// Effective theme after resolving "system": "light" | "dark"
     pub effective_theme: RwLock<String>,
@@ -117,8 +146,10 @@ impl AppState {
     pub fn new(settings: SettingsData, effective_theme: String) -> Self {
         AppState {
             settings: RwLock::new(settings),
+            login: LoginState::default(),
             last_quota: RwLock::new(None),
             last_deepseek: RwLock::new(None),
+            kimi_usage: RwLock::new(None),
             update: RwLock::new(UpdateStatus::default()),
             effective_theme: RwLock::new(effective_theme),
             last_hide: Mutex::new(None),

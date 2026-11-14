@@ -1,6 +1,6 @@
 // Entry point. Self-check args (--test-fetch / --test-update / --test-deepseek
-// / --test-ui) run BEFORE any GUI or single-instance logic, mirroring
-// App.OnStartup (SPEC 19).
+// --test-ui / --test-login / --test-usage) run BEFORE any GUI or single-instance logic,
+// mirroring App.OnStartup (SPEC 19).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -89,9 +89,22 @@ fn main() {
         return;
     }
 
+    // Headless Kimi cache/usage self-check: scan the local session logs twice
+    if args.iter().any(|a| a == "--test-usage") {
+        quota_tray_lib::run_usage_test();
+        return;
+    }
+
     // Headless UI self-check: construct the four windows, print OK lines, exit
     if args.iter().any(|a| a == "--test-ui") {
         quota_tray_lib::run_ui_test();
+        return;
+    }
+
+    // Headless DeepSeek sign-in self-check (PLAN §8): verify the configured
+    // token, then build the sign-in window and prove its capture channel
+    if args.iter().any(|a| a == "--test-login") {
+        quota_tray_lib::run_login_test(args.iter().any(|a| a == "--verbose"));
         return;
     }
 

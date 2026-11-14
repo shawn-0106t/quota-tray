@@ -62,6 +62,9 @@ pub async fn safe_refresh_deepseek(app: &AppHandle) -> DeepseekResult {
     if r.balance.is_some() || r.usage.is_some() {
         deepseek::save_cache(&r);
     }
+    // The tooltip carries both providers (PLAN §5.3), so either refresh renews
+    // it; the last-good slot just written is what it reads.
+    tray::update_tooltip(app);
     let delay = if r.has_error() {
         Duration::from_secs(30)
     } else {

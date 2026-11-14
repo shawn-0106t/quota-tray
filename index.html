@@ -45,6 +45,32 @@
           </div>
         </div>
 
+        <!-- Cache / decode block (PLAN §5.1, demo/ui-demo.html): read from the
+             local CLI session logs, so it is labelled `local` and appears only
+             once the first scan has numbers. -->
+        <div class="quota rule" id="kimi-cache" hidden>
+          <div class="field">
+            <div class="label">Cache 7d · local</div>
+            <div class="num" id="cache-week-num"><b id="cache-week">--</b><span class="unit">%</span></div>
+            <div class="bar"><i id="cache-week-fill"></i></div>
+            <div class="note" id="cache-week-note"></div>
+          </div>
+          <div class="field">
+            <div class="label">Cache today</div>
+            <div class="num" id="cache-today-num"><b id="cache-today">--</b><span class="unit">%</span></div>
+            <div class="bar"><i id="cache-today-fill"></i></div>
+            <div class="note" id="cache-today-note"></div>
+          </div>
+        </div>
+
+        <div class="row" id="kimi-speed" hidden>
+          <div class="row-main">
+            <span class="row-label">Decode</span>
+            <span class="row-value muted" id="speed-value">--</span>
+          </div>
+          <div class="note tight" id="speed-note"></div>
+        </div>
+
         <!-- Extra usage row -->
         <div class="row">
           <div class="row-main">

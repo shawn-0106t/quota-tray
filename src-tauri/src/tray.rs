@@ -2,6 +2,7 @@
 // static icon, left-click toggles the panel, right-click opens the menu window
 // at the cursor, hover (Enter/Move) prefetch-throttled at 10s, tooltip text only.
 
+use crate::deepseek::DeepseekResult;
 use crate::panel;
 use crate::polling;
 use crate::quota::{QuotaResult, QuotaSegment};
@@ -10,38 +11,49 @@ use std::time::{Duration, Instant};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
-const ICON_PNG: &[u8] = include_bytes!("../icons/icon.png");
+const ICON_PNG: &[u8] = include_bytes!("../icons/tray.png");
 
-/// Programmatic 32x32 blue ball, drawn exactly like the WPF fallback
-/// (circle (1,1,30,30) #1A88FF + highlight ellipse (7,5,10,7) white@90).
+/// Programmatic 48x48 copy of the tray mark, used only if the PNG above fails to
+/// decode: the same two accent bars on the same 24-unit grid as
+/// `demo/make_icon.py`, supersampled 4x so the corners stay clean.
 fn fallback_icon() -> tauri::image::Image<'static> {
-    const S: usize = 32;
-    let mut px = vec![0u8; S * S * 4];
-    for y in 0..S {
-        for x in 0..S {
-            let dx = x as f64 + 0.5 - 16.0;
-            let dy = y as f64 + 0.5 - 16.0;
-            if dx * dx + dy * dy <= 15.0 * 15.0 {
-                let i = (y * S + x) * 4;
-                px[i] = 0x1A;
-                px[i + 1] = 0x88;
-                px[i + 2] = 0xFF;
-                px[i + 3] = 0xFF;
-            }
-        }
+    const S: usize = 48;
+    const SS: usize = 4;
+    const GRID: f64 = 24.0;
+    const RADIUS: f64 = 1.6;
+    const ACCENT: [u8; 3] = [0x8c, 0x74, 0xb1];
+    const BARS: [(f64, f64, f64, f64); 2] =
+        [(3.5, 4.5, 10.5, 19.5), (12.5, 10.0, 19.5, 19.5)];
+
+    /// Rounded-rectangle coverage: clamp into the inset rect, then measure.
+    fn inside(x: f64, y: f64, bar: (f64, f64, f64, f64)) -> bool {
+        let (x0, y0, x1, y1) = bar;
+        let cx = x.clamp(x0 + RADIUS, x1 - RADIUS);
+        let cy = y.clamp(y0 + RADIUS, y1 - RADIUS);
+        let dx = x - cx;
+        let dy = y - cy;
+        dx * dx + dy * dy <= RADIUS * RADIUS
     }
-    let a = 90.0 / 255.0;
-    for y in 0..S {
-        for x in 0..S {
-            let dx = (x as f64 + 0.5 - 12.0) / 5.0;
-            let dy = (y as f64 + 0.5 - 8.5) / 3.5;
-            if dx * dx + dy * dy <= 1.0 {
-                let i = (y * S + x) * 4;
-                if px[i + 3] > 0 {
-                    px[i] = (255.0 * a + px[i] as f64 * (1.0 - a)) as u8;
-                    px[i + 1] = (255.0 * a + px[i + 1] as f64 * (1.0 - a)) as u8;
-                    px[i + 2] = (255.0 * a + px[i + 2] as f64 * (1.0 - a)) as u8;
+
+    let mut px = vec![0u8; S * S * 4];
+    for sy in 0..S {
+        for sx in 0..S {
+            let mut hits = 0u32;
+            for oy in 0..SS {
+                for ox in 0..SS {
+                    let gx = (sx as f64 + (ox as f64 + 0.5) / SS as f64) * GRID / S as f64;
+                    let gy = (sy as f64 + (oy as f64 + 0.5) / SS as f64) * GRID / S as f64;
+                    if BARS.iter().any(|bar| inside(gx, gy, *bar)) {
+                        hits += 1;
+                    }
                 }
+            }
+            if hits > 0 {
+                let i = (sy * S + sx) * 4;
+                px[i] = ACCENT[0];
+                px[i + 1] = ACCENT[1];
+                px[i + 2] = ACCENT[2];
+                px[i + 3] = (hits as f64 / (SS * SS) as f64 * 255.0).round() as u8;
             }
         }
     }
@@ -52,7 +64,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let icon = tauri::image::Image::from_bytes(ICON_PNG).unwrap_or_else(|_| fallback_icon());
     TrayIconBuilder::with_id("tray")
         .icon(icon)
-        .tooltip("Quota Tray")
+        .tooltip(tooltip_text(app))
         .on_tray_icon_event(|tray, event| {
             let app = tray.app_handle();
             match event {
@@ -99,27 +111,60 @@ fn on_hover(app: &AppHandle) {
     });
 }
 
-/// Tooltip: "Quota Tray  5h X% · week Y%" (+ " (fetch failed)" on error).
+/// Tooltip: two provider lines under the product name (PLAN §5.3). Each line
+/// carries its own failure suffix, so a dead Kimi fetch never hides a healthy
+/// DeepSeek balance.
 pub fn update_tooltip(app: &AppHandle) {
-    let st = app.state::<AppState>();
-    let last: Option<QuotaResult> = st.last_quota.read().unwrap().clone();
-    let text = match &last {
-        None => "Quota Tray".to_string(),
-        Some(l) => {
-            let mut t = format!(
-                "Quota Tray  5h {} · week {}",
-                pct(&l.five_hour),
-                pct(&l.week)
-            );
-            if l.error.is_some() {
-                t.push_str(" (fetch failed)");
-            }
-            t
-        }
-    };
     if let Some(tray) = app.tray_by_id("tray") {
-        let _ = tray.set_tooltip(Some(text));
+        let _ = tray.set_tooltip(Some(tooltip_text(app)));
     }
+}
+
+fn tooltip_text(app: &AppHandle) -> String {
+    let st = app.state::<AppState>();
+    let kimi = st.last_quota.read().unwrap().clone();
+    let deepseek = st.last_deepseek.read().unwrap().clone();
+    format!(
+        "Quota Tray\n{}\n{}",
+        kimi_line(kimi.as_ref()),
+        deepseek_line(deepseek.as_ref())
+    )
+}
+
+fn kimi_line(last: Option<&QuotaResult>) -> String {
+    match last {
+        None => "Kimi --".to_string(),
+        Some(l) => {
+            let mut text = format!("Kimi 5h {} · week {}", pct(&l.five_hour), pct(&l.week));
+            if l.error.is_some() {
+                text.push_str(" (fetch failed)");
+            }
+            text
+        }
+    }
+}
+
+fn deepseek_line(last: Option<&DeepseekResult>) -> String {
+    match last {
+        None => "DeepSeek --".to_string(),
+        Some(r) => {
+            let mut text = match &r.balance {
+                Some(b) => format!("DeepSeek {}", money(b.total, &b.currency)),
+                None => "DeepSeek --".to_string(),
+            };
+            if r.has_error() {
+                text.push_str(" (fetch failed)");
+            }
+            text
+        }
+    }
+}
+
+/// Same rule as `fmtMoney` in common.ts: DeepSeek money is yuan and always
+/// two decimals (PLAN §5.2).
+fn money(amount: f64, currency: &str) -> String {
+    let symbol = if currency == "USD" { "$" } else { "¥" };
+    format!("{symbol}{amount:.2}")
 }
 
 fn pct(seg: &Option<QuotaSegment>) -> String {

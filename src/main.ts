@@ -8,14 +8,18 @@ import {
   DeepseekResult,
   DeepseekUsage,
   ExtraInfo,
+  KimiCacheWindow,
+  KimiUsage,
   ProviderTab,
   QuotaResult,
   QuotaSegment,
   SHADOW_ROOM,
   UpdateStatus,
   clampPercent,
+  fmtCount,
   fmtHitRate,
   fmtMoney,
+  fmtPct,
   fmtTokens,
   fmtUpdated,
   fmtYuan,
@@ -34,6 +38,7 @@ function el<T extends HTMLElement>(id: string): T {
 let tab: ProviderTab = 'kimi';
 let quota: QuotaResult | null = null;
 let deepseek: DeepseekResult | null = null;
+let kimiUsage: KimiUsage | null = null;
 
 // ---- Rendering: Kimi (mirrors MainWindow.xaml.cs Render/SetCard/RenderExtra) ----
 
@@ -86,6 +91,68 @@ function renderQuota(r: QuotaResult | null): void {
   setCard('five', r?.fiveHour);
   renderExtra(r?.extra);
   renderStamp();
+  reportHeight();
+}
+
+// ---- Rendering: Kimi cache / decode figures (PLAN §5.1) ----
+//
+// These come from the CLI's own session logs, so the label says `local`: they
+// cover this machine, not the account. Hidden entirely when no session has
+// produced prompt tokens yet (a fresh install, or the first scan still running).
+
+function renderCacheCell(
+  prefix: 'week' | 'today',
+  rate: number | null | undefined,
+  window: KimiCacheWindow | undefined,
+): void {
+  const pct = el(`cache-${prefix}`);
+  const fill = el(`cache-${prefix}-fill`);
+  const note = el(`cache-${prefix}-note`);
+  const num = el(`cache-${prefix}-num`);
+  const requests = window?.requests ?? 0;
+  note.textContent = requests > 0 ? `${fmtCount(requests)} requests` : 'No requests';
+  if (rate == null) {
+    pct.textContent = '--';
+    fill.style.width = '0%';
+    num.classList.remove('is-danger');
+    return;
+  }
+  pct.textContent = fmtPct(rate) ?? '--';
+  fill.style.width = `${clampPercent(rate)}%`;
+  // Same threshold as the DeepSeek pane: a low hit rate is a failure, not a
+  // gradient (PLAN §5.2).
+  num.classList.toggle('is-danger', isLowCacheHit(rate));
+}
+
+function renderKimiUsage(u: KimiUsage | null): void {
+  kimiUsage = u;
+  const block = el('kimi-cache');
+  const speed = el('kimi-speed');
+  const week = u?.week?.hitRate ?? null;
+  const today = u?.today?.hitRate ?? null;
+  if (!u || (week == null && today == null)) {
+    block.hidden = true;
+    speed.hidden = true;
+    reportHeight();
+    return;
+  }
+  block.hidden = false;
+  renderCacheCell('week', week, u.week);
+  renderCacheCell('today', today, u.today);
+
+  const tps = u.week?.decodeTps ?? null;
+  if (tps == null) {
+    speed.hidden = true;
+  } else {
+    speed.hidden = false;
+    el('speed-value').textContent = `${tps.toFixed(1)} tok/s`;
+    const first = u.week?.firstTokenMs;
+    const calls = fmtCount(u.week?.calls ?? 0);
+    el('speed-note').textContent =
+      first != null
+        ? `First token ${(first / 1000).toFixed(2)} s · ${calls} calls`
+        : `${calls} calls`;
+  }
   reportHeight();
 }
 
@@ -355,6 +422,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // never be missed.
   await listen<QuotaResult>('quota-updated', (e) => renderQuota(e.payload));
   await listen<DeepseekResult>('deepseek-updated', (e) => renderDeepseek(e.payload));
+  await listen<KimiUsage>('kimi-usage-updated', (e) => renderKimiUsage(e.payload));
   await listen<UpdateStatus>('update-status', (e) => renderVersion(e.payload));
   await listen('panel-show', () => playShow());
   await listen('panel-hide', () => playHide());
@@ -379,6 +447,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   // because the settings and skills windows do not need the usage list.
   invoke<DeepseekResult | null>('get_deepseek')
     .then((r) => renderDeepseek(r))
+    .catch(() => undefined);
+  // Same for the local cache figures: the first scan may still be running, in
+  // which case the block simply stays hidden until `kimi-usage-updated`.
+  invoke<KimiUsage | null>('get_kimi_usage')
+    .then((u) => renderKimiUsage(u))
     .catch(() => undefined);
 
   document.querySelectorAll<HTMLInputElement>('input[name="provider"]').forEach((input) => {

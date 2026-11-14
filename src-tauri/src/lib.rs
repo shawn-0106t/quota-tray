@@ -6,6 +6,8 @@
 
 pub mod credentials;
 pub mod deepseek;
+pub mod kimi_usage;
+pub mod login;
 pub mod panel;
 pub mod polling;
 pub mod quota;
@@ -147,6 +149,39 @@ pub struct SaveSettingsArgs {
     pub auto_start: bool,
 }
 
+/// Read-only Kimi credential state for the settings window (PLAN §4). Never
+/// carries the token; `source` is `oauth` / `api-key` / `none`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KimiCredentialDto {
+    pub source: String,
+    /// Unix seconds, OAuth only
+    pub expires_at: Option<i64>,
+    /// An OAuth entry exists but is unusable and nothing took over
+    pub expired: bool,
+}
+
+/// DeepSeek credential state: presence and origin, never a value (PLAN §5.2).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeepseekCredentialDto {
+    pub api_key: bool,
+    pub user_token: bool,
+    /// env | file | imported | undecryptable | none
+    pub source: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialStatusDto {
+    pub kimi: KimiCredentialDto,
+    pub deepseek: DeepseekCredentialDto,
+    /// `kimi --version` from the update check (PLAN §5.1)
+    pub cli_version: Option<String>,
+    pub latest_version: Option<String>,
+    pub update_available: bool,
+}
+
 // ---- Commands ----
 
 #[tauri::command]
@@ -192,6 +227,14 @@ fn refresh_now(app: AppHandle) {
     });
 }
 
+/// Kimi prompt-cache / decode-speed statistics for the Kimi pane (PLAN §5.1).
+/// Kept out of `get_state` for the same reason as `get_deepseek`: only the panel
+/// renders it, and the settings / skills windows call `get_state` too.
+#[tauri::command]
+fn get_kimi_usage(app: AppHandle) -> Option<kimi_usage::KimiUsage> {
+    app.state::<AppState>().kimi_usage.read().unwrap().clone()
+}
+
 /// DeepSeek half of the state: the initial payload for the DeepSeek pane.
 /// Kept out of `get_state` on purpose — the settings and skills windows also
 /// call `get_state` and have no use for the per-model usage list.
@@ -218,6 +261,82 @@ fn set_active_tab(app: AppHandle, tab: String) {
 #[tauri::command]
 fn open_settings(app: AppHandle) {
     show_settings_window(&app);
+}
+
+/// Read-only credential status for the settings sections (PLAN §4). Statuses
+/// only — a value never leaves the backend.
+#[tauri::command]
+fn credential_status(app: AppHandle) -> CredentialStatusDto {
+    let kimi = credentials::describe();
+    let ds = deepseek::credentials::status();
+    let update = app.state::<AppState>().update.read().unwrap().clone();
+    CredentialStatusDto {
+        kimi: KimiCredentialDto {
+            source: kimi.source.to_string(),
+            expires_at: kimi.expires_at,
+            expired: kimi.expired,
+        },
+        deepseek: DeepseekCredentialDto {
+            api_key: ds.api_key,
+            user_token: ds.user_token,
+            source: ds.source.as_str().to_string(),
+        },
+        cli_version: update.local_version,
+        latest_version: update.latest_version,
+        update_available: update.update_available,
+    }
+}
+
+/// Manual fallback for a user who cannot use the sign-in window (PLAN §4).
+/// Verify first, save only on success: a broken key must not replace a working
+/// one. Errors are PLAN §5.2 codes, which the frontend turns into text.
+#[tauri::command]
+async fn save_credential(app: AppHandle, field: String, value: String) -> Result<(), String> {
+    let value = value.trim().to_string();
+    if value.is_empty() {
+        return Err("empty".to_string());
+    }
+    match field.as_str() {
+        "apiKey" => {
+            deepseek::client::fetch_balance(&value).await?;
+            deepseek::credentials::save(Some(&value), None, None);
+        }
+        "userToken" => {
+            deepseek::client::verify_user_token(&value).await?;
+            deepseek::credentials::save(None, Some(&value), None);
+        }
+        _ => return Err("unknown-field".to_string()),
+    }
+    let _ = app.emit("deepseek-credentials-changed", ());
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        polling::safe_refresh_deepseek(&handle).await;
+    });
+    Ok(())
+}
+
+/// Remove both stored DeepSeek credentials. The file stays (empty) so the
+/// one-time legacy import cannot bring them back (PLAN §5.2).
+#[tauri::command]
+fn clear_credentials(app: AppHandle) {
+    deepseek::credentials::clear();
+    let _ = app.emit("deepseek-credentials-changed", ());
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        polling::safe_refresh_deepseek(&handle).await;
+    });
+}
+
+/// DeepSeek sign-in window (PLAN §4): a temporary window, never reused after
+/// it closes.
+#[tauri::command]
+fn open_login(app: AppHandle) {
+    login::open(&app);
+}
+
+#[tauri::command]
+fn close_login(app: AppHandle) {
+    login::close(&app);
 }
 
 /// Shared by the open_settings command and the recovery rebuild restore path.
@@ -475,6 +594,13 @@ fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
         // Windows are single-instance reused: never destroy, only hide.
         // destroy() (recovery rebuild) bypasses CloseRequested on purpose.
         tauri::WindowEvent::CloseRequested { api, .. } => {
+            // The DeepSeek sign-in window is the one temporary window: closing
+            // it destroys it, and the next sign-in builds a fresh one (PLAN §4).
+            if window.label() == login::LABEL {
+                window.app_handle().state::<AppState>().login.reset();
+                recovery::log("login: sign-in window closed");
+                return;
+            }
             api.prevent_close();
             let st = window.app_handle().state::<AppState>();
             match window.label() {
@@ -501,10 +627,16 @@ fn invoke_handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
     tauri::generate_handler![
         get_state,
         get_deepseek,
+        get_kimi_usage,
         set_active_tab,
         refresh_now,
         open_settings,
         close_settings,
+        credential_status,
+        save_credential,
+        clear_credentials,
+        open_login,
+        close_login,
         open_skills,
         close_skills,
         get_skills,
@@ -549,6 +681,8 @@ pub fn run() {
             tauri::async_runtime::spawn(async move { polling::run(h).await });
             let h = app.handle().clone();
             tauri::async_runtime::spawn(async move { polling::run_deepseek(h).await });
+            let h = app.handle().clone();
+            tauri::async_runtime::spawn(async move { kimi_usage::run(h).await });
             let h = app.handle().clone();
             tauri::async_runtime::spawn(async move { check_and_emit(&h).await });
             let h = app.handle().clone();
@@ -619,6 +753,60 @@ fn remove_test_dir(path: &std::path::Path) {
 /// and with its own app-data root so the WebView2 user-data folder never
 /// collides with a running instance (SPEC 22.5).
 pub fn run_ui_test() {
+    run_headless_windows(false);
+}
+
+/// --test-login (PLAN §8): verify the DeepSeek sign-in chain end to end.
+/// The verification half runs first and is read-only; the window half builds
+/// the real sign-in webview and proves the page -> host capture channel by
+/// firing the hook's own sender with a probe.
+pub fn run_login_test(verbose: bool) {
+    let status = deepseek::credentials::status();
+    println!("credentialSource={}", status.source.as_str());
+    println!("apiKeyConfigured={}", status.api_key);
+    println!("userTokenConfigured={}", status.user_token);
+    if verbose {
+        match deepseek::client::load_usage_base() {
+            Some(base) => println!("usageBase={base}"),
+            None => println!("usageBase=(not learned yet)"),
+        }
+    }
+    let creds = deepseek::credentials::load();
+    match creds.user_token.as_deref() {
+        Some(token) => {
+            match tauri::async_runtime::block_on(deepseek::client::verify_user_token(token)) {
+                Ok(()) => println!("verify=ok"),
+                Err(error) => println!("verify={error}"),
+            }
+        }
+        None => println!("verify=skipped(no-user-token)"),
+    }
+    run_headless_windows(true);
+}
+
+/// --test-usage (PLAN §5.1): run the local cache scan twice and print the result.
+/// The first call walks the session tree (or resumes from the index); the second
+/// only re-stats known files — that difference is the incremental proof.
+pub fn run_usage_test() {
+    let first = kimi_usage::scan();
+    println!(
+        "scan1: files={} requests(7d)={} requests(today)={} ms={}",
+        first.files, first.week.requests, first.today.requests, first.scan_ms
+    );
+    let second = kimi_usage::scan_known();
+    println!(
+        "scan2: requests(7d)={} requests(today)={} ms={}",
+        second.week.requests, second.today.requests, second.scan_ms
+    );
+    match serde_json::to_string_pretty(&second) {
+        Ok(json) => println!("{json}"),
+        Err(e) => println!("serialize error: {e}"),
+    }
+}
+
+/// Shared scaffolding for the two headless window tests. `with_login` adds the
+/// on-demand DeepSeek sign-in window and its channel probe.
+fn run_headless_windows(with_login: bool) {
     cleanup_stale_test_dirs();
     let test_root = std::env::temp_dir().join(format!("quota-tray-testui-{}", std::process::id()));
     let mut context = tauri::generate_context!();
@@ -636,7 +824,7 @@ pub fn run_ui_test() {
         .plugin(tauri_plugin_opener::init())
         .manage(build_state())
         .invoke_handler(invoke_handlers())
-        .setup(|app| {
+        .setup(move |app| {
             let handle = app.handle().clone();
             recovery::install_all(&handle);
             recovery::start(&handle);
@@ -657,6 +845,17 @@ pub fn run_ui_test() {
                     None => println!("UI-FAIL: {name}: window was not created"),
                 }
             }
+            // --test-ui also exercises the local cache scan: it is the only
+            // headless path that renders the Kimi pane with real session data.
+            let usage_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move { kimi_usage::run(usage_handle).await });
+            if with_login {
+                login::open(app.handle());
+                match app.get_webview_window(login::LABEL) {
+                    Some(_) => println!("LoginWindow OK"),
+                    None => println!("LOGIN-FAIL: LoginWindow: window was not created"),
+                }
+            }
             // Give the webviews a moment to actually load, then exit headless.
             // Also emit panel-show (after the page's listeners attach) and suppress
             // the focus-loss auto-hide so the panel stays visible for inspection.
@@ -670,9 +869,31 @@ pub fn run_ui_test() {
                 // Lets the skills window render its list in --test-ui too.
                 let _ = handle.emit("skills-show", ());
             });
+            if with_login {
+                let probe = app.handle().clone();
+                std::thread::spawn(move || {
+                    // The page needs to be up before its injected hook exists.
+                    std::thread::sleep(std::time::Duration::from_millis(3500));
+                    if let Some(w) = probe.get_webview_window(login::LABEL) {
+                        let _ = w.eval(login::probe_script());
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(1200));
+                    if login::probe_seen(&probe) {
+                        println!("LoginWindow capture channel OK");
+                    } else {
+                        println!("LOGIN-FAIL: capture channel: the hook never reached the host");
+                    }
+                    if login::candidate_seen(&probe) {
+                        println!("LoginWindow fetch capture OK");
+                    } else {
+                        println!("LOGIN-FAIL: fetch capture: the hook saw no token on a fetch call");
+                    }
+                });
+            }
             let exit_handle = app.handle().clone();
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(6000));
+                let hold = if with_login { 7000 } else { 6000 };
+                std::thread::sleep(std::time::Duration::from_millis(hold));
                 // Graceful exit so app.run returns and the test data dir can
                 // be removed; std::process::exit would skip that cleanup.
                 exit_handle.exit(0);

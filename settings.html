@@ -16,6 +16,7 @@
       </div>
 
       <div class="pane">
+        <!-- General (PLAN §4): the three persisted preferences -->
         <div class="label">Theme</div>
         <div class="seg" role="radiogroup" aria-label="Theme">
           <label>
@@ -58,7 +59,72 @@
           <span class="switch" aria-hidden="true"></span>
         </label>
 
-        <button class="btn save" id="btn-save">Save</button>
+        <!-- Kimi: read-only (PLAN §4). No value of the token ever reaches here. -->
+        <div class="sect">
+          <div class="label">Kimi</div>
+          <div class="row">
+            <div class="row-main">
+              <span class="row-label">CLI version</span>
+              <span class="row-value muted" id="kimi-version">--</span>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-main">
+              <span class="row-label">Credential</span>
+              <span class="row-value muted" id="kimi-credential">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- DeepSeek: statuses + sign-in + the manual fallback (PLAN §4). -->
+        <div class="sect">
+          <div class="label">DeepSeek</div>
+          <div class="row">
+            <div class="row-main">
+              <span class="row-label">API key</span>
+              <span class="row-value muted" id="ds-api-key">--</span>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-main">
+              <span class="row-label">Usage token</span>
+              <span class="row-value muted" id="ds-user-token">--</span>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn" id="btn-sign-in">Sign in…</button>
+            <button class="btn" id="btn-clear">Clear</button>
+          </div>
+          <div class="note" id="ds-note" hidden></div>
+
+          <details class="more" id="manual">
+            <summary>Paste a credential instead</summary>
+            <label class="cred-field">
+              <span class="row-label">API key</span>
+              <input
+                type="password"
+                id="in-api-key"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Verified before it is saved"
+              />
+            </label>
+            <label class="cred-field">
+              <span class="row-label">Usage token</span>
+              <input
+                type="password"
+                id="in-user-token"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="JSON.parse(localStorage.userToken).value"
+              />
+            </label>
+            <div class="note" id="cred-note" hidden></div>
+            <button class="btn" id="btn-save-cred">Save credentials</button>
+          </details>
+        </div>
+
+        <button class="btn save" id="btn-save">Save settings</button>
       </div>
     </div>
     <script type="module" src="/src/settings.ts"></script>

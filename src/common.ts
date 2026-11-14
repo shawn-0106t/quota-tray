@@ -75,6 +75,31 @@ export interface DeepseekResult {
   fetchedAt: string;
 }
 
+// ---- Kimi local statistics (PLAN §5.1) ----
+//
+// Read from the CLI's own session logs, not from the quota API: `local` is part
+// of the label in the pane, because these numbers cover this machine only.
+
+export interface KimiCacheWindow {
+  requests: number;
+  /** Percent, 0-100; null when no prompt tokens were seen in the window */
+  hitRate?: number | null;
+  /** Output tokens per second of server decode time */
+  decodeTps?: number | null;
+  /** Mean time to first token, milliseconds */
+  firstTokenMs?: number | null;
+  /** Calls behind the two speed figures */
+  calls: number;
+}
+
+export interface KimiUsage {
+  week: KimiCacheWindow;
+  today: KimiCacheWindow;
+  scannedAt: string;
+  files: number;
+  scanMs: number;
+}
+
 export type ProviderTab = 'kimi' | 'deepseek';
 
 export interface SettingsDto {
@@ -89,6 +114,33 @@ export interface AppStateDto {
   update: UpdateStatus;
   settings: SettingsDto;
   theme: string; // effective theme: light | dark
+}
+
+// ---- Settings window: read-only credential status (PLAN §4) ----
+// Statuses only — a token or an API key never crosses this boundary.
+
+export interface KimiCredentialStatus {
+  /** oauth | api-key | none */
+  source: string;
+  /** Unix seconds, OAuth only */
+  expiresAt?: number | null;
+  /** An OAuth entry exists but is unusable and nothing took over */
+  expired: boolean;
+}
+
+export interface DeepseekCredentialStatus {
+  apiKey: boolean;
+  userToken: boolean;
+  /** env | file | imported | undecryptable | none */
+  source: string;
+}
+
+export interface CredentialStatus {
+  kimi: KimiCredentialStatus;
+  deepseek: DeepseekCredentialStatus;
+  cliVersion?: string | null;
+  latestVersion?: string | null;
+  updateAvailable: boolean;
 }
 
 /** Transparent shadow-fade room around a window card: the #root margin is
@@ -183,6 +235,17 @@ export function isLowBalance(total: number, isAvailable: boolean): boolean {
 /** PLAN §5.2: a cache hit rate under 60% is red — low means wasted cache. */
 export function isLowCacheHit(rate: number | null | undefined): boolean {
   return rate != null && rate < LOW_CACHE_HIT;
+}
+
+/** One decimal, trailing `.0` dropped: `99.4`, `100`. */
+export function fmtPct(value: number | null | undefined): string | null {
+  if (value == null) return null;
+  return value.toFixed(1).replace(/\.0$/, '');
+}
+
+/** Thousands separator for request / call counts: `3,097`. */
+export function fmtCount(value: number): string {
+  return value.toLocaleString('en-US');
 }
 
 /** Panel stamp text for a fetch time: `Updated HH:MM` in local time. */

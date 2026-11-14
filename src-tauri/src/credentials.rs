@@ -41,27 +41,81 @@ pub(crate) fn kimi_home(home: &Path) -> PathBuf {
     home.join(".kimi-code")
 }
 
+/// Which link of the chain answered, for the settings window's read-only Kimi
+/// section (PLAN §4). Never carries the token itself.
+pub struct Info {
+    /// `oauth` | `api-key` | `none`
+    pub source: &'static str,
+    /// Unix seconds from the OAuth credential file; `None` for an API key.
+    pub expires_at: Option<i64>,
+    /// An OAuth entry exists but was rejected (expired / too close to expiry)
+    /// and no API key took over — the one state the UI can explain precisely.
+    pub expired: bool,
+}
+
 pub fn load_token() -> Option<String> {
+    resolve().map(|(token, _)| token)
+}
+
+/// Read-only description of the chain for the settings window. Same walk as
+/// `load_token`, so the status can never disagree with what a fetch would use.
+pub fn describe() -> Info {
+    let home = home_dir();
+    let oauth = home.as_deref().and_then(oauth_entry);
+    match resolve() {
+        Some((_, source)) => Info {
+            source,
+            expires_at: if source == "oauth" {
+                oauth.as_ref().map(|(_, exp)| *exp)
+            } else {
+                None
+            },
+            expired: false,
+        },
+        None => Info {
+            source: "none",
+            expires_at: oauth.as_ref().map(|(_, exp)| *exp),
+            expired: oauth.is_some(),
+        },
+    }
+}
+
+/// `(token, source)` from the two steps of the chain.
+fn resolve() -> Option<(String, &'static str)> {
     let home = home_dir()?;
     let kimi = kimi_home(&home);
 
     // 1) OAuth access token from the credentials store
-    let cred = kimi.join("credentials").join("kimi-code.json");
-    if let Ok(text) = fs::read_to_string(&cred) {
-        if let Ok(v) = serde_json::from_str::<Value>(&text) {
-            if let Some(at) = v.get("access_token").and_then(|x| x.as_str()) {
-                let exp = v.get("expires_at").and_then(as_f64).unwrap_or(0.0);
-                let now = chrono::Utc::now().timestamp() as f64;
-                if exp > now + 30.0 {
-                    return Some(at.to_string());
-                }
-            }
+    if let Some((token, exp)) = oauth_entry(&home) {
+        let now = chrono::Utc::now().timestamp();
+        if exp > now + 30 {
+            return Some((token, "oauth"));
         }
     }
 
     // 2) config.toml fallback: line-by-line parse (not a full TOML parser)
-    let cfg_path = kimi.join("config.toml");
-    let text = fs::read_to_string(&cfg_path).ok()?;
+    api_key_entry(&kimi).map(|key| (key, "api-key"))
+}
+
+/// `(access_token, expires_at seconds)` from `credentials/kimi-code.json`,
+/// whether or not it is still valid.
+fn oauth_entry(home: &Path) -> Option<(String, i64)> {
+    let kimi = kimi_home(home);
+    let cred = kimi.join("credentials").join("kimi-code.json");
+    let text = fs::read_to_string(&cred).ok()?;
+    let v: Value = serde_json::from_str(&text).ok()?;
+    let token = v.get("access_token").and_then(|x| x.as_str())?;
+    if token.is_empty() {
+        return None;
+    }
+    Some((
+        token.to_string(),
+        v.get("expires_at").and_then(as_f64).unwrap_or(0.0) as i64,
+    ))
+}
+
+fn api_key_entry(kimi: &Path) -> Option<String> {
+    let text = fs::read_to_string(kimi.join("config.toml")).ok()?;
     let kv = Regex::new(r#"^(base_url|api_key)\s*=\s*"([^"]*)""#).ok()?;
     let mut section: Option<String> = None;
     let mut base_url: Option<String> = None;

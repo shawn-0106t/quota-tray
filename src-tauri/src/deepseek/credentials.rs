@@ -63,7 +63,14 @@ pub fn load() -> Credentials {
     }
 
     let mut undecryptable = false;
-    let (file_key, file_token) = decrypt_pair(&mut undecryptable);
+    let existing = read_raw();
+    let (file_key, file_token) = match &existing {
+        Some(file) => (
+            open(&file.api_key, &mut undecryptable),
+            open(&file.user_token, &mut undecryptable),
+        ),
+        None => (None, None),
+    };
     if file_key.is_some() || file_token.is_some() {
         // A half-configured env still gets its missing half from the file,
         // matching the parent app's LoadCredentials.
@@ -75,14 +82,19 @@ pub fn load() -> Credentials {
         };
     }
 
-    let (old_key, old_token) = read_legacy();
-    if old_key.is_some() || old_token.is_some() {
-        save(old_key.as_deref(), old_token.as_deref(), Some(OLD_FILE_LABEL));
-        return Credentials {
-            api_key: env_key.or(old_key),
-            user_token: env_token.or(old_token),
-            source: Source::Imported,
-        };
+    // The legacy import is one-time (PLAN §5.2): the mere existence of our own
+    // file — including one emptied by "Clear" — means it already ran. Reading
+    // the old file again would resurrect credentials the user just removed.
+    if existing.is_none() {
+        let (old_key, old_token) = read_legacy();
+        if old_key.is_some() || old_token.is_some() {
+            save(old_key.as_deref(), old_token.as_deref(), Some(OLD_FILE_LABEL));
+            return Credentials {
+                api_key: env_key.or(old_key),
+                user_token: env_token.or(old_token),
+                source: Source::Imported,
+            };
+        }
     }
 
     Credentials {
@@ -94,6 +106,38 @@ pub fn load() -> Credentials {
             Source::None
         },
     }
+}
+
+/// Which values are configured, without ever handing a value to the caller.
+/// The settings window renders this (PLAN §4).
+pub struct Status {
+    pub api_key: bool,
+    pub user_token: bool,
+    pub source: Source,
+}
+
+pub fn status() -> Status {
+    let creds = load();
+    Status {
+        api_key: creds.api_key.is_some(),
+        user_token: creds.user_token.is_some(),
+        source: creds.source,
+    }
+}
+
+/// Drop both stored values. The file stays behind, empty, so the one-time
+/// legacy import cannot resurrect them on the next poll (see `load`).
+pub fn clear() {
+    let imported_from = read_raw()
+        .and_then(|f| f.imported_from)
+        .or_else(|| Some("cleared".to_string()));
+    let file = CredFile {
+        v: 1,
+        api_key: String::new(),
+        user_token: String::new(),
+        imported_from,
+    };
+    write(&file);
 }
 
 /// Write both values, DPAPI-sealed, preserving fields the caller left alone
@@ -114,9 +158,13 @@ pub fn save(api_key: Option<&str>, user_token: Option<&str>, imported_from: Opti
             .map(str::to_string)
             .or(existing.imported_from),
     };
+    write(&file);
+}
+
+fn write(file: &CredFile) {
     let dir = settings::config_dir();
     let _ = fs::create_dir_all(&dir);
-    let Ok(json) = serde_json::to_string_pretty(&file) else {
+    let Ok(json) = serde_json::to_string_pretty(file) else {
         return;
     };
     // Temp + rename so a crash cannot leave a truncated credential file.
@@ -147,16 +195,6 @@ fn read_raw() -> Option<CredFile> {
 
 /// Decrypt both fields. `failed` is set when a `dpapi:` blob could not be
 /// opened, which only matters for the diagnostic source string.
-fn decrypt_pair(failed: &mut bool) -> (Option<String>, Option<String>) {
-    let Some(file) = read_raw() else {
-        return (None, None);
-    };
-    (
-        open(&file.api_key, failed),
-        open(&file.user_token, failed),
-    )
-}
-
 fn open(value: &str, failed: &mut bool) -> Option<String> {
     if value.is_empty() {
         return None;

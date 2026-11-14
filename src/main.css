@@ -45,6 +45,16 @@ body.leave #root {
   }
 }
 
+/* Cache block (PLAN §5.1): a second readout row, separated from the quota one by
+   the same hairline the rows use. Both columns are percentages, so both bars
+   mean the same thing. */
+.quota.rule {
+  border-top: 1px solid var(--hair);
+}
+.note.tight {
+  margin-top: 6px;
+}
+
 /* Extra usage sub-block (monthly bar + caption) */
 .extra-meta {
   margin-top: 8px;

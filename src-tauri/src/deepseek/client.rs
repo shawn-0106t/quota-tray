@@ -109,16 +109,7 @@ async fn fetch_usage_body(
     user_token: &str,
     diag: &mut Diag,
 ) -> Result<String, String> {
-    let remembered = load_usage_base();
-    let mut bases: Vec<String> = Vec::new();
-    if let Some(base) = &remembered {
-        bases.push(base.clone());
-    }
-    for base in USAGE_BASES {
-        bases.push((*base).to_string());
-    }
-    bases.dedup();
-
+    let bases = candidate_bases();
     let mut last_error = "server-error".to_string();
     for base in &bases {
         let Some(client) = client() else {
@@ -126,15 +117,7 @@ async fn fetch_usage_body(
         };
         let url = format!("{base}/{kind}?month={month}&year={year}");
         diag.log(format!("usage/{kind} GET {url}"));
-        let resp = match client
-            .get(&url)
-            .header("Authorization", format!("Bearer {user_token}"))
-            .header("x-app-version", APP_VERSION)
-            .header("User-Agent", BROWSER_UA)
-            .header("Accept", "*/*")
-            .send()
-            .await
-        {
+        let resp = match console_get(&client, &url, user_token).send().await {
             Ok(r) => r,
             Err(_) => return Err("network-error".to_string()),
         };
@@ -154,11 +137,71 @@ async fn fetch_usage_body(
             .await
             .map_err(|_| "network-error".to_string())?;
         log_top_level_keys(&body, kind, diag);
-        if remembered.as_deref() != Some(base.as_str()) {
+        if load_usage_base().as_deref() != Some(base.as_str()) {
             save_usage_base(base);
             diag.log(format!("usage/{kind} endpoint remembered: {base}"));
         }
         return Ok(body);
+    }
+    Err(last_error)
+}
+
+/// The remembered base first, then the compiled-in candidates (PLAN §6.2).
+fn candidate_bases() -> Vec<String> {
+    let mut bases: Vec<String> = Vec::new();
+    if let Some(base) = load_usage_base() {
+        bases.push(base);
+    }
+    for base in USAGE_BASES {
+        bases.push((*base).to_string());
+    }
+    bases.dedup();
+    bases
+}
+
+/// A console-shaped GET: Bearer token, the console's app-version header, a
+/// browser UA. If upstream tightens validation these are the knobs (PLAN §6).
+fn console_get(client: &Client, url: &str, user_token: &str) -> reqwest::RequestBuilder {
+    client
+        .get(url)
+        .header("Authorization", format!("Bearer {user_token}"))
+        .header("x-app-version", app_version())
+        .header("User-Agent", BROWSER_UA)
+        .header("Accept", "*/*")
+}
+
+/// Verify a candidate browser token with one real `amount` request before it is
+/// saved (PLAN §5.2). The console hands out several intermediate tokens while
+/// signing in; only one of them is finished, so 2xx is the only pass.
+pub async fn verify_user_token(token: &str) -> Result<(), String> {
+    if token.len() < 20 {
+        return Err("token-expired".to_string());
+    }
+    let Some(client) = client() else {
+        return Err("network-error".to_string());
+    };
+    let now = Local::now();
+    let mut last_error = "server-error".to_string();
+    for base in candidate_bases() {
+        let url = format!("{base}/amount?month={}&year={}", now.month(), now.year());
+        let resp = match console_get(client, &url, token).send().await {
+            Ok(r) => r,
+            Err(_) => return Err("network-error".to_string()),
+        };
+        let status = resp.status().as_u16();
+        if (200..300).contains(&status) {
+            // A base the console itself answers on is the best one to remember.
+            if load_usage_base().as_deref() != Some(base.as_str()) {
+                save_usage_base(&base);
+            }
+            return Ok(());
+        }
+        let error = usage_error(status);
+        if status == 404 || status == 410 {
+            last_error = error;
+            continue;
+        }
+        return Err(error);
     }
     Err(last_error)
 }
@@ -219,22 +262,112 @@ fn usage_error(status: u16) -> String {
 #[serde(rename_all = "camelCase", default)]
 struct Endpoints {
     usage_base: String,
+    /// `x-app-version` the console itself sent, learned from the login window
+    /// (PLAN §6.3). Empty means "use the compiled-in constant".
+    app_version: String,
+    /// When the template last changed; diagnostics only.
+    learned_at: Option<DateTime<Local>>,
 }
 
-fn load_usage_base() -> Option<String> {
-    let text = std::fs::read_to_string(settings::config_dir().join(ENDPOINTS_FILE)).ok()?;
-    let memo: Endpoints = serde_json::from_str(&text).ok()?;
-    Some(memo.usage_base).filter(|b| !b.is_empty())
+fn load_endpoints() -> Endpoints {
+    std::fs::read_to_string(settings::config_dir().join(ENDPOINTS_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
 }
 
-fn save_usage_base(base: &str) {
+fn save_endpoints(memo: &Endpoints) {
     let dir = settings::config_dir();
     let _ = std::fs::create_dir_all(&dir);
-    let memo = Endpoints {
-        usage_base: base.to_string(),
-    };
-    if let Ok(json) = serde_json::to_string_pretty(&memo) {
+    if let Ok(json) = serde_json::to_string_pretty(memo) {
         let _ = std::fs::write(dir.join(ENDPOINTS_FILE), json);
+    }
+}
+
+/// The base the last successful request (or the console, via the sign-in
+/// window) settled on; surfaced by `--test-login --verbose` (PLAN §6.2).
+pub fn load_usage_base() -> Option<String> {
+    Some(load_endpoints().usage_base).filter(|b| !b.is_empty())
+}
+fn save_usage_base(base: &str) {
+    let mut memo = load_endpoints();
+    if memo.usage_base == base {
+        return;
+    }
+    memo.usage_base = base.to_string();
+    memo.learned_at = Some(Local::now());
+    save_endpoints(&memo);
+}
+
+/// The console's app-version header, learned first and compiled-in second.
+fn app_version() -> String {
+    let learned = load_endpoints().app_version;
+    if sanitize_version(&learned).is_some() {
+        learned
+    } else {
+        APP_VERSION.to_string()
+    }
+}
+
+/// Accept only a short, header-safe version token: the value arrives from a
+/// remote page, so it must not be able to inject a header of its own.
+fn sanitize_version(value: &str) -> Option<&str> {
+    let trimmed = value.trim();
+    let ok = !trimmed.is_empty()
+        && trimmed.len() <= 24
+        && trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'));
+    if ok {
+        Some(trimmed)
+    } else {
+        None
+    }
+}
+
+/// Learn the usage template from a request the console itself made (PLAN §6.3).
+/// Only the URL shape and the non-sensitive app-version header are kept; the
+/// Authorization header never leaves the page. Returns a diagnostic line when
+/// anything changed.
+pub fn learn_request(url: &str, version_header: &str) -> Option<String> {
+    let base = usage_base_from(url)?;
+    let mut memo = load_endpoints();
+    let mut learned: Vec<String> = Vec::new();
+    if memo.usage_base != base {
+        learned.push(format!("usage base {base}"));
+        memo.usage_base = base;
+    }
+    if let Some(version) = sanitize_version(version_header) {
+        if memo.app_version != version {
+            learned.push(format!("app version {version}"));
+            memo.app_version = version.to_string();
+        }
+    }
+    if learned.is_empty() {
+        return None;
+    }
+    memo.learned_at = Some(Local::now());
+    save_endpoints(&memo);
+    Some(learned.join(", "))
+}
+
+/// `https://platform.deepseek.com/api/v0/usage/amount?month=…` -> `…/api/v0/usage`.
+/// A relative URL is resolved against the console host it was captured on.
+fn usage_base_from(url: &str) -> Option<String> {
+    const HOST: &str = "https://platform.deepseek.com";
+    let absolute = if url.starts_with('/') {
+        format!("{HOST}{url}")
+    } else {
+        url.to_string()
+    };
+    let rest = absolute.strip_prefix(HOST)?;
+    let idx = rest.find("/usage")?;
+    let base = format!("{HOST}{}", &rest[..idx + "/usage".len()]);
+    // Only a path we could actually fetch: no query, no fragment, no empty base.
+    if base.ends_with("/usage") && !base.contains('?') && !base.contains('#') {
+        Some(base)
+    } else {
+        None
     }
 }
 
@@ -359,4 +492,41 @@ async fn fetch_models(api_key: &str, diag: &mut Diag) -> Option<BTreeMap<String,
     }
     diag.log(format!("models GET -> {} id/name pairs", names.len()));
     Some(names)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // PLAN §6.3: the template captured from the console must yield the base the
+    // fetch walks, and nothing else — a request to another host is not a hint.
+    #[test]
+    fn usage_base_is_derived_from_the_console_url() {
+        assert_eq!(
+            usage_base_from("https://platform.deepseek.com/api/v0/usage/amount?month=11&year=2026")
+                .as_deref(),
+            Some("https://platform.deepseek.com/api/v0/usage")
+        );
+        assert_eq!(
+            usage_base_from("/api/v2/usage/cost?month=1&year=2026").as_deref(),
+            Some("https://platform.deepseek.com/api/v2/usage")
+        );
+        assert_eq!(
+            usage_base_from("https://evil.example.com/api/v0/usage/amount"),
+            None
+        );
+        assert_eq!(
+            usage_base_from("https://platform.deepseek.com/api/v0/models"),
+            None
+        );
+    }
+
+    // The value comes from a remote page and ends up in a request header.
+    #[test]
+    fn app_version_header_values_are_sanitised() {
+        assert_eq!(sanitize_version(" 1.0.0 "), Some("1.0.0"));
+        assert_eq!(sanitize_version(""), None);
+        assert_eq!(sanitize_version("1.0.0\r\nX-Evil: 1"), None);
+        assert_eq!(sanitize_version(&"9".repeat(25)), None);
+    }
 }
