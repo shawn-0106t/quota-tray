@@ -24,11 +24,12 @@ def read(rel: str) -> str:
 
 def body_of(html: str) -> str:
     """Inner body HTML, minus the module scripts and the root id."""
-    match = re.search(r"<body>(.*)</body>", html, re.S)
+    match = re.search(r"<body>(.*)</body>", html, re.S | re.I)
     assert match, "no <body>"
-    # Case-insensitive on purpose: HTML tag names are, and a missed <SCRIPT>
-    # would ship live product JS into the review page (CodeQL py/bad-tag-filter).
-    inner = re.sub(r"<script\b[^>]*>.*?</script\s*>", "", match.group(1), flags=re.S | re.I)
+    # Case-insensitive on purpose (HTML tag names are), and both tags accept
+    # anything up to '>' the way a parser does: CodeQL's py/bad-tag-filter
+    # rejects a strip that misses <SCRIPT> or a junk-filled </script \n>.
+    inner = re.sub(r"<script\b[^>]*>.*?</script[^>]*>", "", match.group(1), flags=re.S | re.I)
     # A page can host several windows; duplicate ids would be invalid, and the
     # card styling only ever needs `.root`.
     inner = inner.replace('<div id="root">', '<div class="root">')
