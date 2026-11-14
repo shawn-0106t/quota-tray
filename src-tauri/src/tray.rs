@@ -22,8 +22,7 @@ fn fallback_icon() -> tauri::image::Image<'static> {
     const GRID: f64 = 24.0;
     const RADIUS: f64 = 1.6;
     const ACCENT: [u8; 3] = [0x8c, 0x74, 0xb1];
-    const BARS: [(f64, f64, f64, f64); 2] =
-        [(3.5, 4.5, 10.5, 19.5), (12.5, 10.0, 19.5, 19.5)];
+    const BARS: [(f64, f64, f64, f64); 2] = [(3.5, 4.5, 10.5, 19.5), (12.5, 10.0, 19.5, 19.5)];
 
     /// Rounded-rectangle coverage: clamp into the inset rect, then measure.
     fn inside(x: f64, y: f64, bar: (f64, f64, f64, f64)) -> bool {

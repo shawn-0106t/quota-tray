@@ -84,6 +84,11 @@ pub struct LoginState {
     pub probe: AtomicBool,
     /// `--test-login` saw the hook lift a token off a real `fetch` call
     pub candidate: AtomicBool,
+    /// Newest candidate that arrived while another one was being verified. The
+    /// console emits a burst of tokens during sign-in; dropping the last one
+    /// costs the user a whole sign-in, so it is retried once the current
+    /// verification finishes (login.rs).
+    pub pending: Mutex<Option<String>>,
 }
 
 impl LoginState {
@@ -92,6 +97,9 @@ impl LoginState {
         self.accepted.store(false, Ordering::SeqCst);
         self.probe.store(false, Ordering::SeqCst);
         self.candidate.store(false, Ordering::SeqCst);
+        if let Ok(mut pending) = self.pending.lock() {
+            *pending = None;
+        }
     }
 }
 
@@ -99,7 +107,8 @@ impl LoginState {
 pub struct AppState {
     pub settings: RwLock<SettingsData>,
     /// DeepSeek sign-in window state (temporary window, PLAN §4)
-    pub login: LoginState,    pub last_quota: RwLock<Option<QuotaResult>>,
+    pub login: LoginState,
+    pub last_quota: RwLock<Option<QuotaResult>>,
     /// Last-known-good DeepSeek payload; kept apart from `last_quota` so a
     /// failure on one provider never blanks the other (PLAN §5.3)
     pub last_deepseek: RwLock<Option<DeepseekResult>>,

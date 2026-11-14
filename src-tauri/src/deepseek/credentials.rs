@@ -88,7 +88,11 @@ pub fn load() -> Credentials {
     if existing.is_none() {
         let (old_key, old_token) = read_legacy();
         if old_key.is_some() || old_token.is_some() {
-            save(old_key.as_deref(), old_token.as_deref(), Some(OLD_FILE_LABEL));
+            save(
+                old_key.as_deref(),
+                old_token.as_deref(),
+                Some(OLD_FILE_LABEL),
+            );
             return Credentials {
                 api_key: env_key.or(old_key),
                 user_token: env_token.or(old_token),
@@ -154,9 +158,7 @@ pub fn save(api_key: Option<&str>, user_token: Option<&str>, imported_from: Opti
             Some(v) if !v.is_empty() => seal(v),
             _ => existing.user_token,
         },
-        imported_from: imported_from
-            .map(str::to_string)
-            .or(existing.imported_from),
+        imported_from: imported_from.map(str::to_string).or(existing.imported_from),
     };
     write(&file);
 }
@@ -351,7 +353,10 @@ mod tests {
     #[test]
     fn dpapi_round_trips() {
         let blob = dpapi::protect(b"secret-token").expect("DPAPI available in this session");
-        assert_ne!(blob, b"secret-token", "the blob must not contain the plaintext");
+        assert_ne!(
+            blob, b"secret-token",
+            "the blob must not contain the plaintext"
+        );
         assert_eq!(dpapi::unprotect(&blob).as_deref(), Some("secret-token"));
     }
 }

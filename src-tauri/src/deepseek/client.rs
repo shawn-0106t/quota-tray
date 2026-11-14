@@ -69,10 +69,7 @@ pub async fn fetch_balance(api_key: &str) -> Result<BalanceInfo, String> {
     if !resp.status().is_success() {
         return Err(balance_error(resp.status().as_u16()));
     }
-    let body = resp
-        .text()
-        .await
-        .map_err(|_| "network-error".to_string())?;
+    let body = resp.text().await.map_err(|_| "network-error".to_string())?;
     parse::parse_balance(&body).map_err(|_| "parse-error".to_string())
 }
 
@@ -117,7 +114,7 @@ async fn fetch_usage_body(
         };
         let url = format!("{base}/{kind}?month={month}&year={year}");
         diag.log(format!("usage/{kind} GET {url}"));
-        let resp = match console_get(&client, &url, user_token).send().await {
+        let resp = match console_get(client, &url, user_token).send().await {
             Ok(r) => r,
             Err(_) => return Err("network-error".to_string()),
         };
@@ -132,10 +129,7 @@ async fn fetch_usage_body(
             diag.log(format!("usage/{kind} {url} -> {error}"));
             return Err(error);
         }
-        let body = resp
-            .text()
-            .await
-            .map_err(|_| "network-error".to_string())?;
+        let body = resp.text().await.map_err(|_| "network-error".to_string())?;
         log_top_level_keys(&body, kind, diag);
         if load_usage_base().as_deref() != Some(base.as_str()) {
             save_usage_base(base);
@@ -219,12 +213,14 @@ fn log_top_level_keys(body: &str, kind: &str, diag: &mut Diag) {
         join_keys(map.keys())
     ));
     if let Some(Value::Object(data)) = map.get("data") {
-        diag.log(format!("usage/{kind} data keys: {}", join_keys(data.keys())));
+        diag.log(format!(
+            "usage/{kind} data keys: {}",
+            join_keys(data.keys())
+        ));
         match data.get("biz_data") {
-            Some(Value::Array(list)) => diag.log(format!(
-                "usage/{kind} biz_data is an array[{}]",
-                list.len()
-            )),
+            Some(Value::Array(list)) => {
+                diag.log(format!("usage/{kind} biz_data is an array[{}]", list.len()))
+            }
             Some(Value::Object(biz)) => diag.log(format!(
                 "usage/{kind} biz_data keys: {}",
                 join_keys(biz.keys())

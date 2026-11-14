@@ -203,10 +203,7 @@ fn biz(root: &Value) -> Option<&Value> {
 /// Walk biz.<section>[]: each item is {model, usage:[{type, amount}]}.
 fn model_entries(biz: Option<&Value>, section: &str) -> Vec<(String, Vec<(String, f64)>)> {
     let mut out = Vec::new();
-    let Some(list) = biz
-        .and_then(|b| b.get(section))
-        .and_then(Value::as_array)
-    else {
+    let Some(list) = biz.and_then(|b| b.get(section)).and_then(Value::as_array) else {
         return out;
     };
     for item in list {
@@ -222,10 +219,7 @@ fn day_entries(
     date: &str,
 ) -> Vec<(String, Vec<(String, f64)>)> {
     let mut out = Vec::new();
-    let Some(days) = biz
-        .and_then(|b| b.get(section))
-        .and_then(Value::as_array)
-    else {
+    let Some(days) = biz.and_then(|b| b.get(section)).and_then(Value::as_array) else {
         return out;
     };
     for day in days {
@@ -422,7 +416,11 @@ mod tests {
     #[test]
     fn usage_fixture() {
         let u = parse_usage(&fixture(AMOUNT_OK), &fixture(COST_OK)).expect("usage parses");
-        assert_eq!(u.by_model.len(), 2, "two models, the placeholder row is not invented");
+        assert_eq!(
+            u.by_model.len(),
+            2,
+            "two models, the placeholder row is not invented"
+        );
 
         let pro = model(&u, "deepseek-v4-pro");
         assert_eq!(pro.month_tokens, 1_330_000);
@@ -445,7 +443,10 @@ mod tests {
         assert_eq!(u.month_cost, 3.00);
         assert_eq!(u.today_tokens, 26_500);
         assert_eq!(u.today_cost, 0.30);
-        assert!(close(u.cache_hit_rate.expect("total hit rate"), 200.0 / 3.0));
+        assert!(close(
+            u.cache_hit_rate.expect("total hit rate"),
+            200.0 / 3.0
+        ));
     }
 
     #[test]
@@ -453,7 +454,11 @@ mod tests {
         let u = parse_usage(&fixture(AMOUNT_SPARSE), &fixture(COST_OK)).expect("sparse parses");
         let pro = model(&u, "deepseek-v4-pro");
         assert_eq!(pro.cache_hit_rate, None, "no usage[] means no hit rate");
-        assert_eq!(model(&u, "deepseek-v4-flash").month_tokens, 42, "a typeless entry still counts");
+        assert_eq!(
+            model(&u, "deepseek-v4-flash").month_tokens,
+            42,
+            "a typeless entry still counts"
+        );
         assert_eq!(u.today_tokens, 0, "no days[] means no today");
     }
 
@@ -501,7 +506,11 @@ mod tests {
         assert_eq!(base_display_name("deepseek-chat-20250324"), "Chat");
         assert_eq!(base_display_name("deepseek-v3.2-2025-03-24"), "V3.2");
         assert_eq!(base_display_name("deepseek-v4-pro-0"), "V4 Pro");
-        assert_eq!(base_display_name("deepseek-"), "deepseek-", "degenerate id stays raw");
+        assert_eq!(
+            base_display_name("deepseek-"),
+            "deepseek-",
+            "degenerate id stays raw"
+        );
     }
 
     #[test]
@@ -537,6 +546,10 @@ mod tests {
             .iter()
             .map(|m| m.model.as_str())
             .collect();
-        assert_eq!(visible, ["m6", "m3", "m5", "m4"], "zero row dropped, top 4 by cost");
+        assert_eq!(
+            visible,
+            ["m6", "m3", "m5", "m4"],
+            "zero row dropped, top 4 by cost"
+        );
     }
 }

@@ -240,7 +240,11 @@ fn get_kimi_usage(app: AppHandle) -> Option<kimi_usage::KimiUsage> {
 /// call `get_state` and have no use for the per-model usage list.
 #[tauri::command]
 fn get_deepseek(app: AppHandle) -> Option<DeepseekResult> {
-    app.state::<AppState>().last_deepseek.read().unwrap().clone()
+    app.state::<AppState>()
+        .last_deepseek
+        .read()
+        .unwrap()
+        .clone()
 }
 
 /// Provider tab selected in the panel (PLAN §4). Persisted so the next launch
@@ -886,7 +890,9 @@ fn run_headless_windows(with_login: bool) {
                     if login::candidate_seen(&probe) {
                         println!("LoginWindow fetch capture OK");
                     } else {
-                        println!("LOGIN-FAIL: fetch capture: the hook saw no token on a fetch call");
+                        println!(
+                            "LOGIN-FAIL: fetch capture: the hook saw no token on a fetch call"
+                        );
                     }
                 });
             }

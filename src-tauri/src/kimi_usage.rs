@@ -16,12 +16,12 @@
 
 use crate::state::AppState;
 use chrono::{DateTime, Local, TimeZone};
-use tauri::{AppHandle, Emitter, Manager};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Emitter, Manager};
 
 const INDEX_FILE: &str = "kimi-usage.json";
 /// Days kept per file. Long enough for the 7-day window plus a diagnosis, short
@@ -612,7 +612,10 @@ mod tests {
     fn days_are_bucketed_separately_and_the_index_round_trips() {
         let mut days: BTreeMap<i32, Bucket> = BTreeMap::new();
         absorb(&mut days, &usage_line(now_ms(), "turn", 100, 0, 1));
-        absorb(&mut days, &usage_line(now_ms() - 86_400_000, "turn", 50, 0, 1));
+        absorb(
+            &mut days,
+            &usage_line(now_ms() - 86_400_000, "turn", 50, 0, 1),
+        );
         assert_eq!(days.len(), 2);
 
         let state = FileState {

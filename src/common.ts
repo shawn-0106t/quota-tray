@@ -248,11 +248,19 @@ export function fmtCount(value: number): string {
   return value.toLocaleString('en-US');
 }
 
-/** Panel stamp text for a fetch time: `Updated HH:MM` in local time. */
+/** Panel stamp text for a fetch time: `Updated HH:MM` in local time, prefixed
+ *  `M/D ` when the fetch happened on an earlier local day — a cache reused
+ *  across a restart must not read as if it were fetched today (PLAN §5.2). */
 export function fmtUpdated(atIso: string): string {
   const d = new Date(atIso);
   if (Number.isNaN(d.getTime())) return '';
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
-  return `Updated ${hh}:${mm}`;
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const day = sameDay ? '' : `${d.getMonth() + 1}/${d.getDate()} `;
+  return `Updated ${day}${hh}:${mm}`;
 }

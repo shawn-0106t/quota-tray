@@ -99,8 +99,12 @@ fn on_navigation(app: &AppHandle, url: &tauri::Url) -> bool {
     match kind.as_str() {
         "token" => submit_token(app, &token),
         "request" => {
-            if let Some(learned) = client::learn_request(&request_url, &app_version) {
-                recovery::log(&format!("login: learned {learned}"));
+            // The probe's own fetch carries a marker: a diagnostic run must not
+            // teach the app an endpoint the console never used (PLAN §6.3).
+            if !request_url.contains("quotatray=probe") {
+                if let Some(learned) = client::learn_request(&request_url, &app_version) {
+                    recovery::log(&format!("login: learned {learned}"));
+                }
             }
         }
         // `--test-login` fires this through the injected hook itself, proving
@@ -124,8 +128,14 @@ fn submit_token(app: &AppHandle, token: &str) {
     if st.login.accepted.load(Ordering::SeqCst) {
         return;
     }
-    // One verification at a time: the console emits a burst of candidates.
+    // One verification at a time: the console emits a burst of candidates and
+    // only the last one is finished. The newcomer replaces any queued token and
+    // is retried when the current verification ends — dropping it would cost a
+    // whole sign-in, and the page never resends a token it already reported.
     if st.login.verifying.swap(true, Ordering::SeqCst) {
+        if let Ok(mut pending) = st.login.pending.lock() {
+            *pending = Some(token.to_string());
+        }
         return;
     }
     let owned = token.to_string();
@@ -135,30 +145,43 @@ fn submit_token(app: &AppHandle, token: &str) {
     });
 }
 
-async fn verify_and_save(app: &AppHandle, token: String) {
-    set_title(app, STATUS_VERIFYING);
-    let result = client::verify_user_token(&token).await;
-    let st = app.state::<AppState>();
-    st.login.verifying.store(false, Ordering::SeqCst);
-    match result {
-        Ok(()) => {
-            st.login.accepted.store(true, Ordering::SeqCst);
-            credentials::save(None, Some(&token), None);
-            set_title(app, STATUS_SAVED);
-            recovery::log("login: candidate verified and saved");
-            // The settings section re-reads its status; the panel asks for new
-            // numbers so the user sees the effect of signing in.
-            let _ = app.emit("deepseek-credentials-changed", ());
-            polling::safe_refresh_deepseek(app).await;
-            tokio::time::sleep(Duration::from_millis(900)).await;
-            close(app);
-        }
-        Err(error) => {
-            set_title(
-                app,
-                &format!("DeepSeek sign-in — {} — keep signing in", explain(&error)),
-            );
-            recovery::log(&format!("login: candidate rejected ({error})"));
+async fn verify_and_save(app: &AppHandle, mut token: String) {
+    loop {
+        set_title(app, STATUS_VERIFYING);
+        let result = client::verify_user_token(&token).await;
+        let st = app.state::<AppState>();
+        match result {
+            Ok(()) => {
+                st.login.accepted.store(true, Ordering::SeqCst);
+                credentials::save(None, Some(&token), None);
+                set_title(app, STATUS_SAVED);
+                recovery::log("login: candidate verified and saved");
+                // The settings section re-reads its status; the panel asks for
+                // new numbers so the user sees the effect of signing in.
+                let _ = app.emit("deepseek-credentials-changed", ());
+                st.login.verifying.store(false, Ordering::SeqCst);
+                polling::safe_refresh_deepseek(app).await;
+                tokio::time::sleep(Duration::from_millis(900)).await;
+                close(app);
+                return;
+            }
+            Err(error) => {
+                recovery::log(&format!("login: candidate rejected ({error})"));
+                // A newer candidate may have landed while this one was in
+                // flight (the console finishes its own sequence after the first
+                // few). Try that one before declaring failure.
+                let next = st.login.pending.lock().ok().and_then(|mut p| p.take());
+                if let Some(next) = next {
+                    token = next;
+                    continue;
+                }
+                st.login.verifying.store(false, Ordering::SeqCst);
+                set_title(
+                    app,
+                    &format!("DeepSeek sign-in — {} — keep signing in", explain(&error)),
+                );
+                return;
+            }
         }
     }
 }
@@ -188,7 +211,7 @@ fn explain(error: &str) -> &'static str {
 pub fn probe_script() -> &'static str {
     "try { \
        window.__quotaTrayCapture && window.__quotaTrayCapture({ kind: 'probe' }); \
-       window.fetch('https://platform.deepseek.com/api/v0/usage/amount?month=1&year=2000', { \
+       window.fetch('https://platform.deepseek.com/api/v0/usage/amount?month=1&year=2000&quotatray=probe', { \
          headers: { Authorization: 'Bearer probe-token-that-is-long-enough-000' } \
        }).catch(function () {}); \
      } catch (e) {}"
