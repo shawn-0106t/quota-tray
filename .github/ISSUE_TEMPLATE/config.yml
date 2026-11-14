@@ -1,0 +1,8 @@
+# Blank issues are disabled so that every report lands in a template with the
+# environment details this Windows-only app needs.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Security vulnerability (private report)
+    url: https://github.com/shawn-0106t/quota-tray/security/advisories/new
+    about: Do not open a public issue for a security problem. See SECURITY.md and use GitHub's private vulnerability reporting.
