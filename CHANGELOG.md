@@ -96,6 +96,12 @@ the English notes first, then the Chinese mirror.
   and remembered in `deepseek-endpoints.json` (`PLAN.md` §6.3). The
   `--test-login` probe carries a marker the host refuses to learn from, so a
   diagnostic run cannot overwrite what the console taught the app.
+- The settings sheet scrolls when its content is taller than the window. The
+  backend caps the window at 90% of the work area; on a short work area (this
+  machine: 752 logical px) the expanded "Paste a credential instead" block
+  (824) used to be clipped by `overflow: hidden`, so the bottom of the sheet —
+  and the Save credentials button — was unreachable. The card keeps its natural
+  height (the height report stays honest) and the window scrolls it.
 - A bilingual `README.md` (English half, then 中文) with requirements,
   install/portable/autostart notes, the data-source table per provider, the
   privacy boundary, the self-check table and the build commands.
@@ -331,6 +337,10 @@ the English notes first, then the Chinese mirror.
 - **新增**：`demo/ui-demo.html`——所有窗口一页看全（两个面板 tab、设置窗、技能窗、
   托盘菜单、通知区、登录窗标题栏），由 `demo/build_ui_demo.py` 从真实 HTML/CSS
   生成，不会与产品走样。
+- **修复**：设置窗内容比窗口高时改为**整张卡片滚动**。后端把窗口夹在工作区 90% 以内，
+  在工作区矮的机器上（本机逻辑高度 752）展开「Paste a credential instead」后的 824 会被
+  `overflow: hidden` 切掉，底部的 Save credentials 根本够不着。卡片保持自然高度（上报的
+  高度仍然是真的），由窗口来滚动。
 - **新增**：中英双语 `README.md`（英文在前、中文在后）——运行要求、安装 / 便携 /
   自启、两个 provider 的数据来源表、隐私边界、自检命令表与构建命令。
 - **新增**：`docs/screenshot-{light,dark}.png`——README 的两张截图，由

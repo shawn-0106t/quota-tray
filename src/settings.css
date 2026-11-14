@@ -3,6 +3,21 @@
    backend resizes + re-centres it, so adding a section (P4: DeepSeek
    credentials) needs no fixed height anywhere. */
 
+/* The backend caps the window at 90% of the work area (panel.rs). On a short
+   work area that cap is smaller than the sheet — the manual-paste block alone
+   adds ~170px — and `html, body { overflow: hidden }` used to clip the rest,
+   so the bottom of the card was unreachable. The sheet scrolls instead: the
+   card keeps its natural height (the height report stays honest) and the
+   window scrolls it. */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  overflow-y: auto;
+}
+
 #titlebar {
   cursor: default;
 }
