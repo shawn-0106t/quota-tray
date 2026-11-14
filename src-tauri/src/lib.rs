@@ -334,14 +334,25 @@ fn clear_credentials(app: AppHandle) {
 
 /// DeepSeek sign-in window (PLAN §4): a temporary window, never reused after
 /// it closes.
+///
+/// Both commands hand the work to the async runtime instead of doing it on the
+/// caller's thread. Tauri runs a sync command on the main thread, and
+/// `WebviewWindowBuilder::build()` dispatches the webview creation to the main
+/// thread and *waits* for it — from the main thread that wait can never be
+/// satisfied: the window is created, the command never returns, nothing after
+/// it runs (no log, no sheet hide) and the half-built window is blank and
+/// unclosable. Reproduced by clicking the real button; the same call from a
+/// spawned task works every time.
 #[tauri::command]
 fn open_login(app: AppHandle) {
-    login::open(&app);
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move { login::open(&handle) });
 }
 
 #[tauri::command]
 fn close_login(app: AppHandle) {
-    login::close(&app);
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move { login::close(&handle) });
 }
 
 /// Shared by the open_settings command and the recovery rebuild restore path.
@@ -646,6 +657,33 @@ fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
         }
         _ => {}
     }
+}
+
+/// Record a panic in `webview.log`. A windowed app has no console, so without
+/// this a panic inside a command or an event handler is completely silent — it
+/// looks like "the window opened but does nothing". Deliberately does not use
+/// `recovery::log`: the panic may have happened while that lock was held.
+pub fn install_panic_log() {
+    std::panic::set_hook(Box::new(|info| {
+        use std::io::Write;
+        let dir = app_data_dir_override().unwrap_or_else(settings::config_dir);
+        let _ = std::fs::create_dir_all(&dir);
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("webview.log"))
+        {
+            let location = info
+                .location()
+                .map(|l| format!("{}:{}", l.file(), l.line()))
+                .unwrap_or_default();
+            let _ = writeln!(
+                file,
+                "{} panic: {info} ({location})",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
+            );
+        }
+    }));
 }
 
 fn invoke_handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {

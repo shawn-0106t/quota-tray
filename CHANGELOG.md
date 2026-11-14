@@ -60,9 +60,16 @@ the English notes first, then the Chinese mirror.
   the next sign-in.
 - The DeepSeek sign-in window now opens **above** the settings sheet instead of
   underneath it: it is `always_on_top` like every other window in the app, and
-  the sheet is hidden while the console is up and restored when it closes. The
-  old arrangement put a topmost overlay and a normal window on the same spot,
-  so every close button was ambiguous and the page was half covered.
+  the sheet is hidden while the console is up and restored when it closes.
+- **Signing in no longer leaves a blank, dead window.** The sign-in window was
+  built inside the `open_login` command, and Tauri runs a sync command on the
+  main thread while `WebviewWindowBuilder::build()` dispatches to that same
+  thread and waits for it — the window appeared, the command never returned,
+  and everything after it (page navigation, logging, the sheet hide) never ran.
+  Both login commands now hand the work to the async runtime. The sheet is also
+  hidden only after the window is built, so a failure there cannot cost the user
+  the sheet. Panics are logged to `webview.log` (`panic: … (file:line)`) —
+  a windowed app has no console, and a silent panic looks like a hung window.
 - A candidate token is verified with one real `amount` request before it
   replaces the stored one; a rejected candidate leaves the credential alone and
   the window open with the reason in its title. The console emits several
@@ -234,12 +241,13 @@ the English notes first, then the Chinese mirror.
   IPC 命令面（因此不需要 `remote` capability，也不需要 ACL 条目）。窗口是临时的：
   关闭即销毁、不在 recovery 集合里，下次登录重新创建。
 - **修复**：DeepSeek 登录窗现在**置顶**，不再开在设置窗下面——它与其它窗口同一档
-  `always_on_top`；打开登录窗时先把设置窗收起，关窗后再放回来。旧行为是「置顶的设置窗
-  + 普通登录窗叠在同一点」，于是每个关闭按钮都变得含糊，页面还被遮掉一半。
-- **修复**：收起设置窗这一步挪到登录窗**建好之后**、并在自己的任务里延迟 80 ms 执行——
-  `close_settings` 会排一个约 150 ms 后跳到主线程的 settle timer，而那一刻正是新窗口
-  在创建的时候；两个 dispatch 叠在一起，就是「点了 Sign in… 只留下一片空白且关不掉的
-  窗口」的原因。建窗若真的失败，设置窗也还在，不会被一起收走。
+  `always_on_top`；打开登录窗时收起设置窗，关窗后再放回来。
+- **修复**：点 `Sign in…` 不再留下「空白且关不掉」的窗口。原来登录窗是在 `open_login`
+  命令里直接建的，而 Tauri 把同步命令跑在主线程上，`WebviewWindowBuilder::build()`
+  又要跳到主线程并等它完成——窗口出现了、命令却永远回不来，后面的事（页面导航、日志、
+  收起设置窗）一件都没发生。现在两个登录命令都把活交给 async runtime；收起设置窗也挪到
+  建窗之后，建窗万一失败不会连设置窗一起丢掉。另加 panic 日志（`webview.log` 里的
+  `panic: … (file:line)`）：窗口程序没有控制台，静默 panic 和卡死看起来一模一样。
 - **新增**：候选 token 先用一次真实 `amount` 请求验证，通过才替换已存的凭证；被拒的
   候选保持窗打开、原因写在窗口标题上，已存凭证不受影响。登录过程会吐多个中间
   token，所以验证期间到达的新候选会顶掉排队中的那个，并在本次验证失败后重试——

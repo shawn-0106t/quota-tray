@@ -47,6 +47,7 @@ fn block_on<F: std::future::Future>(fut: F) -> F::Output {
 }
 
 fn main() {
+    quota_tray_lib::install_panic_log();
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     // Headless quota self-check: fetch once, print indented JSON, exit
