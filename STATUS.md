@@ -1,6 +1,6 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-14 17:27（第九轮结束，P5 完成，工作区即将提交）。
+> 快照：2026-11-14 17:30（第九轮结束，P5 完成，四个提交已全部落地，工作区干净）。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
@@ -32,6 +32,17 @@
 3. **README.md**：英文在前、中文在后；截图由 `demo/make_readme_shots.py` 从 `demo/ui-demo.html` 裁出（`docs/screenshot-{light,dark}.png`），不手工截图。
 4. **独立审查**：委派只读 review（`explore` agent + code-review skill，见下方「审查」）。
 5. **`demo/shot.sh` 修复**：输出路径为绝对路径时浏览器拿到 `C:/repo/C:/...`，截不出图；现在绝对路径原样透传。
+
+## 提交记录（第九轮，四个提交，每个都能独立构建）
+
+```
+9252a08 docs: record P5, the release process and the review fixes
+c2fa3f9 docs(readme): bilingual README with generated screenshots
+d0ea0a5 feat(release): NSIS bundle, packaging script, CI and draft-release pipeline
+bb57658 fix(app): queue sign-in candidates, date stale stamps, pass fmt/clippy
+```
+
+拆分理由：`bb57658` 是行为修复 + 过 fmt/clippy 门（含 `cargo fmt` 的机械改动，不拆），`d0ea0a5` 只碰构建与发布线，README 与截图（生成物）单独一个提交，文档与进度快照最后一起收口。`CHANGELOG` 仍停在 `## [0.1.0] — Unreleased` —— 那是发布门，打 tag 前才改日期。
 
 ## 本轮验证结果
 

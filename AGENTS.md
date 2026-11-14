@@ -213,3 +213,5 @@ Ported from the parent project's tag-triggered draft pipeline (2026-11-14).
 - Python 3.13 (`PYTHONUTF8=1`), Node 24, Rust 1.97 (MSVC), WebView2 runtime present, .NET 8 SDK present.
 - Chrome is **not** installed; Edge is. Always probe at runtime (Chrome → Edge → other Chromium) — never hardcode a browser path.
 - Windows binaries cannot write to MSYS paths (`/tmp`): convert with `cygpath` (the demo scripts already do).
+- **Code-review delegation is degraded on this machine** (2026-11-14): the session `Agent` tool registers only `plan` / `coder` / `explore` — there is no `code-reviewer` type — and `~/.kimi-code/bin/kimi-review.cmd` is pinned to `kimi-code/k3.1-pro`, which this subscription cannot access (`provider.auth_error`). Use a read-only `explore` subagent pointed at `~/.agents/skills/code-review/SKILL.md`, and re-run the CI gates yourself afterwards: that reviewer found 8 real defects but missed a `cargo clippy -D warnings` error.
+- A silently-installed NSIS package must be launched with `Start-Process -Wait -PassThru`; invoking `QuotaTray_<ver>_x64-setup.exe /S` straight from Git Bash exits 1 and installs nothing.
