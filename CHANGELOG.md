@@ -66,6 +66,22 @@ the English notes first, then the Chinese mirror.
 - Closing the settings window now collapses the panel when it lost focus:
   the suppressed blur never arrives on its own, so the panel used to linger
   until the next click elsewhere.
+- The single accent is a quiet violet (`#8c74b1` light / `#9d88bc` dark)
+  instead of Kimi blue. Same jobs — usage bars, chips, focus rings — and each
+  theme keeps its own lightness ladder so both stay above 3:1 on the track and
+  4.5:1 for chip text.
+- The `Update` chip is a tag-shaped rounded rectangle (radius 4) instead of a
+  pill, and its light-theme fill rises from 10% to 18% of the accent so it
+  reads as a tinted block the way the dark one already did.
+- `demo/panel-demo-e.html` becomes the frozen design: D's structure and type
+  with the reworked accent, an accent ring on the selected cell (the neutral
+  hairline measured 1.16/1.82 against the track, under WCAG's 3:1 for a state
+  indicator), and the tag chip. `panel-demo-d.html` is kept unchanged as the
+  previous reference. `demo/compare.html`, `heights.py` and `check_contrast.py`
+  cover E too.
+- The ring lives in `--seg-ring`, so the settings window's segmented control is
+  ringed the same way the panel tab is: one token, one look, and no second way
+  to express "selected". `demo/seg-ring-problem.html` records why.
 
 ### 中文
 
@@ -108,3 +124,15 @@ the English notes first, then the Chinese mirror.
   而那是另一条独立的路。
 - **变更**：关掉设置窗时若面板已失去焦点就顺手收起——被抑制的那次 blur 不会
   自己补来，之前面板要等到下一次点击别处才收。
+- **变更**：唯一强调色从 Kimi 蓝换成静紫（浅 `#8c74b1` / 深 `#9d88bc`）——
+  用途不变（用量条、chip、focus ring），只换色相让面板更安静；深浅两套明度
+  阶梯分别达标（对轨道 ≥3:1、chip 文字 ≥4.5:1）。
+- **变更**：`Update` chip 从胶囊改成 tag 形状的圆角矩形（radius 4），浅色底纹
+  从 10% 提到 18%，才和深色一样看得出是一块带色的底。
+- **新增**：`demo/panel-demo-e.html` 成为新的定稿——结构、字体与 D 完全一致，
+  换上静紫强调色、活动格改紫 ring（中性发丝线对轨道只有 1.16 / 1.82，低于 WCAG
+  对状态标识的 3:1）、chip 改 tag 形状。`panel-demo-d.html` 原样保留作为上一版
+  定稿；`compare.html`、`heights.py`、`check_contrast.py` 都已覆盖 E。
+- **变更**：ring 落在 `--seg-ring` 上，设置窗的分段控件与面板 tab 从此共用同一个
+  值——一个 token、一种观感，不再有第二处「只靠填充差表达选中」。
+  `demo/seg-ring-problem.html` 记录了这个取舍的前后对比。

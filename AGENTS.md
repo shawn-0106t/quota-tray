@@ -11,14 +11,14 @@ Guidance for AI coding agents working in this repository. Read this first; then 
 
 This repository is the merge of two earlier first-party projects: `kimi-planbar-tray` (Tauri/rust edition) and `deepseek-planbar` (WPF edition). See `NOTICE` for lineage.
 
-**Current state: Phase 3 (DeepSeek backend) is landed; the segmented tab is next.** P1 (baseline import), the visual half of P2 (all four windows on the D tokens/layout) and P3 (DeepSeek credentials, balance, usage, display names, dual pollers, `--test-deepseek`, fixture tests) are done. Nothing renders DeepSeek yet — the data stops at the `get_deepseek` command and the `deepseek-updated` event. The Kimi/DeepSeek tab was deliberately sequenced **after** P3 (user decision, 2026-11-14) so it could be built against real DeepSeek data instead of an empty placeholder; that is the remaining P2 work. Follow `PLAN.md` §8.
+**Current state: Phase 3 (DeepSeek backend) is landed; the segmented tab is next.** P1 (baseline import), the visual half of P2 (all four windows on the E tokens/layout) and P3 (DeepSeek credentials, balance, usage, display names, dual pollers, `--test-deepseek`, fixture tests) are done. Nothing renders DeepSeek yet — the data stops at the `get_deepseek` command and the `deepseek-updated` event. The Kimi/DeepSeek tab was deliberately sequenced **after** P3 (user decision, 2026-11-14) so it could be built against real DeepSeek data instead of an empty placeholder; that is the remaining P2 work. Follow `PLAN.md` §8.
 
 ## Source of truth
 
 | Question | Answer |
 |---|---|
 | 当前进度 / 交接给新 agent | `STATUS.md` |
-| What should the UI look like? | `demo/panel-demo-d.html` — the frozen design. `demo/panel-demo-a/b/c.html` are the rejected alternatives, kept only for comparison; do not evolve them. |
+| What should the UI look like? | `demo/panel-demo-e.html` — the frozen design (D's structure and type, violet accent, accent tab ring, tag chip). `demo/panel-demo-d.html` is the previous frozen design (same layout, Kimi blue); `demo/panel-demo-a/b/c.html` are the rejected alternatives. All of them are kept only for comparison; do not evolve them. |
 | Layout numbers, tokens, colours | `PLAN.md` §3 |
 | Behaviour (polling, credentials, failure semantics, traps) | `PLAN.md` §5, §7 |
 | Inherited Kimi behaviour (credential chain, parsing, tray/window lifecycle, WebView2 recovery) | `docs/SPEC.md` (Chinese) / `docs/SPEC_EN.md` — read the scope table at the top first; `PLAN.md` wins where they differ |
@@ -36,7 +36,7 @@ menu.html             # tray menu window   (src/menu.ts + menu.css)
 src/                  # vanilla TS frontend (Vite multi-page build)
   main.ts / settings.ts / skills.ts / menu.ts   # per-window logic
   common.ts           # shared DTO types + formatting helpers
-  theme.css           # D tokens + shared primitives (PLAN §3.2, §3.4)
+  theme.css           # E tokens + shared primitives (PLAN §3.2, §3.4)
   main.css / settings.css / skills.css / menu.css   # layout only
   vite-env.d.ts
 vite.config.ts        # 4-page rollup input; 100 KB asset inlining budget
@@ -53,9 +53,11 @@ src-tauri/            # Rust backend (Tauri 2)
 docs/SPEC.md          # inherited Kimi behaviour spec (Chinese)
 docs/SPEC_EN.md       # ... English mirror, same chapter numbers
 demo/                 # frozen design demos + review tooling (self-contained, zero deps)
-  panel-demo-d.html   # THE design reference (C structure + A type + slim palette)
+  panel-demo-e.html   # THE design reference (D structure + A type + quiet violet accent)
+  panel-demo-d.html   # previous reference (same as E but Kimi blue, neutral tab ring, pill chip)
   panel-demo-a/b/c.html
   compare.html        # side-by-side viewer, theme/provider/state switchers
+  seg-ring-problem.html  # diagnostic: why the settings control needs E's ring too (PLAN §9)
   shot.sh             # headless screenshot with ?query presets; probes Chrome -> Edge
   crop_panel.py       # crop to the 424px window, trim backdrop
   heights.py          # measured card/window height for every demo x tab x state
@@ -101,10 +103,10 @@ quota-tray.exe --test-ui           # construct every window, print "… OK" line
 
 `cargo test` covers pure logic only: 18 tests — the recovery classifier/backoff/log-tail pair, the skills frontmatter parser, and the DeepSeek `parse`/`credentials` suite. The DeepSeek numbers are asserted against the four fixtures in `src-tauri/tests/fixtures/` (ported from `deepseek-planbar/tests/fixtures/`, pulled in with `include_str!`, so `tests/` holds data only). `FixtureTests.cs` in the parent repo asserts the same values; running the old exe with `--test-fixtures <abs path>` and the Rust suite together is how parse equivalence is proven — the live account moves every minute, so a numeric diff between two live fetches proves nothing.
 
-Design review is part of the deliverable: after any visual change, regenerate screenshots and compare against `demo/panel-demo-d.html` at 424px, in both themes:
+Design review is part of the deliverable: after any visual change, regenerate screenshots and compare against `demo/panel-demo-e.html` at 424px, in both themes:
 
 ```bash
-bash demo/shot.sh demo/panel-demo-d.html .shots/x.png "bare=1&theme=dark&tab=ds" 560 900 2
+bash demo/shot.sh demo/panel-demo-e.html .shots/x.png "bare=1&theme=dark&tab=ds" 560 900 2
 PYTHONUTF8=1 python demo/crop_panel.py .shots/x.png .shots/x-crop.png 424 2
 PYTHONUTF8=1 python demo/heights.py
 PYTHONUTF8=1 python demo/check_contrast.py
@@ -145,7 +147,7 @@ New in this project:
 - **DeepSeek money**: token counts round with `round_ties_even` (= .NET `Math.Round`), and money aggregates are snapped to 1e-8 yuan. Raw f64 sums drift in the last bits and print `24.279870719999998` where the console and the WPF version show `24.27987072`; touching this makes the two apps disagree digit for digit.
 - **DeepSeek endpoints**: constants + candidate fallback + learn-from-login-window (`PLAN.md` §6). Model names are data — never hardcode a model list.
 - **Model names are metadata, not constants**: display name falls back official `GET https://api.deepseek.com/models` `name` → static table → derived → raw id. The official name **wins** (user decision 2026-11-14): a vendor rename must reach the panel within the 24 h cache TTL without a new release, so never put the static table back in front. Never drop a model's usage because its id is missing from `/models` — the usage endpoint aggregates the platform console, which also reports combined rows (`A & B`) and retired models. Derivation only rewrites `deepseek-*` ids; anything containing whitespace stays verbatim. Long official names must ellipsis inside the row, never push the cost out.
-- **Colour semantics**: blue = usage, red = failure only. Never colour a high-usage percentage; `Available` stays neutral.
+- **Colour semantics**: the accent (a quiet violet as of 2026-11-14: `#8c74b1` light / `#9d88bc` dark) has exactly two roles — usage (bars, chip) and "this cell is selected" (`--seg-ring` on a segmented control's active cell). Nothing else may take it: no switch tint, no button fill. Red = failure only; never colour a high-usage percentage; `Available` stays neutral. The rule is "the accent means usage or selection", not "the accent is blue" — the hue is a brand decision, the mapping is not.
 
 ## Security considerations
 

@@ -1,12 +1,12 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-14 13:30（第四轮）。
+> 快照：2026-11-14 14:50（第五轮）。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
 ## 一句话
 
-P1（基线导入 + 改名）、P2 的视觉与高度、**P3（DeepSeek 后端）全部完成并端到端验过**。下一步是 **P2 剩余的分段 tab + DeepSeek 面板**——现在有真实数据可用了，这正是当初把 tab 顺延到 P3 之后的理由。
+P1（基线导入 + 改名）、P2 的视觉与高度、**P3（DeepSeek 后端）全部完成并端到端验过**；第五轮把强调色重构成静紫并定稿 **E 版**（`demo/panel-demo-e.html`，含分段控件的紫 ring）。下一步是 **P2 剩余的分段 tab + DeepSeek 面板**——现在有真实数据可用了，这正是当初把 tab 顺延到 P3 之后的理由。
 
 ## 阶段状态
 
@@ -52,7 +52,7 @@ P1（基线导入 + 改名）、P2 的视觉与高度、**P3（DeepSeek 后端�
 ## 接手必须知道的九件事
 
 1. **源仓库在本机同级目录**：`~/Documents/trae_projects/github/kimi-planbar-tray`（只用 `rust/`）、`~/Documents/trae_projects/github/deepseek-planbar`（`tray-wpf/` 是移植源，`publish/DeepseekPlanbarTray.exe` 是可跑的参考实现）。两个原仓库不改不删。
-2. **视觉基准只有一个文件**：`demo/panel-demo-d.html`；数值与 token 在 `PLAN.md` §3。A/B/C 三版只是对照，不要演进。**本轮改了 D 的 err 态文案**（`Update failed` → `Fetch failed`）。
+2. **视觉基准只有一个文件**：`demo/panel-demo-e.html`；数值与 token 在 `PLAN.md` §3。A/B/C/D 四版只是对照，不要演进（D 是 E 之前的蓝色定稿，结构与 E 完全相同，只差强调色、tab ring 和 chip 形状）。
 3. **本机 Chrome 未安装，只有 Edge**。截图/自动化必须运行时探测（Chrome → Edge），不得写死路径。headless Edge 的视口比 `--window-size` 宽约 54px、矮约 98px。
 4. **`core.autocrlf=true`**，仓库有 `.gitattributes` 强制 `eol=lf`；脚本改回 CRLF 会让 Git Bash `bad interpreter`。
 5. **提交会过全局 pre-commit 钩子**（gitleaks + 密钥 + 隐私 + 本机路径三层）。文档/代码里不写本机绝对路径，用户目录写 `~`。**`%APPDATA%\QuotaTray\deepseek-credentials.json` 是密文，永远不要 `cat`**，要看只 `grep -c '"dpapi:'`。
@@ -73,7 +73,7 @@ P1（基线导入 + 改名）、P2 的视觉与高度、**P3（DeepSeek 后端�
 
 `PLAN.md` §3.4 有规格，`theme.css` 的 `seg` 类已就绪（设置窗在用）。
 
-1. header 下的分段控件（Kimi / DeepSeek），`PLAN.md` §3.4。
+1. header 下的分段控件（Kimi / DeepSeek），`PLAN.md` §3.4。复用 `theme.css` 的 `.seg`，**不要另写 ring**：`--seg-ring` 已经是强调紫，活动格的紫 ring 会自动出现（这是 E 版定的，别再退回中性发丝线）。
 2. 两个 tab 的内容区：Kimi 沿用现有 pane；DeepSeek 用 `get_deepseek` / `deepseek-updated` 的真实数据，渲染 `visible_models()`（已含过滤与 top 4）。**不需要空态面板**。
 3. `settings.json` 增加 `ActiveTab`（`SettingsData` + `SettingsDto` + 回填），缺省回落 `kimi`。
 4. 高度：先按 `ActiveTab` 定尺寸再显示（`panel_height` 机制已就绪）；验收是连点 tab 30 次不跳位、底边与右边缘不动。
@@ -82,7 +82,7 @@ P1（基线导入 + 改名）、P2 的视觉与高度、**P3（DeepSeek 后端�
 
 ## 未决（等你拍板）
 
-1. **tab 活动块 ring**：中性灰对轨道约 1.2–1.3:1，低于 WCAG；可改强调蓝 ring（3.8:1）。当前保留中性。
+1. ~~分段控件活动格的 ring~~ → **已定（2026-11-14）**：`--seg-ring` 取强调色，面板 tab 与设置窗分段控件共用同一个值。对轨道 4.46/4.82、对活动块 5.08/3.63，全部过 3:1（`check_contrast.py` 的 E 段）。前后对比保留在 `demo/seg-ring-problem.html`。
 2. **托盘图标**是否换新（当前沿用 kimi 的 K 标）。
 3. **GitHub 仓库名 / 是否建 remote**（建议 `quota-tray`）。目前无 remote，历史都在本地。
 4. ~~失败文案~~ → **已定**（`Fetch failed` / ` (fetch failed)`）。
@@ -90,4 +90,4 @@ P1（基线导入 + 改名）、P2 的视觉与高度、**P3（DeepSeek 后端�
 
 ## 新对话开场建议
 
-> 接手 Quota Tray（当前目录已是 git repo）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`，视觉基准是 `demo/panel-demo-d.html`。P1、P2 的视觉/高度、**P3 DeepSeek 后端**都已完成并验过（`cargo test` 18 passed、`--test-deepseek` 与旧版逐字段一致）。**现在做 P2 剩余：Kimi/DeepSeek 分段 tab + DeepSeek 面板**，数据从 `get_deepseek` 命令和 `deepseek-updated` 事件取，渲染用 `visible_models()`。
+> 接手 Quota Tray（当前目录已是 git repo）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`，视觉基准是 `demo/panel-demo-e.html`。P1、P2 的视觉/高度、**P3 DeepSeek 后端**都已完成并验过（`cargo test` 18 passed、`--test-deepseek` 与旧版逐字段一致）。**现在做 P2 剩余：Kimi/DeepSeek 分段 tab + DeepSeek 面板**，数据从 `get_deepseek` 命令和 `deepseek-updated` 事件取，渲染用 `visible_models()`。

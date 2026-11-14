@@ -17,7 +17,7 @@
 > | 9 维护边界与文档地图 | 由本仓库 `AGENTS.md` / `PLAN.md` / `STATUS.md` 取代 |
 > | 10 窗口规格 | 尺寸以 `PLAN.md` §4 为准（面板与设置窗内容自适应；Skills 窗固定 404×520） |
 > | 11 配色方案 | 由 `PLAN.md` §3.2 取代 |
-> | 12 面板 UI 结构 | 由 `PLAN.md` §3 与 `demo/panel-demo-d.html` 取代；P2 重写为双 tab |
+> | 12 面板 UI 结构 | 由 `PLAN.md` §3 与 `demo/panel-demo-e.html` 取代；P2 重写为双 tab |
 > | 13 设置窗 UI 结构 | 适用，P4 增补 DeepSeek 凭证区 |
 > | 14 托盘行为 | 适用；合并版 tooltip 覆盖两个 provider（P4） |
 > | 15 动画 | 适用（`PLAN.md` §3.6 复述同套时序） |

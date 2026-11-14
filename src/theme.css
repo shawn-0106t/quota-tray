@@ -1,7 +1,7 @@
 /* Quota Tray — shared tokens and window chrome.
    Single source of colour/type primitives; the layout files (main.css,
    settings.css, skills.css, menu.css) only place them.
-   Token table: PLAN.md section 3.2. Visual reference: demo/panel-demo-d.html. */
+   Token table: PLAN.md section 3.2. Visual reference: demo/panel-demo-e.html. */
 
 :root[data-theme='light'] {
   color-scheme: light;
@@ -11,13 +11,17 @@
   --ink-3: #0000004d;
   --hair: #00000021;
   --hair-soft: #00000012;
-  --accent: #1783ff;
-  --accent-bar: #0d6fe8;
-  --accent-ink: #0a5fc0;
-  --tint: #1783ff1a;
+  --accent: #8c74b1;
+  --accent-bar: #7d61a6;
+  --accent-ink: #6c5293;
+  /* 18%: matches the dark badge's lift off the paper (~1.22:1); 10% read as
+     washed out next to it. Ink on this fill is 5.04:1. */
+  --tint: #8c74b12e;
   --seg-track: #f1f0ec;
   --seg-on: #ffffff;
-  --seg-ring: #0000001f;
+  /* the selected cell is ringed with the accent: fill alone was 1.14:1
+     against the track, under WCAG 1.4.11's 3:1 for a state cue */
+  --seg-ring: #7d61a6;
   --danger: #b42318;
   --shadow: 0 12px 40px #00000026;
 }
@@ -30,13 +34,13 @@
   --ink-3: #ffffff42;
   --hair: #ffffff1f;
   --hair-soft: #ffffff12;
-  --accent: #1a88ff;
-  --accent-bar: #1a88ff;
-  --accent-ink: #6fb4ff;
-  --tint: #1a88ff26;
+  --accent: #9d88bc;
+  --accent-bar: #9d88bc;
+  --accent-ink: #b5abc4;
+  --tint: #9d88bc26;
   --seg-track: #262624;
   --seg-on: #3a3a37;
-  --seg-ring: #ffffff1a;
+  --seg-ring: #9d88bc;
   --danger: #ff6b6b;
   --shadow: 0 12px 40px #00000073;
 }
@@ -211,14 +215,14 @@ body {
   gap: 6px;
 }
 
-/* ---------- chip ---------- */
+/* ---------- chip (tag) ---------- */
 .badge {
   font-size: 9.5px;
   font-weight: 500;
   line-height: 1.4;
   color: var(--accent-ink);
   background: var(--tint);
-  border-radius: 9999px;
+  border-radius: 4px;
   padding: 2px 8px;
   white-space: nowrap;
 }

@@ -1,7 +1,7 @@
 # PLAN — Quota Tray
 
 > 状态：**设计定稿，代码待落地**（Phase 1 起）。
-> 视觉基准：`demo/panel-demo-d.html`（唯一准绳；`demo/compare.html` 保留 A/B/C 三版仅作对照，不再演进）。
+> 视觉基准：`demo/panel-demo-e.html`（唯一准绳；`demo/compare.html` 保留 A/B/C/D 四版仅作对照，不再演进）。
 > 本文件是行为与设计的契约。改动设计或行为前先改这里，再改代码。
 
 ---
@@ -22,10 +22,10 @@
 |---|---|---|
 | 技术栈 | Tauri 2 + Rust 后端 + vanilla TS/HTML/CSS | kimi 的体验（滑入动画、失焦隐藏、DPI 规则、WebView2 recovery）只存在于其 `rust/` 版；单 exe ~6MB，WebView2 系统自带，DeepSeek 的登录捕获本来也依赖它 |
 | 代码基线 | 复制 `kimi-planbar-tray/rust/` 到本仓库根目录 | 直接继承已验证的窗口/托盘/recovery 逻辑，不重写 |
-| 视觉方向 | D 版：C 的结构 + A 的字体 + A 的配色（收敛到两色） | 结构上 C 的两行 header + 无框读数区最清爽；字体上 A 的全 sans 比 mono 更耐看；配色上 A 的暖纸底 + alpha 墨阶，但砍掉多余色相 |
+| 视觉方向 | E 版：C 的结构 + A 的字体 + A 的配色（收敛到两色），强调色为自定静紫 | 结构上 C 的两行 header + 无框读数区最清爽；字体上 A 的全 sans 比 mono 更耐看；配色上 A 的暖纸底 + alpha 墨阶，砍掉多余色相；2026-11-14 在 D 之上换强调色并给 tab 加紫 ring（见 §3.4/§3.5） |
 | 字体 | 全系统字体，零下载；**不用 Inter** | `kimi-planbar-tray` 本身就是 `'Segoe UI', system-ui, sans-serif` 一条声明；Windows 小字号下 Segoe UI 的 hinting 最优，Inter 需打包字体且与 CJK 混排基线不一致 |
 | 数字字体 | sans + `tabular-nums`，**不使用 mono** | 等宽数字的"代码感"与托盘工具的定位不符；`tabular-nums` 已能保证刷新不跳宽 |
-| 强调色 | 单一 Kimi 蓝（`#1783ff` / dark `#1a88ff`），两个 tab 共用 | 应用本身是 Kimi 的延伸；DeepSeek 品牌蓝、成功绿、警告琥珀全部取消，红只留给真实故障 |
+| 强调色 | 单一静紫（`#8c74b1` / dark `#9d88bc`），两个 tab 共用 | 2026-11-14 用户决定：弃用 Kimi 蓝，换成自定的低彩度紫（取 CLI `gentle` 主题 primary 的色相 264°、彩度 28%，重算明度阶梯）。仍是唯一功能强调色，DeepSeek 品牌蓝、成功绿、警告琥珀全部取消，红只留给真实故障 |
 | tab 控件 | 灰底轨道 + 等宽单元格 + 活动块用 1px 内描边 ring（**不用投影**） | 去投影后更平面；ring 比阴影更省视觉噪音 |
 | 合并版仓库 | 新建独立 repo，两个原仓库不动 | 原仓库有各自的 CI/发布线，合并进去会污染语义 |
 | 产品名 | **Quota Tray**；`com.shawnqi.quotatray`；`quota-tray.exe` | — |
@@ -33,7 +33,7 @@
 | DeepSeek 登录捕获 | 进 v1 | 与现版功能对齐；代价是 WebView2 COM 互操作是本项目风险最高的一块 |
 | DeepSeek 凭证存储 | `config_dir()/deepseek-credentials.json`，值用 Windows DPAPI 加密（`dpapi:` 前缀），旧版文件首次运行一次性导入 | API Key 能花钱，不该落明文盘；存储跟着 `config_dir()` 走，便携模式才带得走；旧文件只读不写，旧应用不受影响 |
 
-## 3. 设计定稿（D 版）
+## 3. 设计定稿（E 版）
 
 ### 3.1 结构骨架
 
@@ -71,14 +71,14 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 | `--ink-3` | `#0000004d` | `#ffffff42` | **仅图标/装饰**，不可用于文字 |
 | `--hair` | `#00000021` | `#ffffff1f` | 分区发丝线 |
 | `--hair-soft` | `#00000012` | `#ffffff12` | 进度条轨道 |
-| `--accent` | `#1783ff` | `#1a88ff` | 品牌蓝（选中态之外的强调基准） |
-| `--accent-bar` | `#0d6fe8` | `#1a88ff` | 进度条填充、focus ring（对轨道 ≥3:1） |
-| `--accent-ink` | `#0a5fc0` | `#6fb4ff` | chip 文字（对 tint ≥4.5:1） |
-| `--tint` | `#1783ff1a` | `#1a88ff26` | chip 底 |
+| `--accent` | `#8c74b1` | `#9d88bc` | 强调紫（选中态之外的强调基准）：浅 3.84:1、深 5.65:1 对纸面 |
+| `--accent-bar` | `#7d61a6` | `#9d88bc` | 进度条填充、focus ring（对轨道 4.17 / 4.68，≥3:1） |
+| `--accent-ink` | `#6c5293` | `#b5abc4` | chip 文字（对 tint 5.04 / 6.55，≥4.5:1）；彩度低于条（28%→18%），小字更干净 |
+| `--tint` | `#8c74b12e` | `#9d88bc26` | chip 底。浅色用 **18%** 而非 10%：10% 在纸面上只有 1.12 的提亮，和深色的 1.24 不成对，chip 会显得没上色 |
 | `--danger` | `#b42318` | `#ff6b6b` | 故障红 |
 | `--seg-track` | `#f1f0ec` | `#262624` | 分段控件轨道；footer hover 底 |
 | `--seg-on` | `#ffffff` | `#3a3a37` | 活动格底 |
-| `--seg-ring` | `#0000001f` | `#ffffff1a` | 活动格内描边 |
+| `--seg-ring` | `#7d61a6` | `#9d88bc` | 活动格内描边 = 强调色。原来的中性发丝线对轨道只有 1.16 / 1.82，不满足 1.4.11；换紫后 4.46 / 4.82，面板 tab 与设置窗分段控件共用同一个值 |
 | 阴影 | `0 12px 40px #00000026` | `0 12px 40px #00000073` | 面板悬浮阴影（case 的 menu 档） |
 
 ### 3.3 排版
@@ -92,19 +92,19 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 
 | 组件 | 规格 |
 |---|---|
-| 分段控件 | margin `10 0 12`，padding 3，轨道 radius 12；格高 30、radius 8、`flex: 1`；活动格 `--seg-on` + `inset 0 0 0 1px --seg-ring` |
+| 分段控件 | margin `10 0 12`，padding 3，轨道 radius 12；格高 30、radius 8、`flex: 1`；活动格 `--seg-on` + `inset 0 0 0 1px --seg-ring`。**`--seg-ring` 就是强调色**（2026-11-14 起）：填充差只有 1.14 / 1.33，靠它补到 4.46 / 4.82 才过 1.4.11。面板 tab 与设置窗分段控件是同一个组件、同一个 token，不允许再出现「只靠填充差」的第三处 |
 | 读数列 | `grid-template-columns: 1fr 1fr; gap: 24px`，列内 padding `10 0 11` |
 | 进度条 | 高 4、radius 2、轨道 `--hair-soft`、填充 `--accent-bar`、`margin-top: 9`；模型占比条高 3、`margin-top: 8` |
 | 分行 | `border-top: 1px --hair`，padding `9 0`；**最后一个子块** `padding-bottom: 10`（父容器不再加底部内边距，否则该行会光学偏上） |
 | 模型行 | 名称单行省略（`min-width: 0` + `text-overflow: ellipsis`、`white-space: nowrap`），金额固定右对齐、不参与省略 —— 官方展示名可能比手写表长，不能顶掉金额 |
-| chip | radius 9999，padding `2 8`，`--tint` 底 + `--accent-ink` 字 |
+| chip | **tag 形状**：radius 4（不是胶囊）、padding `2 8`、`--tint` 底 + `--accent-ink` 字；深浅两主题都要真的看出底色，浅色因此用 18% |
 | footer | `grid 4`，`gap 2`，padding 5，按钮高 42、radius 8、图标 16、hover 底 `--seg-track` |
-| 开关 | 轨道 38×20、radius 9999、1px `--ink-2` 描边；钮 14、inset 2；开启态轨道 `--ink-1`、钮 `--paper`、位移 18px；150ms 过渡；整行是点击目标；**单色，不占蓝**（蓝只给用量） |
+| 开关 | 轨道 38×20、radius 9999、1px `--ink-2` 描边；钮 14、inset 2；开启态轨道 `--ink-1`、钮 `--paper`、位移 18px；150ms 过渡；整行是点击目标；**单色，不占强调色**（强调色只给用量） |
 | 焦点 | `outline: 2px solid --accent-bar; outline-offset: 2px` |
 
 ### 3.5 颜色语义
 
-- **蓝 = 用量**（进度条、chip）。不做"高用量变色"。
+- **强调色 = 用量 + 选中态**。只有两个角色：用量（进度条、chip）与「这一格被选中」（分段控件活动格的 ring）。色相是实现选择，不是规则本身：2026-11-14 起是静紫 `#8c74b1` / `#9d88bc`（原来是 Kimi 蓝）。除此之外强调色不得出现——不做"高用量变色"，不给开关、勾选、按钮上色。
 - **红 = 故障**（余额不足、token 过期、Key 失效、更新失败、解析失败、命中率 <60%）。
 - **墨 = 一切正常**。`Available` 不着色，用量百分比不着色。
 
@@ -194,7 +194,7 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 |---|---|---|
 | **P0（已完成）** | 四版静态 demo + 设计定稿 + 本文件 | `demo/compare.html` 可切主题/provider/状态；`heights.py` 出高度表；`check_contrast.py` 全通过 |
 | **P1（已完成）** | 仓库化、拷入 `kimi-planbar-tray/rust/` 基线、改名 Quota Tray、拷入 SPEC/LICENSE | `cargo build` + `npm run build` + `tsc --noEmit` 通过；`--test-fetch` / `--test-ui` 通过；旧 UI 能跑 |
-| **P2（视觉与高度已完成，tab 顺延）** | 面板 UI 重写（D 版 token）+ tab + 自适应高度。**已完成**：四个窗口统一 D 版视觉（含设置/技能/托盘菜单）、面板与设置窗内容自适应、kimi-cu 端到端验过 | 连点 tab 30 次无跳位、底部贴边不变；`--test-ui` 通过；截图与 `panel-demo-d.html` 对照一致。**剩余**：分段 tab + DeepSeek 面板（见下方顺序调整） |
+| **P2（视觉与高度已完成，tab 顺延）** | 面板 UI 重写（E 版 token）+ tab + 自适应高度。**已完成**：四个窗口统一字体/结构与 D 的骨架、强调色换成静紫（E 版）、面板与设置窗内容自适应、kimi-cu 端到端验过 | 连点 tab 30 次不跳位、底部贴边不变；`--test-ui` 通过；截图与 `panel-demo-e.html` 对照一致。**剩余**：分段 tab（含 E 的紫 ring）+ DeepSeek 面板（见下方顺序调整） |
 | **P3（已完成 2026-11-14）** | DeepSeek 后端移植 + 双 poller + fixtures 解析测试 | ✅ `cargo test` 18 passed；✅ 同机对比旧版 `--test-fetch` 逐字段一致（仅展示名按 §6.1 取官方名）；✅ `--test-deepseek` 通过；旧版 `--test-fixtures` ALL PASS |
 | **P4** | 设置窗（通用 / Kimi 只读 / DeepSeek 凭证）+ 托盘合并 tooltip + 登录捕获窗 | 设置落盘后重启生效；真账号走通捕获 → 验证 → 保存 → 面板出数；`--test-login` 通过 |
 | **P5** | 打包、端到端验证、README、独立 code review | `npx tauri build` 出单 exe；`--test-fetch` / `--test-deepseek` / `--test-ui` / `--test-login` 全绿；端到端脚本通过；审查报告无 Blocker |
@@ -208,15 +208,15 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 - **私有接口漂移**：见 §6；失败必须表现为可理解提示 + 可重试。
 - **内存**：WebView2 常驻约 300MB，与现版 kimi 一致，不做优化承诺。
 - **未决**：
-  - tab 活动块的 ring 用中性灰时，对轨道/活动块只有约 1.2–1.3:1，低于 WCAG 1.4.11 对状态标识的 3:1；当前靠「填充差 + 字重 + `aria-selected`」表达状态，键盘焦点另有 2px 蓝 outline（3.8:1）兜底。可选改成强调蓝 ring（对轨道 3.8:1，代价是标题区多一个蓝色元素）——待定。
+  - ~~分段控件的活动格怎么表达选中~~（**已定，2026-11-14**：`--seg-ring` 取强调色，面板 tab 与设置窗共用。填充差 1.14 / 1.33 不够 1.4.11 的 3:1；紫 ring 对轨道 4.46（浅）/ 4.82（深），对活动块 5.08 / 3.63，四端全过。起因与前后对比见 **`demo/seg-ring-problem.html`**，该页已改为「记录」性质）。
   - 托盘图标是否换新（当前沿用 kimi 的 K 标）。
-  - ~~skills 窗口是否也随 D 版换肤~~（已定：随 D 版，2026-11-13 落地）。
+  - ~~skills 窗口是否也随 D 版换肤~~（已定：随 D 版换肤，2026-11-13 落地；E 起强调色变化同样适用于四个窗口）。
   - **设置窗开关边界**：`--hair` 只给到 1.34:1（轨道描边），低于 WCAG 1.4.11 的 3:1。已改为 `--ink-2` 描边（5.67:1 亮 / 6.26:1 暗），开启态是 `--ink-1` 实心轨道，两态都能分辨；与 tab ring 同一取舍：状态不靠填色差，靠形状与位置。
 
 ## 10. 设计审阅工具（`demo/`）
 
 ```bash
-bash demo/shot.sh demo/panel-demo-d.html out.png "bare=1&theme=dark&tab=ds" 560 900 2
+bash demo/shot.sh demo/panel-demo-e.html out.png "bare=1&theme=dark&tab=ds" 560 900 2
 PYTHONUTF8=1 python demo/crop_panel.py out.png out-crop.png 424 2
 PYTHONUTF8=1 python demo/heights.py        # 四版 × 两 tab × 五状态的高度表
 PYTHONUTF8=1 python demo/check_contrast.py # token 对的 WCAG 比值

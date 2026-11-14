@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="color-scheme" content="light dark">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Quota Tray — panel design A/B/C/D</title>
+<title>Quota Tray — panel design A/B/C/D/E</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -62,10 +62,11 @@
 </style>
 </head>
 <body>
-<h1>Quota Tray — panel design A/B/C/D</h1>
+<h1>Quota Tray — panel design A/B/C/D/E</h1>
 <p class="lead">
-  Same information architecture and geometry in all four: 424px window (368px card + 28px shadow room),
-  provider tabs, shared 4-button footer, content-driven height. Only the skin differs.
+  Same information architecture and geometry in all five: 424px window (368px card + 28px shadow room),
+  provider tabs, shared 4-button footer, content-driven height. A/B/C differ in skin; D and E share
+  the same geometry and differ only in accent, tab ring and chip shape — E is the frozen design.
   Switch theme / provider / data state below — every iframe reloads together.
 </p>
 
@@ -136,10 +137,24 @@
       usage percentages no longer turn red, so only real failures are coloured.
     </p>
   </div>
+  <div class="col">
+    <h2>E — the frozen design (D with the accent reworked)</h2>
+    <iframe id="frame-e" title="Design E" src="panel-demo-e.html?bare=1"></iframe>
+    <p class="notes">
+      <b>Reads as:</b> D, unchanged in structure and type, with three edits. The single accent
+      is a quiet violet (264&deg; at 28% chroma) instead of Kimi blue, on its own lightness ladder
+      per theme so both clear 3:1 on the track and 4.5:1 for chip text. The active tab is ringed
+      with that accent rather than a neutral hairline, because a fill difference alone measured
+      1.2&ndash;1.3:1 against the track. The Update chip is a tag (radius 4) whose light fill is
+      18% of the accent, matching the dark one's lift off the paper.
+      <b>Cost:</b> red is now the only warm hue in the panel, so the accent and a failure are
+      easier to tell apart &mdash; but the accent is also no longer a Kimi brand mark.
+    </p>
+  </div>
 </div>
 
 <p class="hint">
-  All four files are standalone (<kbd>demo/panel-demo-a.html</kbd> … <kbd>panel-demo-d.html</kbd>);
+  All five files are standalone (<kbd>demo/panel-demo-a.html</kbd> … <kbd>panel-demo-e.html</kbd>);
   each opens alone with a control bar that also reports the measured card / window height.
   Measured heights: <kbd>python demo/heights.py</kbd>.
 </p>
@@ -152,12 +167,14 @@
     b: document.getElementById('frame-b'),
     c: document.getElementById('frame-c'),
     d: document.getElementById('frame-d'),
+    e: document.getElementById('frame-e'),
   };
 
   // Measured card heights per demo and state (demo/heights.py), tallest first:
   //   kimi  A 262 / B 287 / C 320 / D 328   (+56 shadow => window 318 / 343 / 376 / 384)
   //   ds    A 360 / B 373 / C 385 / D 401   four 500 / 521 / 521 / 543
-  // iframe height = tallest of the four for that state, plus slack.
+  // E keeps D's geometry (python demo/heights.py measures it), so these bounds hold.
+  // iframe height = tallest of the demos for that state, plus slack.
   const FRAME_H = {
     'kimi:normal': 400, 'kimi:four': 400, 'kimi:hot': 435, 'kimi:err': 400, 'kimi:nocred': 390,
     'ds:normal': 475, 'ds:four': 615, 'ds:err': 345, 'ds:nocred': 345, 'ds:hot': 475,

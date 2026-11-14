@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<!-- Diagnostic demo (not a design direction): the same .seg component carries the
+     selected state two different ways. The panel tab (design E) rings its active
+     cell with the accent; the settings window still relies on a fill difference
+     plus a neutral hairline. WCAG 1.4.11 wants 3:1 for the indicator that tells
+     you which item is selected, and the fill difference alone measures 1.14 light
+     / 1.33 dark. Numbers come from demo/check_contrast.py.
+     The desaturated columns are the honest test: strip the hue and ask what is
+     left. In the tab it is a ring you can still see; in the settings control it
+     is 400 vs 500 font weight and nothing else. -->
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quota Tray — segmented control selected state</title>
+<style>
+.cell.light {
+  --paper: #fbfaf9;
+  --ink-1: #000000e6;
+  --ink-2: #00000099;
+  --ink-3: #0000004d;
+  --hair: #00000021;
+  --seg-track: #f1f0ec;
+  --seg-on: #ffffff;
+  --seg-ring: #0000001f;
+  --accent-ring: #7d61a6;
+  background: #fbfaf9;
+}
+.cell.dark {
+  --paper: #181817;
+  --ink-1: #ffffffd6;
+  --ink-2: #ffffff8f;
+  --ink-3: #ffffff42;
+  --hair: #ffffff1f;
+  --seg-track: #262624;
+  --seg-on: #3a3a37;
+  --seg-ring: #ffffff1a;
+  --accent-ring: #9d88bc;
+  background: #181817;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 26px 30px 42px;
+  background: #e9e7e3; color: #000000e6;
+  font: 13px/1.55 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+h1 { font-size: 15px; font-weight: 600; margin: 0 0 5px; letter-spacing: -.01em; }
+p.lead { margin: 0 0 22px; max-width: 82ch; font-size: 12.5px; color: #00000099; }
+p.lead code { font-family: Consolas, ui-monospace, monospace; font-size: 11.5px; color: #000000e6; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 178px repeat(4, 244px);
+  gap: 14px 18px;
+  align-items: start;
+}
+.hd {
+  font-size: 10px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase;
+  color: #00000073; padding-bottom: 2px; border-bottom: 1px solid #00000021;
+}
+.who { font-size: 11.5px; line-height: 1.5; color: #00000099; padding-top: 10px; }
+.who b { display: block; font-size: 12.5px; font-weight: 600; color: #000000e6; letter-spacing: -.005em; }
+.who .tag {
+  display: inline-block; margin-top: 5px; font-size: 9.5px; font-weight: 600;
+  letter-spacing: .02em; padding: 1px 6px; border-radius: 4px; text-transform: uppercase;
+}
+.who .pass { background: #8c74b12e; color: #6c5293; }
+.who .fail { background: #b4231814; color: #b42318; }
+.who .fix  { background: #0000000f; color: #00000099; }
+
+.cell { border-radius: 12px; padding: 16px 14px; box-shadow: 0 4px 14px #00000014; }
+.cell.light { background: #fbfaf9; }
+.cell.dark  { background: #181817; }
+.gray { filter: grayscale(1); }
+
+/* the real control, copied from src/theme.css */
+.seg {
+  display: flex; gap: 2px; padding: 3px;
+  background: var(--seg-track); border-radius: 12px;
+}
+.seg button, .seg label { flex: 1; display: flex; min-width: 0; }
+.seg button, .seg .seg-item {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  height: 30px; border: 0; border-radius: 8px; background: transparent;
+  font: inherit; font-size: 12.5px; font-weight: 400; color: var(--ink-2);
+  white-space: nowrap;
+}
+.seg label input { position: absolute; opacity: 0; width: 0; height: 0; }
+.seg button[aria-selected='true'], .seg input:checked + .seg-item {
+  background: var(--seg-on); color: var(--ink-1); font-weight: 500;
+  box-shadow: inset 0 0 0 1px var(--seg-ring);
+}
+/* what the tab does differently — the only delta under test */
+.seg.ring-accent button[aria-selected='true'],
+.seg.ring-accent input:checked + .seg-item {
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
+}
+
+.metrics {
+  grid-column: 1 / -1;
+  display: flex; flex-wrap: wrap; gap: 6px 26px;
+  font-size: 11px; color: #00000099;
+  padding: 2px 0 6px; border-bottom: 1px solid #00000012;
+}
+.metrics b { color: #000000e6; font-weight: 600; }
+.metrics .bad { color: #b42318; font-weight: 600; }
+.metrics .ok  { color: #0a6b46; font-weight: 600; }
+
+footer { margin-top: 26px; max-width: 82ch; font-size: 11.5px; color: #00000099; }
+footer b { color: #000000e6; }
+kbd {
+  font-family: Consolas, ui-monospace, monospace; font-size: 10.5px;
+  padding: 1px 5px; border-radius: 3px; background: #0000000d;
+}
+</style>
+</head>
+<body>
+
+<h1>Segmented control — the selected state has two different jobs</h1>
+<p class="lead">
+  Both controls are the same component (<code>.seg</code>), same geometry, same neutrals.
+  The difference is only how the selected cell announces itself. WCAG 1.4.11 asks for
+  <b>3:1</b> between a state indicator and its surroundings; a fill difference of
+  <b>1.14</b> (light) / <b>1.33</b> (dark) is not one. The desaturated columns are the
+  honest test — remove the hue and ask what is still there.
+  <br><br>
+  <b>Resolved 2026-11-14:</b> the ring moved onto <code>--seg-ring</code>, so both the panel
+  tab and the settings window are ringed with the accent and there is no second way to say
+  "selected". This page is kept as the record of why.
+</p>
+
+<div class="grid">
+  <div></div>
+  <div class="hd">light</div>
+  <div class="hd">dark</div>
+  <div class="hd">light · desaturated</div>
+  <div class="hd">dark · desaturated</div>
+
+  <!-- 1. panel tab, design E -->
+  <div class="who"><b>Panel tab — E</b>accent ring</div>
+  <div class="cell light"><div class="seg ring-accent"><button aria-selected="true">Kimi</button><button>DeepSeek</button></div></div>
+  <div class="cell dark"><div class="seg ring-accent"><button aria-selected="true">Kimi</button><button>DeepSeek</button></div></div>
+  <button class="cell light gray" style="border:0" aria-hidden="true" tabindex="-1"><span class="seg ring-accent" style="display:flex;background:var(--seg-track)"><span class="seg-item" style="background:#fff;color:#000;font-weight:500;box-shadow:inset 0 0 0 1px #7d61a6">Kimi</span><span class="seg-item">DeepSeek</span></span></button>
+  <button class="cell dark gray" style="border:0" aria-hidden="true" tabindex="-1"><span class="seg ring-accent" style="display:flex;background:var(--seg-track)"><span class="seg-item" style="background:#3a3a37;color:#fff;font-weight:500;box-shadow:inset 0 0 0 1px #9d88bc">Kimi</span><span class="seg-item">DeepSeek</span></span></button>
+  <div class="metrics">
+    <span>active cell vs track <b>1.14</b> / <b>1.33</b></span>
+    <span>ring vs track <span class="ok">4.46</span> / <span class="ok">4.82</span></span>
+    <span>result: <span class="ok">state survives desaturation</span></span>
+  </div>
+
+  <!-- 2. settings window, today -->
+  <div class="who"><b>Settings — before</b>neutral hairline<span class="tag fail">failed 1.4.11</span></div>
+  <div class="cell light"><div class="seg"><label><input type="radio" name="t1" checked><span class="seg-item">System</span></label><label><input type="radio" name="t1"><span class="seg-item">Light</span></label><label><input type="radio" name="t1"><span class="seg-item">Dark</span></label></div></div>
+  <div class="cell dark"><div class="seg"><label><input type="radio" name="t2" checked><span class="seg-item">System</span></label><label><input type="radio" name="t2"><span class="seg-item">Light</span></label><label><input type="radio" name="t2"><span class="seg-item">Dark</span></label></div></div>
+  <button class="cell light gray" style="border:0" aria-hidden="true" tabindex="-1"><span class="seg" style="display:flex;background:var(--seg-track)"><span class="seg-item" style="background:#fff;color:#000;font-weight:500;box-shadow:inset 0 0 0 1px #e0e0e0">System</span><span class="seg-item">Light</span><span class="seg-item">Dark</span></span></button>
+  <button class="cell dark gray" style="border:0" aria-hidden="true" tabindex="-1"><span class="seg" style="display:flex;background:var(--seg-track)"><span class="seg-item" style="background:#3a3a37;color:#fff;font-weight:500;box-shadow:inset 0 0 0 1px #4e4c4a">System</span><span class="seg-item">Light</span><span class="seg-item">Dark</span></span></button>
+  <div class="metrics">
+    <span>active cell vs track <b>1.14</b> / <b>1.33</b></span>
+    <span>hairline vs track <span class="bad">1.16</span> / <span class="bad">1.82</span></span>
+    <span>result: <span class="bad">desaturated, only 500 vs 400 weight is left</span></span>
+  </div>
+
+  <!-- 3. settings window with the same ring -->
+  <div class="who"><b>Settings — since 2026-11-14</b>same token as the tab<span class="tag fix">adopted</span></div>
+  <div class="cell light"><div class="seg ring-accent"><label><input type="radio" name="t3" checked><span class="seg-item">System</span></label><label><input type="radio" name="t3"><span class="seg-item">Light</span></label><label><input type="radio" name="t3"><span class="seg-item">Dark</span></label></div></div>
+  <div class="cell dark"><div class="seg ring-accent"><label><input type="radio" name="t4" checked><span class="seg-item">System</span></label><label><input type="radio" name="t4"><span class="seg-item">Light</span></label><label><input type="radio" name="t4"><span class="seg-item">Dark</span></label></div></div>
+  <button class="cell light gray" style="border:0" aria-hidden="true" tabindex="-1"><span class="seg ring-accent" style="display:flex;background:var(--seg-track)"><span class="seg-item" style="background:#fff;color:#000;font-weight:500;box-shadow:inset 0 0 0 1px #7d61a6">System</span><span class="seg-item">Light</span><span class="seg-item">Dark</span></span></button>
+  <button class="cell dark gray" style="border:0" aria-hidden="true" tabindex="-1"><span class="seg ring-accent" style="display:flex;background:var(--seg-track)"><span class="seg-item" style="background:#3a3a37;color:#fff;font-weight:500;box-shadow:inset 0 0 0 1px #9d88bc">System</span><span class="seg-item">Light</span><span class="seg-item">Dark</span></span></button>
+  <div class="metrics">
+    <span>active cell vs track <b>1.14</b> / <b>1.33</b></span>
+    <span>ring vs track <span class="ok">4.46</span> / <span class="ok">4.82</span></span>
+    <span>result: <span class="ok">same mark as the tab</span></span>
+  </div>
+</div>
+
+<footer>
+  <p>
+    <b>The cost of not fixing it:</b> a low-vision or bright-screen user sees three cells of
+    nearly equal weight. The selected one is one weight step heavier and nothing else — measured
+    <b>1.16</b> / <b>1.82</b> on the ring, against 3:1 required.
+  </p>
+  <p>
+    <b>What it cost:</b> one more role for the accent. It now means usage (bars, chip) and
+    "this cell is selected" (the ring), declared in PLAN §3.5. The change was one value in
+    <kbd>--seg-ring</kbd>, which both controls already read.
+  </p>
+  <p>
+    Numbers are produced by <kbd>python demo/check_contrast.py</kbd> (the E rows); the neutrals here
+    are the real <kbd>--seg-track</kbd> / <kbd>--seg-on</kbd> / <kbd>--seg-ring</kbd> values.
+  </p>
+</footer>
+
+<script>
+  // The desaturated cells are static mirrors of the live ones drawn with inline
+  // styles, so the page needs no scripting beyond keeping the radio groups apart.
+  // Nothing to do — kept as a module so the file matches the other demos' shape.
+</script>
+</body>
+</html>

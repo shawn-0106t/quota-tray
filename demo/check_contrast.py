@@ -115,6 +115,32 @@ def main() -> int:
         ("D dark  switch track ink-2 56%", ratio(over(white, 0.56, d_dark), d_dark), "3.0"),
     ]
 
+    # Demo E: D's structure and ladder with the accent reworked (2026-11-14).
+    # Only the accent rows are listed — every neutral row is identical to D.
+    e_light, e_dark = d_light, d_dark
+    e_tint_l = over(hex_rgb("#8c74b1"), 0.18, e_light)
+    e_tint_d = over(hex_rgb("#9d88bc"), 0.15, e_dark)
+    e_tile_l, e_tile_d = hex_rgb("#ffffff"), hex_rgb("#3a3a37")
+    e_ring_l, e_ring_d = hex_rgb("#7d61a6"), hex_rgb("#9d88bc")
+    # The ring sits inside the segmented control, so its ground is --seg-track,
+    # not the bar track (see the D tab rows above). It is --seg-ring for both the
+    # panel tab and the settings control since 2026-11-14.
+    e_seg_l, e_seg_d = hex_rgb("#f1f0ec"), hex_rgb("#262624")
+    rows += [
+        ("E light chip ink on violet 18% tint", ratio(hex_rgb("#6c5293"), e_tint_l), "4.5"),
+        ("E light bar #7d61a6 vs track", ratio(hex_rgb("#7d61a6"), d_track_l), "3.0"),
+        ("E light focus #7d61a6 vs paper", ratio(hex_rgb("#7d61a6"), e_light), "3.0"),
+        # The ring has to read against the track it sits on AND the tile it wraps;
+        # the weaker side is the one that matters, and 1.4.11 only needs 3:1 there.
+        ("E light seg ring vs track", ratio(e_ring_l, e_seg_l), "3.0"),
+        ("E light seg ring vs tile", ratio(e_ring_l, e_tile_l), "3.0"),
+        ("E dark  chip ink on violet 15% tint", ratio(hex_rgb("#b5abc4"), e_tint_d), "4.5"),
+        ("E dark  bar #9d88bc vs track", ratio(hex_rgb("#9d88bc"), d_track_d), "3.0"),
+        ("E dark  focus #9d88bc vs paper", ratio(hex_rgb("#9d88bc"), e_dark), "3.0"),
+        ("E dark  seg ring vs track", ratio(e_ring_d, e_seg_d), "3.0"),
+        ("E dark  seg ring vs tile", ratio(e_ring_d, e_tile_d), "3.0"),
+    ]
+
     bad = 0
     for label, r, need in rows:
         ok = r >= float(need)

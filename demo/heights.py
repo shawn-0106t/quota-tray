@@ -55,7 +55,13 @@ def main() -> int:
     base = Path(__file__).resolve().parent
     print(f"{'demo':<4} {'tab':<5} {'state':<8} {'card':>6} {'window':>7}")
     print("-" * 34)
-    for name in ("panel-demo-a.html", "panel-demo-b.html", "panel-demo-c.html", "panel-demo-d.html"):
+    for name in (
+        "panel-demo-a.html",
+        "panel-demo-b.html",
+        "panel-demo-c.html",
+        "panel-demo-d.html",
+        "panel-demo-e.html",
+    ):
         page = base / name
         demo = name.split("-")[-1].split(".")[0].upper()
         for tab in TABS:
