@@ -91,9 +91,15 @@ fn on_hover(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         polling::safe_refresh(&app2).await;
     });
+    // Hover prefetch covers both providers under the same 10s throttle
+    // (PLAN §5.3), so the pane is warm by the time the user opens it.
+    let app3 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        polling::safe_refresh_deepseek(&app3).await;
+    });
 }
 
-/// Tooltip: "Quota Tray  5h X% · week Y%" (+ " (update failed)" on error).
+/// Tooltip: "Quota Tray  5h X% · week Y%" (+ " (fetch failed)" on error).
 pub fn update_tooltip(app: &AppHandle) {
     let st = app.state::<AppState>();
     let last: Option<QuotaResult> = st.last_quota.read().unwrap().clone();
@@ -106,7 +112,7 @@ pub fn update_tooltip(app: &AppHandle) {
                 pct(&l.week)
             );
             if l.error.is_some() {
-                t.push_str(" (update failed)");
+                t.push_str(" (fetch failed)");
             }
             t
         }

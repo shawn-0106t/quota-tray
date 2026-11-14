@@ -1,10 +1,12 @@
-// Quota Tray — Tauri 2 shell hosting the Kimi quota view (the DeepSeek pane
-// lands in P3). Imported from kimi-planbar-tray (rust edition); startup order,
+// Quota Tray — Tauri 2 shell hosting the Kimi quota view; the DeepSeek backend
+// is wired but nothing renders it yet (the provider tab is the remaining P2
+// work). Imported from kimi-planbar-tray (rust edition); startup order,
 // window model and WebView2 recovery are unchanged (docs/SPEC.md section 20).
 // Self-check command line args are handled in main.rs BEFORE the
 // single-instance check.
 
 pub mod credentials;
+pub mod deepseek;
 pub mod panel;
 pub mod polling;
 pub mod quota;
@@ -16,6 +18,7 @@ pub mod theme_watch;
 pub mod tray;
 pub mod update;
 
+use deepseek::DeepseekResult;
 use quota::QuotaResult;
 use serde::{Deserialize, Serialize};
 use settings::SettingsData;
@@ -177,9 +180,23 @@ fn refresh_now(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         polling::safe_refresh(&a1).await;
     });
+    // One Refresh command refreshes both providers (PLAN §5.3); they fail
+    // independently, so a Kimi error never blocks the DeepSeek fetch.
+    let a2 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        polling::safe_refresh_deepseek(&a2).await;
+    });
     tauri::async_runtime::spawn(async move {
         check_and_emit(&app).await;
     });
+}
+
+/// DeepSeek half of the state. Deliberately not folded into `get_state`: the
+/// pane and the provider tab are Phase 2's remaining work, and the Kimi DTO
+/// stays untouched until they land (PLAN §8 order adjustment).
+#[tauri::command]
+fn get_deepseek(app: AppHandle) -> Option<DeepseekResult> {
+    app.state::<AppState>().last_deepseek.read().unwrap().clone()
 }
 
 #[tauri::command]
@@ -219,6 +236,9 @@ fn close_settings(app: AppHandle) {
         let _ = w.hide();
     }
     recovery::note_ui_event(&app, "settings", "hide");
+    // The suppressed blur never arrives: closing settings has to close the
+    // panel's focus loop itself, or the panel sits there until the next blur.
+    panel::collapse_after_settings_close(&app);
 }
 
 /// Skills window: same reuse pattern as settings (SPEC 21). The scan itself
@@ -290,7 +310,13 @@ fn save_settings(app: AppHandle, settings: SaveSettingsArgs) {
         settings::apply_auto_start(&cur);
     }
     theme_watch::apply_now(&app);
-    app.state::<AppState>().reschedule.notify_one();
+    // Both loops restart on the new interval; their own last-good slots and
+    // in-flight fetches are untouched (PLAN §5.3).
+    {
+        let st = app.state::<AppState>();
+        st.schedule(state::Provider::Kimi).restart();
+        st.schedule(state::Provider::Deepseek).restart();
+    }
     close_settings(app);
 }
 
@@ -410,7 +436,11 @@ fn apply_app_data_dir_override(context: &mut tauri::Context<tauri::Wry>) {
 fn build_state() -> AppState {
     let data = settings::load();
     let theme = theme_watch::effective(&data.theme);
-    AppState::new(data, theme)
+    let state = AppState::new(data, theme);
+    // Seed from the last successful payload so the pane has numbers before the
+    // first poll lands (mirrors DeepseekService.StartAutoRefresh -> LoadCache).
+    *state.last_deepseek.write().unwrap() = deepseek::load_cache();
+    state
 }
 
 fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
@@ -454,6 +484,7 @@ fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
 fn invoke_handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         get_state,
+        get_deepseek,
         refresh_now,
         open_settings,
         close_settings,
@@ -499,6 +530,8 @@ pub fn run() {
             tray::build(app.handle())?;
             let h = app.handle().clone();
             tauri::async_runtime::spawn(async move { polling::run(h).await });
+            let h = app.handle().clone();
+            tauri::async_runtime::spawn(async move { polling::run_deepseek(h).await });
             let h = app.handle().clone();
             tauri::async_runtime::spawn(async move { check_and_emit(&h).await });
             let h = app.handle().clone();

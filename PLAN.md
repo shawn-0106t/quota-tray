@@ -151,13 +151,13 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
   有意的取舍：密钥绑当前 Windows 账号，便携盘插到别的账号下解不开（重填即可）；迁移期新旧两版不再共用凭证（旧版读不了密文，新版也不再回写旧文件）。
 - 缓存：`config_dir()/deepseek-cache.json`（原子写 temp + rename，失败保留上次成功值）。
 - 错误码：`key-invalid` / `token-expired` / `rate-limited` / `server-error` / `http-N` / `network-error` / `parse-error`；余额与用量两类错误互相独立。
-- 解析：`data.biz_data` 既可能是对象也可能是数组（取 `[0]`）；`total[]` 按模型聚合，`REQUEST` 计请求不计 token，`PROMPT_CACHE_HIT/MISS_TOKEN` 算命中率；`days[]` 只取本地今天；金额保 double 精度、token 取整；过滤全零占位模型；按本月消费降序取前 4。
+- 解析：`data.biz_data` 既可能是对象也可能是数组（取 `[0]`）；`total[]` 按模型聚合，`REQUEST` 计请求不计 token，`PROMPT_CACHE_HIT/MISS_TOKEN` 算命中率；`days[]` 只取本地今天；金额保 double 精度、token 取整（`round_ties_even`，即 .NET `Math.Round` 的默认中点舍入）；**金额按 1e-8 元量子归整**（与本页钱包 `amountLeft` 同一单位）—— 逐条 f64 求和的末位漂移会让面板显示 `24.279870719999998` 而不是 `24.27987072`，归整后与旧版 decimal 逐位一致；过滤全零占位模型；按本月消费降序取前 4。
 - 阈值：命中率 <60% 标红（不含琥珀档）；余额 < ¥10 或 `is_available=false` 标红。
 
 ### 5.3 轮询与失败语义
 
 - 启动 2s 后首次拉取；正常间隔 1/5/10/30 分钟（默认 5）。
-- 失败：保留上次成功数据 + 状态行提示，30s 后快速重试；成功后回正常周期。
+- 失败：保留上次成功数据 + 状态行提示，30s 后快速重试；成功后回正常周期。失败文案统一为 **`Fetch failed`**（面板 header 红字）与 **` (fetch failed)`**（托盘 tooltip）—— 原来的 `Update failed` 容易被误读成 CLI 版本检查失败，而那是一条独立的路。
 - 托盘悬停预取两个 provider，10s 节流。
 - 两个 provider 各自独立 poller，共用上述语义。
 
@@ -165,7 +165,8 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 
 模型名本来就是数据（`usage[].model`），新模型只会显示原始 ID，官方另有公开端点可提供展示名称；接口路径/参数则是硬编码常量。四层加固：
 
-1. **零成本 + 官方命名元数据**：显示名按四段回落 —— 静态表（已知 id，离线兜底）→ 官方 `GET https://api.deepseek.com/models` 的 `name`（Bearer 同一 API Key，按 id 精确匹配）→ 规则派生（去 `deepseek-` 前缀、`v4-pro` → `V4 Pro`、剥离 `-0`/日期后缀）→ 原始 id。
+1. **零成本 + 官方命名元数据**：显示名按四段回落 —— 官方 `GET https://api.deepseek.com/models` 的 `name`（Bearer 同一 API Key，按 id 精确匹配）→ 静态表（已知 id，离线兜底）→ 规则派生（去 `deepseek-` 前缀、`v4-pro` → `V4 Pro`、剥离 `-0`/日期后缀）→ 原始 id。
+   **优先级于 2026-11-14 调整（用户决定）**：官方名压过静态表，且必须跟随厂商上游的实际命名变动 —— 上游改名后最长 24 小时（缓存 TTL）即反映到面板，不需要发新版本；静态表退化为「拿不到网络时的兜底」。派生只对 `deepseek-*` 形式的 id 生效，含空白的组合行（如 `A & B`）与外部 id 原样显示，不做任何改写。
    刷新与缓存：启动后首次校验抓一次；出现未知 id 时补抓一次（每次启动最多一次）；结果写 `config_dir()/deepseek-models.json`，TTL 24 小时；无 API Key、请求失败或 `name` 缺失都静默回落到下一段。只取 `id` 与 `name`，其余字段（`context_window` / `effort` / `api_capabilities`）与额度面板无关，不解析、不落盘。
    注意：该端点属于 `api.deepseek.com`，与用量所在的 `platform.deepseek.com` 内部接口无关，**不解决路径/参数漂移**；用量口径来自平台控制台聚合，可能出现组合行（`A & B`）或已下线模型，因此**永不因为某个 id 不在 `/models` 里就丢弃它的用量**。
    诊断：`--test-deepseek --verbose` 打印所用端点 + 响应顶层键 + 每模型聚合 + `/models` 命中情况。
@@ -182,7 +183,7 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 - **Win11 圆角**：每个窗口 `DWMWA_WINDOW_CORNER_PREFERENCE = DONOTROUND`，圆角由 CSS 自绘。
 - **便携模式**：exe 旁存在 `portable.dat` 时配置写 exe 目录，否则 `%APPDATA%\QuotaTray`。
 - **开机自启**：HKCU Run，仅用户域，永不请求管理员权限。
-- **面板交互**：托盘左键开合；失焦自动隐藏（settings/skills 打开时抑制）；隐藏后 300ms 内的托盘点击忽略（同一次点击造成的失焦）。
+- **面板交互**：托盘左键开合；失焦自动隐藏（settings/skills 打开时抑制）；隐藏后 300ms 内的托盘点击忽略（同一次点击造成的失焦）。**关掉设置窗要补一次收起判定**：抑制期间那次 blur 已经被丢掉，关窗也不会再产生新的 blur，所以 `close_settings` 之后 150ms 检查「面板可见且未获焦点」则收起（150ms 是留给 Windows 把焦点交还面板的时间）。
 - **WebView2 recovery**：沿用 kimi 的策略——`ProcessFailed` 时就地重建窗口，不重启进程，`ExitRequested` 时 `prevent_exit`；重建单飞 + 1/2/5s 退避 + 30s 内 3 次封顶；诊断写 `webview.log`，永不写 token。
 - **错误呈现**：所有 IO / 注册表 / 进程 / HTTP 失败都静默吞掉，只通过界面文字与状态字段暴露，**不弹对话框**。
 - **settings.json**：`{ Theme, RefreshMinutes, AutoStart, ActiveTab }`，PascalCase，`serde(default)` 容忍缺字段；`ActiveTab` 缺省回 `kimi`。
@@ -194,7 +195,7 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 | **P0（已完成）** | 四版静态 demo + 设计定稿 + 本文件 | `demo/compare.html` 可切主题/provider/状态；`heights.py` 出高度表；`check_contrast.py` 全通过 |
 | **P1（已完成）** | 仓库化、拷入 `kimi-planbar-tray/rust/` 基线、改名 Quota Tray、拷入 SPEC/LICENSE | `cargo build` + `npm run build` + `tsc --noEmit` 通过；`--test-fetch` / `--test-ui` 通过；旧 UI 能跑 |
 | **P2（视觉与高度已完成，tab 顺延）** | 面板 UI 重写（D 版 token）+ tab + 自适应高度。**已完成**：四个窗口统一 D 版视觉（含设置/技能/托盘菜单）、面板与设置窗内容自适应、kimi-cu 端到端验过 | 连点 tab 30 次无跳位、底部贴边不变；`--test-ui` 通过；截图与 `panel-demo-d.html` 对照一致。**剩余**：分段 tab + DeepSeek 面板（见下方顺序调整） |
-| **P3（下一个）** | DeepSeek 后端移植 + 双 poller + fixtures 解析测试 | `cargo test` 通过；同机对比旧版 `--test-fetch` 逐字段一致；`--test-deepseek` 通过 |
+| **P3（已完成 2026-11-14）** | DeepSeek 后端移植 + 双 poller + fixtures 解析测试 | ✅ `cargo test` 18 passed；✅ 同机对比旧版 `--test-fetch` 逐字段一致（仅展示名按 §6.1 取官方名）；✅ `--test-deepseek` 通过；旧版 `--test-fixtures` ALL PASS |
 | **P4** | 设置窗（通用 / Kimi 只读 / DeepSeek 凭证）+ 托盘合并 tooltip + 登录捕获窗 | 设置落盘后重启生效；真账号走通捕获 → 验证 → 保存 → 面板出数；`--test-login` 通过 |
 | **P5** | 打包、端到端验证、README、独立 code review | `npx tauri build` 出单 exe；`--test-fetch` / `--test-deepseek` / `--test-ui` / `--test-login` 全绿；端到端脚本通过；审查报告无 Blocker |
 

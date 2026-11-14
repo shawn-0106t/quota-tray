@@ -11,7 +11,7 @@ Guidance for AI coding agents working in this repository. Read this first; then 
 
 This repository is the merge of two earlier first-party projects: `kimi-planbar-tray` (Tauri/rust edition) and `deepseek-planbar` (WPF edition). See `NOTICE` for lineage.
 
-**Current state: Phase 3 (DeepSeek backend) is next.** P1 (baseline import) and the visual half of P2 are landed: all four windows use the D tokens and layout (`demo/panel-demo-d.html`), the panel and the settings window are content-sized, and the Kimi pane renders live data. The segmented Kimi/DeepSeek tab is deliberately sequenced **after** P3 (user decision, 2026-11-14) so it can be built against real DeepSeek data instead of an empty placeholder. Follow `PLAN.md` §8.
+**Current state: Phase 3 (DeepSeek backend) is landed; the segmented tab is next.** P1 (baseline import), the visual half of P2 (all four windows on the D tokens/layout) and P3 (DeepSeek credentials, balance, usage, display names, dual pollers, `--test-deepseek`, fixture tests) are done. Nothing renders DeepSeek yet — the data stops at the `get_deepseek` command and the `deepseek-updated` event. The Kimi/DeepSeek tab was deliberately sequenced **after** P3 (user decision, 2026-11-14) so it could be built against real DeepSeek data instead of an empty placeholder; that is the remaining P2 work. Follow `PLAN.md` §8.
 
 ## Source of truth
 
@@ -46,7 +46,9 @@ src-tauri/            # Rust backend (Tauri 2)
   tauri.conf.json     # 4 windows: main 424x520, settings 404x464, skills 404x520, menu 188x160
   capabilities/default.json
   icons/              # inherited K mark (replacement still undecided, PLAN.md §9)
-  src/                # main/lib/credentials/quota/polling/tray/panel/settings/skills/update/theme_watch/recovery/state
+  src/                # main/lib/credentials/quota/deepseek/polling/tray/panel/settings/skills/update/theme_watch/recovery/state
+    deepseek/         # mod (types, fetch, cache) + credentials (DPAPI) + client (HTTP) + parse (pure, tested)
+  tests/fixtures/     # inert JSON ported from deepseek-planbar; read by include_str! in parse.rs tests
   build.rs / Cargo.lock
 docs/SPEC.md          # inherited Kimi behaviour spec (Chinese)
 docs/SPEC_EN.md       # ... English mirror, same chapter numbers
@@ -87,13 +89,17 @@ Runtime checks are command-line flags, dispatched **before** the single-instance
 
 ```bash
 quota-tray.exe --test-fetch        # Kimi quota once, JSON to stdout
+quota-tray.exe --test-deepseek     # DeepSeek balance + usage once, JSON to stdout
+quota-tray.exe --test-deepseek --verbose   # ... plus PLAN §6.1 diagnostics on stderr
 quota-tray.exe --test-update       # CLI version check once, one line: local=… latest=… updateAvailable=… checkFailed=…
 quota-tray.exe --test-ui           # construct every window, print "… OK" lines
 ```
 
-`--test-deepseek` and `--test-login` belong to P3 / P4 and are **not implemented yet** — an unknown flag falls through to the normal GUI launch, so do not script them before those phases land.
+`--test-deepseek --verbose` prints `credential source`, the endpoint and response shape it used, the per-model aggregation and the `/models` hit, all on **stderr** so stdout stays valid JSON. It runs on the real config dir, so the first invocation performs the one-time import from `~/.deepseek-planbar/credentials.json`.
 
-`cargo test` covers pure logic only: today that is the recovery classifier/backoff/log-tail tests and the skills frontmatter parser (5 tests). DeepSeek parsing tests arrive with P3, against fixtures ported from `deepseek-planbar` (there is no `tests/` tree in this repository yet).
+`--test-login` belongs to P4 and is **not implemented yet** — an unknown flag falls through to the normal GUI launch, so do not script it before that phase lands.
+
+`cargo test` covers pure logic only: 18 tests — the recovery classifier/backoff/log-tail pair, the skills frontmatter parser, and the DeepSeek `parse`/`credentials` suite. The DeepSeek numbers are asserted against the four fixtures in `src-tauri/tests/fixtures/` (ported from `deepseek-planbar/tests/fixtures/`, pulled in with `include_str!`, so `tests/` holds data only). `FixtureTests.cs` in the parent repo asserts the same values; running the old exe with `--test-fixtures <abs path>` and the Rust suite together is how parse equivalence is proven — the live account moves every minute, so a numeric diff between two live fetches proves nothing.
 
 Design review is part of the deliverable: after any visual change, regenerate screenshots and compare against `demo/panel-demo-d.html` at 424px, in both themes:
 
@@ -123,7 +129,7 @@ Inherited from `kimi-planbar-tray`:
 - **Extra Usage units**: `boosterWallet.balance.amountLeft` is 1e-8 yuan → cents via `(raw + 500000) / 1000000`. `priceInCents` is already cents. All API numbers are modelled as strings, numeric fallback tolerated.
 - **`isEnabled=false`**: the wallet balance is an estimate, not real — the whole card shows `Not activated`.
 - **Credential chain**: `~/.kimi-code/credentials/kimi-code.json` `access_token` (only if `expires_at` > now + 30 s) → `api_key` in `~/.kimi-code/config.toml` whose provider `base_url` contains `api.kimi.com/coding`. `KIMI_CODE_HOME` overrides the home dir.
-- **Failure semantics**: keep last-good values, show "Update failed", retry after 30 s, return to the configured interval on success.
+- **Failure semantics**: keep last-good values, show "Fetch failed", retry after 30 s, return to the configured interval on success.
 - **Single instance**: named mutex `QuotaTray.SingleInstance` — do not rename.
 - **DPI**: size windows with `LogicalSize`, position them with `PhysicalPosition`.
 - **Portable mode**: empty `portable.dat` next to the exe moves `settings.json` to the exe directory.
@@ -134,10 +140,11 @@ Inherited from `kimi-planbar-tray`:
 New in this project:
 
 - **Panel height**: content-driven and **bottom-anchored**. The frontend measures and reports (`panel_height`); the backend resizes with `LogicalSize` and re-pins the window's bottom-right corner with `PhysicalPosition`, clamped to the work area. The settings window is content-sized too (`settings_height`) and re-centred instead. Never leave the pane's bottom padding to a parent container — the last row must carry it, or that row reads optically high (this was a real defect in the demos; see `PLAN.md` §3.4).
-- **Two provider pollers** share the interval and failure semantics but must not overwrite each other's last-good state.
-- **DeepSeek parsing**: `data.biz_data` is an object for `amount` and an array for `cost` — tolerate both; `REQUEST` counts requests, not tokens; new token types fall through to the total; all-zero placeholder models are filtered; top 4 by month cost.
+- **Two provider pollers** share the interval and failure semantics but must not overwrite each other's last-good state. Each owns its own `Schedule` (reschedule/retime Notifies): `notify_one` wakes a single waiter, so a shared pair would starve one loop.
+- **DeepSeek parsing**: `data.biz_data` is an object for `amount` and an array for `cost` — tolerate both; `REQUEST` counts requests, not tokens, and is excluded from money too; new token types fall through to the total; a model with an empty `usage[]` still gets an all-zero entry; all-zero placeholder models are filtered; top 4 by month cost.
+- **DeepSeek money**: token counts round with `round_ties_even` (= .NET `Math.Round`), and money aggregates are snapped to 1e-8 yuan. Raw f64 sums drift in the last bits and print `24.279870719999998` where the console and the WPF version show `24.27987072`; touching this makes the two apps disagree digit for digit.
 - **DeepSeek endpoints**: constants + candidate fallback + learn-from-login-window (`PLAN.md` §6). Model names are data — never hardcode a model list.
-- **Model names are metadata, not constants**: display name falls back static table → official `GET https://api.deepseek.com/models` `name` → derived → raw id. Never drop a model's usage because its id is missing from `/models` — the usage endpoint aggregates the platform console, which also reports combined rows (`A & B`) and retired models. Long official names must ellipsis inside the row, never push the cost out.
+- **Model names are metadata, not constants**: display name falls back official `GET https://api.deepseek.com/models` `name` → static table → derived → raw id. The official name **wins** (user decision 2026-11-14): a vendor rename must reach the panel within the 24 h cache TTL without a new release, so never put the static table back in front. Never drop a model's usage because its id is missing from `/models` — the usage endpoint aggregates the platform console, which also reports combined rows (`A & B`) and retired models. Derivation only rewrites `deepseek-*` ids; anything containing whitespace stays verbatim. Long official names must ellipsis inside the row, never push the cost out.
 - **Colour semantics**: blue = usage, red = failure only. Never colour a high-usage percentage; `Available` stays neutral.
 
 ## Security considerations

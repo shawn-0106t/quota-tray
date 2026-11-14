@@ -1,12 +1,26 @@
 // Refresh scheduling, 1:1 port of QuotaService.SafeRefresh/Reschedule (SPEC 16.5):
 // first refresh 2s after start, period = max(1, RefreshMinutes), failure keeps
-// last-known-good data and retries fast after 30s.
+// last-known-good data and retries fast after 30s. Both providers share that
+// contract but run their own loop, schedule and last-good slot (PLAN §5.3).
 
+use crate::deepseek::{self, DeepseekResult};
 use crate::quota::{self, QuotaResult};
-use crate::state::AppState;
+use crate::state::{AppState, Provider};
 use crate::tray;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
+
+/// The configured interval, clamped to at least one minute.
+fn period(app: &AppHandle) -> Duration {
+    let mins = app
+        .state::<AppState>()
+        .settings
+        .read()
+        .unwrap()
+        .refresh_minutes
+        .max(1) as u64;
+    Duration::from_secs(mins.saturating_mul(60))
+}
 
 pub async fn safe_refresh(app: &AppHandle) -> QuotaResult {
     let mut r = quota::fetch().await;
@@ -23,24 +37,61 @@ pub async fn safe_refresh(app: &AppHandle) -> QuotaResult {
     // Every refresh (scheduled, manual, or hover) moves the next scheduled
     // tick: 30s after a failure, one period after a success (SPEC 16.5 step 3,
     // mirrors _timer.Change in QuotaService.SafeRefresh)
-    let mins = st.settings.read().unwrap().refresh_minutes.max(1) as u64;
     let delay = if r.error.is_some() {
         Duration::from_secs(30)
     } else {
-        Duration::from_secs(mins.saturating_mul(60))
+        period(app)
     };
-    *st.retime_delay.lock().unwrap() = Some(delay);
-    st.retime.notify_one();
+    st.schedule(Provider::Kimi).retime(delay);
+    r
+}
+
+/// DeepSeek counterpart of `safe_refresh`. Same failure semantics, separate
+/// last-good slot: the two providers never overwrite each other (PLAN §5.3).
+pub async fn safe_refresh_deepseek(app: &AppHandle) -> DeepseekResult {
+    let mut r = deepseek::fetch().await;
+    let st = app.state::<AppState>();
+    if r.has_error() {
+        let last = st.last_deepseek.read().unwrap().clone();
+        if let Some(l) = &last {
+            r.fill_missing_from(l);
+        }
+    }
+    *st.last_deepseek.write().unwrap() = Some(r.clone());
+    // Nothing renders DeepSeek yet (the provider tab is Phase 2's remainder),
+    // so the event is what the pane will subscribe to.
+    let _ = app.emit("deepseek-updated", &r);
+    if r.balance.is_some() || r.usage.is_some() {
+        deepseek::save_cache(&r);
+    }
+    let delay = if r.has_error() {
+        Duration::from_secs(30)
+    } else {
+        period(app)
+    };
+    st.schedule(Provider::Deepseek).retime(delay);
     r
 }
 
 /// Polling loop. `reschedule` notify restarts the cycle with the 2s first
-/// delay (mirrors QuotaService.Reschedule's timer.Change(2s, period)).
+/// delay (mirrors QuotaService.Reschedule's timer.Change(2s, period)); entries
+/// on the Manual or Hover path re-time the next tick through `retime`.
 pub async fn run(app: AppHandle) {
+    run_loop(app, Provider::Kimi).await;
+}
+
+pub async fn run_deepseek(app: AppHandle) {
+    run_loop(app, Provider::Deepseek).await;
+}
+
+async fn run_loop(app: AppHandle, provider: Provider) {
     let mut next = Duration::from_secs(2);
     loop {
-        let reschedule = app.state::<AppState>().reschedule.clone();
-        let retime = app.state::<AppState>().retime.clone();
+        let (reschedule, retime) = {
+            let st = app.state::<AppState>();
+            let schedule = st.schedule(provider);
+            (schedule.reschedule.clone(), schedule.retime.clone())
+        };
         let wall_start = std::time::SystemTime::now();
         tokio::select! {
             _ = tokio::time::sleep(next) => {}
@@ -48,13 +99,13 @@ pub async fn run(app: AppHandle) {
                 // Drain any stale retime hint queued before this reschedule:
                 // the notify permit survives `continue`, and a leftover delay
                 // would otherwise overwrite the 2s first-refresh tick.
-                let _ = app.state::<AppState>().retime_delay.lock().unwrap().take();
+                app.state::<AppState>().schedule(provider).clear_delay();
                 next = Duration::from_secs(2);
                 continue;
             }
             _ = retime.notified() => {
-                let hint = app.state::<AppState>().retime_delay.lock().unwrap().take();
-                if let Some(d) = hint {
+                let delay = app.state::<AppState>().schedule(provider).take_delay();
+                if let Some(d) = delay {
                     next = d;
                 }
                 continue;
@@ -67,22 +118,18 @@ pub async fn run(app: AppHandle) {
                 crate::recovery::note_ui_event(
                     &app,
                     "app",
-                    &format!("wake-gap={}s", wall.as_secs()),
+                    &format!("{}-wake-gap={}s", provider.label(), wall.as_secs()),
                 );
             }
         }
-        let r = safe_refresh(&app).await;
-        next = if r.error.is_some() {
+        let errored = match provider {
+            Provider::Kimi => safe_refresh(&app).await.error.is_some(),
+            Provider::Deepseek => safe_refresh_deepseek(&app).await.has_error(),
+        };
+        next = if errored {
             Duration::from_secs(30) // fast retry after failure
         } else {
-            let mins = app
-                .state::<AppState>()
-                .settings
-                .read()
-                .unwrap()
-                .refresh_minutes
-                .max(1) as u64;
-            Duration::from_secs(mins.saturating_mul(60))
+            period(&app)
         };
     }
 }

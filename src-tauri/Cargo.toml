@@ -23,12 +23,17 @@ reqwest = { version = "0.13", features = ["json"] }
 regex = "1"
 chrono = { version = "0.4", features = ["serde"] }
 winreg = "0.56"
+# DPAPI blob encoding for the DeepSeek credential file (PLAN §5.2). Pinned to
+# the version already resolved in Cargo.lock, so no new crate is pulled in.
+base64 = "0.22"
 # Direct dependency for the WebView2 ProcessFailed event (SPEC 22). Must match
 # the version tauri-runtime-wry resolves (0.39) so the COM types are identical.
 webview2-com = "0.39"
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Security",
+    # CryptProtectData/CryptUnprotectData for the DeepSeek credential file
+    "Win32_Security_Cryptography",
     "Win32_System_Threading",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",

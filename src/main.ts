@@ -73,7 +73,9 @@ function renderQuota(r: QuotaResult | null): void {
     lastUpdated.textContent = '';
     lastUpdated.classList.remove('bad');
   } else if (r.error) {
-    lastUpdated.textContent = 'Update failed';
+    // "Fetch failed", not "Update failed": this is the quota fetch. The CLI
+    // version check is a separate path (PLAN §5.3).
+    lastUpdated.textContent = 'Fetch failed';
     lastUpdated.classList.add('bad');
   } else {
     const d = new Date(r.fetchedAt);

@@ -1,5 +1,6 @@
-// Entry point. Self-check args (--test-fetch / --test-update / --test-ui) run
-// BEFORE any GUI or single-instance logic, mirroring App.OnStartup (SPEC 19).
+// Entry point. Self-check args (--test-fetch / --test-update / --test-deepseek
+// / --test-ui) run BEFORE any GUI or single-instance logic, mirroring
+// App.OnStartup (SPEC 19).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -51,6 +52,23 @@ fn main() {
     // Headless quota self-check: fetch once, print indented JSON, exit
     if args.iter().any(|a| a == "--test-fetch") {
         let r = block_on(quota_tray_lib::quota::fetch());
+        match serde_json::to_string_pretty(&r) {
+            Ok(j) => println!("{j}"),
+            Err(e) => println!("serialize error: {e}"),
+        }
+        return;
+    }
+
+    // Headless DeepSeek self-check: one fetch, JSON to stdout. `--verbose`
+    // adds the PLAN §6.1 diagnostics (credential source, endpoints, response
+    // shape, per-model aggregation, /models hits) on stderr so stdout stays
+    // pipeable. Neither stream ever carries a token or an API key.
+    if args.iter().any(|a| a == "--test-deepseek") {
+        let verbose = args.iter().any(|a| a == "--verbose");
+        let (r, diag) = block_on(quota_tray_lib::deepseek::fetch_diag(verbose));
+        for line in diag {
+            eprintln!("{line}");
+        }
         match serde_json::to_string_pretty(&r) {
             Ok(j) => println!("{j}"),
             Err(e) => println!("serialize error: {e}"),

@@ -1,0 +1,362 @@
+// DeepSeek HTTP layer (PLAN §5.2 / §6):
+//  - balance and model metadata live on api.deepseek.com behind the API key
+//  - usage lives on the platform console behind the browser user token, so the
+//    request has to look like the console's own fetch
+//  - the usage base is a candidate chain: 404/410 walks to the next one and the
+//    winner is remembered, so a path move only costs one extra request
+// Every failure maps to a PLAN §5.2 error code and is never raised as a panic
+// or a dialog.
+
+use crate::deepseek::parse;
+use crate::deepseek::{BalanceInfo, Diag, UsageInfo};
+use crate::settings;
+use chrono::{DateTime, Datelike, Duration, Local};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
+
+const BALANCE_URL: &str = "https://api.deepseek.com/user/balance";
+/// Display names only; this endpoint never drives the usage numbers (PLAN §6.1).
+const MODELS_URL: &str = "https://api.deepseek.com/models";
+
+/// Fixed headers that make the console accept a plain fetch. If upstream
+/// tightens validation these two constants are the only knobs (PLAN §6.2).
+const APP_VERSION: &str = "1.0.0";
+const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
+                          (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36";
+
+/// Tried in order; the first one that answers is remembered (PLAN §6.2).
+const USAGE_BASES: &[&str] = &[
+    "https://platform.deepseek.com/api/v0/usage",
+    "https://platform.deepseek.com/api/v1/usage",
+];
+
+const ENDPOINTS_FILE: &str = "deepseek-endpoints.json";
+const MODELS_FILE: &str = "deepseek-models.json";
+const MODELS_TTL_HOURS: i64 = 24;
+
+/// At most one refreshing `/models` request per process: an id the endpoint
+/// does not know must not trigger a request on every poll (PLAN §6.1).
+static MODELS_REFETCHED: AtomicBool = AtomicBool::new(false);
+
+fn client() -> Option<&'static Client> {
+    static CLIENT: OnceLock<Option<Client>> = OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            Client::builder()
+                // The parent app used a 15s HttpClient timeout.
+                .timeout(std::time::Duration::from_secs(15))
+                .build()
+                .ok()
+        })
+        .as_ref()
+}
+
+pub async fn fetch_balance(api_key: &str) -> Result<BalanceInfo, String> {
+    let Some(client) = client() else {
+        return Err("network-error".to_string());
+    };
+    let resp = client
+        .get(BALANCE_URL)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|_| "network-error".to_string())?;
+    if !resp.status().is_success() {
+        return Err(balance_error(resp.status().as_u16()));
+    }
+    let body = resp
+        .text()
+        .await
+        .map_err(|_| "network-error".to_string())?;
+    parse::parse_balance(&body).map_err(|_| "parse-error".to_string())
+}
+
+pub async fn fetch_usage(user_token: &str, diag: &mut Diag) -> Result<UsageInfo, String> {
+    let now = Local::now();
+    let month = now.month();
+    let year = now.year();
+    let amount = fetch_usage_body("amount", month, year, user_token, diag).await?;
+    let cost = fetch_usage_body("cost", month, year, user_token, diag).await?;
+    let usage = parse::parse_usage(&amount, &cost).map_err(|_| "parse-error".to_string())?;
+    if diag.enabled {
+        for m in &usage.by_model {
+            diag.log(format!(
+                "model {}: tokens={} requests={} cost={:.8} hitRate={} todayTokens={} todayCost={:.8}",
+                m.model,
+                m.month_tokens,
+                m.month_requests,
+                m.month_cost,
+                m.cache_hit_rate
+                    .map(|v| format!("{v:.4}"))
+                    .unwrap_or_else(|| "null".to_string()),
+                m.today_tokens,
+                m.today_cost,
+            ));
+        }
+    }
+    Ok(usage)
+}
+
+async fn fetch_usage_body(
+    kind: &str,
+    month: u32,
+    year: i32,
+    user_token: &str,
+    diag: &mut Diag,
+) -> Result<String, String> {
+    let remembered = load_usage_base();
+    let mut bases: Vec<String> = Vec::new();
+    if let Some(base) = &remembered {
+        bases.push(base.clone());
+    }
+    for base in USAGE_BASES {
+        bases.push((*base).to_string());
+    }
+    bases.dedup();
+
+    let mut last_error = "server-error".to_string();
+    for base in &bases {
+        let Some(client) = client() else {
+            return Err("network-error".to_string());
+        };
+        let url = format!("{base}/{kind}?month={month}&year={year}");
+        diag.log(format!("usage/{kind} GET {url}"));
+        let resp = match client
+            .get(&url)
+            .header("Authorization", format!("Bearer {user_token}"))
+            .header("x-app-version", APP_VERSION)
+            .header("User-Agent", BROWSER_UA)
+            .header("Accept", "*/*")
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(_) => return Err("network-error".to_string()),
+        };
+        let status = resp.status().as_u16();
+        if !(200..300).contains(&status) {
+            let error = usage_error(status);
+            if status == 404 || status == 410 {
+                diag.log(format!("usage/{kind} {url} -> {error}, next candidate"));
+                last_error = error;
+                continue;
+            }
+            diag.log(format!("usage/{kind} {url} -> {error}"));
+            return Err(error);
+        }
+        let body = resp
+            .text()
+            .await
+            .map_err(|_| "network-error".to_string())?;
+        log_top_level_keys(&body, kind, diag);
+        if remembered.as_deref() != Some(base.as_str()) {
+            save_usage_base(base);
+            diag.log(format!("usage/{kind} endpoint remembered: {base}"));
+        }
+        return Ok(body);
+    }
+    Err(last_error)
+}
+
+fn log_top_level_keys(body: &str, kind: &str, diag: &mut Diag) {
+    if !diag.enabled {
+        return;
+    }
+    let Ok(Value::Object(map)) = serde_json::from_str::<Value>(body) else {
+        diag.log(format!("usage/{kind} body is not a JSON object"));
+        return;
+    };
+    diag.log(format!(
+        "usage/{kind} top-level keys: {}",
+        join_keys(map.keys())
+    ));
+    if let Some(Value::Object(data)) = map.get("data") {
+        diag.log(format!("usage/{kind} data keys: {}", join_keys(data.keys())));
+        match data.get("biz_data") {
+            Some(Value::Array(list)) => diag.log(format!(
+                "usage/{kind} biz_data is an array[{}]",
+                list.len()
+            )),
+            Some(Value::Object(biz)) => diag.log(format!(
+                "usage/{kind} biz_data keys: {}",
+                join_keys(biz.keys())
+            )),
+            _ => diag.log(format!("usage/{kind} biz_data missing")),
+        }
+    }
+}
+
+fn join_keys<'a>(keys: impl Iterator<Item = &'a String>) -> String {
+    keys.map(|k| k.as_str()).collect::<Vec<_>>().join(", ")
+}
+
+/// Balance and usage report 401 differently on purpose: the balance 401 means
+/// a dead API key, the usage 401 means the browser session token expired.
+fn balance_error(status: u16) -> String {
+    match status {
+        401 => "key-invalid".to_string(),
+        429 => "rate-limited".to_string(),
+        s if s >= 500 => "server-error".to_string(),
+        s => format!("http-{s}"),
+    }
+}
+
+fn usage_error(status: u16) -> String {
+    match status {
+        401 => "token-expired".to_string(),
+        429 => "rate-limited".to_string(),
+        s if s >= 500 => "server-error".to_string(),
+        s => format!("http-{s}"),
+    }
+}
+
+#[derive(Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct Endpoints {
+    usage_base: String,
+}
+
+fn load_usage_base() -> Option<String> {
+    let text = std::fs::read_to_string(settings::config_dir().join(ENDPOINTS_FILE)).ok()?;
+    let memo: Endpoints = serde_json::from_str(&text).ok()?;
+    Some(memo.usage_base).filter(|b| !b.is_empty())
+}
+
+fn save_usage_base(base: &str) {
+    let dir = settings::config_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let memo = Endpoints {
+        usage_base: base.to_string(),
+    };
+    if let Ok(json) = serde_json::to_string_pretty(&memo) {
+        let _ = std::fs::write(dir.join(ENDPOINTS_FILE), json);
+    }
+}
+
+#[derive(Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct ModelsCache {
+    fetched_at: Option<DateTime<Local>>,
+    /// id -> official display name. Only `id` and `name` are kept; the other
+    /// fields on that endpoint are irrelevant to a quota panel (PLAN §6.1).
+    names: BTreeMap<String, String>,
+}
+
+fn load_models() -> ModelsCache {
+    std::fs::read_to_string(settings::config_dir().join(MODELS_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+fn save_models(cache: &ModelsCache) {
+    let dir = settings::config_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    if let Ok(json) = serde_json::to_string_pretty(cache) {
+        let _ = std::fs::write(dir.join(MODELS_FILE), json);
+    }
+}
+
+/// Put the official display name in front of the static/derived one (PLAN §6.1
+/// amended 2026-11-14: the live `/models` name wins, so a vendor rename reaches
+/// the panel without a new release). Everything here is best-effort: no API
+/// key, a failed request or a missing name all fall through silently.
+pub async fn apply_display_names(usage: &mut UsageInfo, api_key: Option<&str>, diag: &mut Diag) {
+    let mut cache = load_models();
+    let fresh = cache.fetched_at.is_some_and(|at| {
+        Local::now().signed_duration_since(at) < Duration::hours(MODELS_TTL_HOURS)
+    });
+    // Refresh when the cache is stale, or when a model showed up that the
+    // cache has never seen (a release can ship a new id mid-day).
+    let unknown = usage
+        .by_model
+        .iter()
+        .any(|m| !cache.names.contains_key(&m.model));
+    let want = !fresh || (unknown && !cache.names.is_empty());
+    diag.log(format!(
+        "models cache: {} entries, fresh={fresh}, unknownId={unknown}",
+        cache.names.len()
+    ));
+    if want {
+        if let Some(key) = api_key {
+            if !MODELS_REFETCHED.swap(true, Ordering::SeqCst) {
+                if let Some(names) = fetch_models(key, diag).await {
+                    cache.names = names;
+                    cache.fetched_at = Some(Local::now());
+                    save_models(&cache);
+                }
+            }
+        }
+    }
+    for m in &mut usage.by_model {
+        match cache.names.get(&m.model).filter(|n| !n.is_empty()) {
+            Some(official) => {
+                m.display_name = official.clone();
+                diag.log(format!("model {}: name from /models", m.model));
+            }
+            None => diag.log(format!(
+                "model {}: name {}=static/derived",
+                m.model, m.display_name
+            )),
+        }
+    }
+}
+
+async fn fetch_models(api_key: &str, diag: &mut Diag) -> Option<BTreeMap<String, String>> {
+    let client = client()?;
+    let resp = match client
+        .get(MODELS_URL)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .header("Accept", "application/json")
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(_) => {
+            diag.log("models GET -> network-error");
+            return None;
+        }
+    };
+    if !resp.status().is_success() {
+        diag.log(format!("models GET -> http-{}", resp.status().as_u16()));
+        return None;
+    }
+    let body = match resp.text().await {
+        Ok(b) => b,
+        Err(_) => {
+            diag.log("models GET -> unreadable body");
+            return None;
+        }
+    };
+    let root: Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(_) => {
+            diag.log("models GET -> parse-error");
+            return None;
+        }
+    };
+    let Some(list) = root.get("data").and_then(Value::as_array) else {
+        diag.log("models GET -> no data array");
+        return None;
+    };
+    let mut names = BTreeMap::new();
+    for item in list {
+        let (Some(id), Some(name)) = (
+            item.get("id").and_then(Value::as_str),
+            item.get("name").and_then(Value::as_str),
+        ) else {
+            continue;
+        };
+        if id.is_empty() || name.is_empty() {
+            continue;
+        }
+        names.insert(id.to_string(), name.to_string());
+    }
+    diag.log(format!("models GET -> {} id/name pairs", names.len()));
+    Some(names)
+}

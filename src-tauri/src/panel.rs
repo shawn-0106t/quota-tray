@@ -235,6 +235,31 @@ pub fn on_main_blur(app: &AppHandle) {
     }
 }
 
+/// Closing the settings window is a focus change the panel never observes:
+/// its blur was suppressed while settings was open, and hiding settings does
+/// not produce a new `Focused(false)` for the panel. Close the loop here.
+///
+/// The check waits a beat because Windows usually hands focus back to the
+/// panel after the child window disappears; hiding on the instant check would
+/// fight that.
+pub fn collapse_after_settings_close(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let st = app.state::<AppState>();
+        if st.settings_open.load(Ordering::SeqCst) || st.skills_open.load(Ordering::SeqCst) {
+            return; // reopened while the settle timer ran
+        }
+        let Some(panel) = app.get_webview_window("main") else {
+            return;
+        };
+        if !panel.is_visible().unwrap_or(false) || panel.is_focused().unwrap_or(false) {
+            return;
+        }
+        start_hide(&app);
+    });
+}
+
 /// ShowAtCursor (SPEC 10.3): physical cursor px -> DIP, clamp horizontally,
 /// flip up near the bottom edge, then steal the foreground so the menu
 /// actually receives focus (otherwise Deactivated closes it at once).
