@@ -325,6 +325,17 @@ async fn save_credential(app: AppHandle, field: String, value: String) -> Result
 #[tauri::command]
 fn clear_credentials(app: AppHandle) {
     deepseek::credentials::clear();
+    // A sign-in window that is still open holds the console's own session: its
+    // hook would capture the token again on the next request and the Clear
+    // would look like it did nothing. Close it, and make any verification that
+    // is already in flight drop its result.
+    {
+        let st = app.state::<AppState>();
+        st.login.epoch.fetch_add(1, Ordering::SeqCst);
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move { login::close(&handle) });
+    }
+    recovery::log("credentials: cleared (apiKey=false userToken=false)");
     let _ = app.emit("deepseek-credentials-changed", ());
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {

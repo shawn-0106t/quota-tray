@@ -231,7 +231,18 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   el('btn-clear').addEventListener('click', () => {
-    invoke('clear_credentials').catch(() => undefined);
+    // The statuses refresh through `deepseek-credentials-changed`; this note
+    // explains why a usage token can come back afterwards — signing in stores
+    // the token the console already has, which is the point of that window.
+    invoke('clear_credentials')
+      .then(() => {
+        const note = el('ds-note');
+        note.textContent =
+          'Cleared. Signing in again stores the usage token the console already has.';
+        note.hidden = false;
+        reportHeight();
+      })
+      .catch(() => undefined);
   });
 
   el('btn-save-cred').addEventListener('click', () => {

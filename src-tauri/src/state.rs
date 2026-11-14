@@ -89,6 +89,9 @@ pub struct LoginState {
     /// costs the user a whole sign-in, so it is retried once the current
     /// verification finishes (login.rs).
     pub pending: Mutex<Option<String>>,
+    /// Bumped by Clear. A verification that started before the bump must not
+    /// save its token afterwards, or "Clear" would silently undo itself.
+    pub epoch: std::sync::atomic::AtomicU64,
 }
 
 impl LoginState {

@@ -81,6 +81,12 @@ the English notes first, then the Chinese mirror.
 - The manual fallback survived: a collapsed "Paste a credential instead" block
   in the settings window verifies each non-empty field and saves only what
   passes.
+- `Clear` now also closes an open sign-in window and discards any verification
+  that is still in flight, so a capture cannot put the usage token back right
+  after the user removed it. The settings window says what can still bring it
+  back: opening "Sign in…" stores the token the console's own session already
+  carries — that is that window's job, and it is why a cleared token can
+  reappear without the user typing anything.
 - `--test-login [--verbose]`: credential source, a real token verification, then
   the sign-in window plus a probe fired through the injected hook — `LoginWindow
   capture channel OK` proves injection, the cancelled-navigation channel and the
@@ -255,6 +261,10 @@ the English notes first, then the Chinese mirror.
   而不删除它，否则一次性旧版导入会把刚清掉的凭证导回来。
 - **新增**：手工兜底保留——设置窗里折叠的「Paste a credential instead」会逐个验证
   非空字段，只有通过的才落盘。
+- **修复**：`Clear` 现在会顺手关掉开着的登录窗，并丢弃仍在验证中的候选——否则清掉之后
+  那次捕获又会把 usage token 写回去。设置窗也把「什么会让它回来」写清楚了：点
+  `Sign in…` 会把 console 自己会话里已有的 token 存下来，这正是那个窗口的职责，所以
+  清空的 token 可能在没手动输入的情况下自己回来。
 - **新增**：`--test-login [--verbose]`——先报凭证来源并做一次真实验证，再建登录窗并用
   注入的 hook 自己打一发 probe；`LoginWindow capture channel OK` 即「注入生效 +
   导航被拦 + 宿主解析」三件事的证据，不需要真人登录。

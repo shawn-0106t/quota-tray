@@ -171,19 +171,27 @@ fn submit_token(app: &AppHandle, token: &str) {
         return;
     }
     let owned = token.to_string();
+    let epoch = st.login.epoch.load(Ordering::SeqCst);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        verify_and_save(&app, owned).await;
+        verify_and_save(&app, owned, epoch).await;
     });
 }
 
-async fn verify_and_save(app: &AppHandle, mut token: String) {
+async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
     loop {
         set_title(app, STATUS_VERIFYING);
         let result = client::verify_user_token(&token).await;
         let st = app.state::<AppState>();
         match result {
             Ok(()) => {
+                // Clear ran while this verification was in flight: the user
+                // asked for no credential at all, so do not put one back.
+                if st.login.epoch.load(Ordering::SeqCst) != epoch {
+                    st.login.verifying.store(false, Ordering::SeqCst);
+                    recovery::log("login: cleared while verifying, candidate dropped");
+                    return;
+                }
                 st.login.accepted.store(true, Ordering::SeqCst);
                 credentials::save(None, Some(&token), None);
                 set_title(app, STATUS_SAVED);
