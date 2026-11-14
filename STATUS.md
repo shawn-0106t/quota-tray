@@ -1,6 +1,6 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-14 19:03（第九轮结束 + 用户实测后的四刀修补，13 个提交，工作区干净）。
+> 快照：2026-11-14 19:10（第九轮结束 + 用户实测后的修补，15 个提交，工作区干净；下一轮做发版前的去安装包 + 全量审查 + 全量测试）。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
@@ -23,9 +23,11 @@
 | P5 打包 / 发布线 / README / 代码审查 | 完成（`bb57658`…`9252a08`） |
 | 实测修补：登录窗 / Clear / 设置窗滚动与阴影 | 完成（`26fbe6a`…`940ae42`） |
 
-## 提交记录（第九轮，13 个，每个都能独立构建）
+## 提交记录（第九轮，15 个，每个都能独立构建）
 
 ```
+281fd36 docs(agents): the shadow must fit the 28px margin
+03622c2 docs: sync P5 and the user-testing fixes
 940ae42 fix(settings): scroll inside the card, with a hairline scrollbar; tighten the shadow
 4cf6061 fix(settings): scroll the sheet when the window is clamped
 5682d67 fix(app): Clear must not be undone by an open sign-in window
@@ -64,14 +66,68 @@ bb57658 fix(app): queue sign-in candidates, date stale stamps, pass fmt/clippy
 | 设计评审 | `demo/ui-demo.html` 与两张 README 截图按新 token 重新生成；`check_contrast.py` 65/65 |
 | 独立审查 | 报 2 Blocker / 3 Major / 3 Minor，全部修复；我自己复跑 CI 门又补了一条 clippy |
 
-## 下一步（都只能人做或要你拍板）
+## 已拍板（2026-11-14，用户在第九轮末尾决定）
 
-1. **真人登录验证**：设置窗点 `Sign in…` → 在窗里登录 → 标题变 `verified, saved` → 关窗后设置窗回来。
-2. **发布**：建 remote（建议仓库名 `quota-tray`）→ 把 `CHANGELOG.md` 的 `## [0.1.0] — Unreleased` 改成带日期的标题 → `git tag v0.1.0` → push tag。workflow 会开草稿 Release，人工 review 后再 publish。
-3. **要你拍板**：
-   - 安装包留不留（现在 release 是「便携 exe 为主 + 可选按用户 NSIS」，改 `bundle.targets` 为 `[]` 即可去掉）。
-   - 托盘图标要不要再做一版带 DeepSeek 元素的双色标。
-   - 设置窗展开时要不要临时放宽到 96% 工作区（现在是固定 90% + 卡片内滚动）。
+| 项 | 决定 | 落地情况 |
+|---|---|---|
+| 安装包 | **只发便携 exe**，去掉 NSIS 安装包 | **未落地**，见下一节第 1 步 |
+| 托盘图标 | 保持现在的纯紫双条，不再出双色版 | 无需改动 |
+| 设置窗高度 | 保持「工作区 90% 上限 + 卡片内滚动」，不做 96% 展开 | 无需改动 |
+
+**真人登录验证已完成**：`webview.log` 里有三次 `candidate verified and saved`，`--test-login` 报 `verify=ok`，DeepSeek 用量页有数。这一步不再需要重做。
+
+## 下一轮：发版前（用户在新的对话里发起）
+
+### 第 1 步：去掉安装包，只留便携 exe
+
+按这个清单改，一处都不能漏（漏一处就会让 release 资产与文档对不上）：
+
+| 文件 | 改法 |
+|---|---|
+| `src-tauri/tauri.conf.json` | `bundle.targets` → `[]`；`bundle.windows.nsis` 整块删掉；`bundle.icon` 保留（exe 图标仍用它） |
+| `.github/workflows/release.yml` | 构建步骤 `npx tauri build` → `--no-bundle`；删 `test -f "QuotaTray_${version}_x64-setup.exe"`；`gh release create` 的资产列表去掉 setup.exe；notes 里的 Assets 段改成两件 |
+| `scripts/release/make_release_zip.py` | `binaries()` 删掉 NSIS 那条（只剩便携 exe 进 zip + 作为资产）；docstring 的「three assets / four assets」表述同步 |
+| `README.md` | 「Optional installer」那条 bullet 删掉（中英两处）；首段「no installer」保持 |
+| `AGENTS.md` | Release process 的「four assets」→「three assets」；Build 段里 NSIS 安装包的说法；Remove「安装包是 per-user …」这条 trap（连同 `Start-Process` 静默安装那条环境说明） |
+| `PLAN.md` | §11 的「Release 资产」行改成两件 + 校验文件 |
+| `CHANGELOG.md` | 中英各加一条 Changed：「不再提供 NSIS 安装包，只发便携 exe」 |
+
+验收：`npx tauri build` 只产出 exe（不再有 `bundle/nsis/`）；`PYTHONUTF8=1 python scripts/release/make_release_zip.py` 产出 `QuotaTray.exe` + `QuotaTray-v0.1.0.zip` + `SHA256SUMS.txt` 三件；`sha256sum -c` 全 OK；`--test-ui` / `--test-login` 仍绿。
+
+### 第 2 步：全量 code review
+
+- 范围是**发版提交的整棵树**，不是 diff：`src-tauri/src/**`、`src/**`、`.github/workflows/**`、`scripts/release/**`、`demo/*.py`、`demo/shot.sh`，以及文档与代码是否互相矛盾（README / AGENTS / PLAN / CHANGELOG）。
+- 委派方式按 `AGENTS.md`「Environment notes」：本会话 `Agent` 没有 `code-reviewer` 类型，`kimi-review.cmd` 钉的 `kimi-code/k3.1-pro` 在本机订阅无权限 → 用只读 `explore` + `~/.agents/skills/code-review`，任务文本要求证伪（假设至少两处错误）。**它的结论必须自己复跑 CI 门核对**（上一轮它漏了 clippy）。
+- 重点复核上一轮修过的三处，确认没有被后续改动碰坏：登录窗在主线程外建窗、`Clear` 的 epoch 与关窗、设置窗 `max(offsetHeight, scrollHeight)` 上报与卡片内滚动。
+- 验收：无 Blocker；每条发现要么修掉，要么在 STATUS 里写明不修的理由。
+
+### 第 3 步：全量测试
+
+```bash
+# 静态门
+(cd src-tauri && cargo fmt --check && cargo clippy --all-targets --locked -- -D warnings && cargo test --locked)
+npx tsc --noEmit && npm run build && npx tauri build
+
+# 运行时自检（release exe，逐条看输出）
+./src-tauri/target/release/quota-tray.exe --test-fetch
+./src-tauri/target/release/quota-tray.exe --test-deepseek --verbose
+./src-tauri/target/release/quota-tray.exe --test-update
+./src-tauri/target/release/quota-tray.exe --test-usage
+./src-tauri/target/release/quota-tray.exe --test-ui
+./src-tauri/target/release/quota-tray.exe --test-login --verbose
+
+# 打包与设计评审
+PYTHONUTF8=1 python scripts/release/make_release_zip.py && sha256sum -c SHA256SUMS.txt
+PYTHONUTF8=1 python demo/build_ui_demo.py
+PYTHONUTF8=1 python demo/make_readme_shots.py
+PYTHONUTF8=1 python demo/heights.py && PYTHONUTF8=1 python demo/check_contrast.py
+```
+
+另外人工过一遍这几条（自动化覆盖不到）：便携模式（exe 旁放空 `portable.dat` 后配置是否落在同目录）、开机自启开关写/删 HKCU 值、两个 tab 各连点 30 次不跳位且右下角不动、设置保存后重启生效（`ActiveTab` 除外）。
+
+### 第 4 步：发版（只有人能做）
+
+建 remote（建议 `quota-tray`）→ 先 push 看 CI 绿不绿（action pin / NSIS 下载 / gitleaks 这三处只有真 runner 能验）→ `CHANGELOG.md` 的 `## [0.1.0] — Unreleased` 改成带日期 → `git tag v0.1.0 && git push origin v0.1.0` → 草稿 Release 出来人工核对资产与 `SHA256SUMS.txt` → publish。
 
 ## 接手必须知道的（新增/更新）
 
@@ -93,4 +149,12 @@ bb57658 fix(app): queue sign-in candidates, date stale stamps, pass fmt/clippy
 
 ## 新对话开场建议
 
-> 接手 Quota Tray（本地 git 仓库，无 remote，HEAD=`940ae42`）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`；要看 UI 直接开 `demo/ui-demo.html`（生成物，别手改），README 截图由 `demo/make_readme_shots.py` 生成。P1–P5 完成、CI 与发布线就位、独立审查 8 条全修、用户实测的 3 个 bug（登录窗空白、Clear 被写回、设置窗切底）也已修完并复验。剩下的是人的动作：真人登录一次、建 remote / 打 tag / publish。
+> 接手 Quota Tray（本地 git 仓库，无 remote，HEAD=`281fd36`）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`；UI 看 `demo/ui-demo.html`（生成物，别手改），README 截图由 `demo/make_readme_shots.py` 生成。
+>
+> 状态：P1–P5 完成、CI 与发布线就位、独立审查 8 条全修、用户实测的三个 bug（登录窗空白 / Clear 被写回 / 设置窗切底）已修并复验、真人登录也验过了。**本轮目标只有一个：把 v0.1.0 发出去之前的准备**——按 `STATUS.md`「下一轮：发版前」四步走：
+> 1. 去掉 NSIS 安装包，只发便携 exe（清单在该节，一处都不能漏）；
+> 2. 对整棵树做一次全量 code review（委派方式与已知限制写在 `AGENTS.md`「Environment notes」，审查结论必须自己复跑 CI 门核对）；
+> 3. 跑全量测试（静态门 + 六条 `--test-*` + 打包校验 + 设计评审脚本 + 四条人工项）；
+> 4. 交回给人：建 remote、push 看 CI、给 CHANGELOG 补日期、打 `v0.1.0` tag、核对草稿 Release 后 publish。
+>
+> 用户已拍板：安装包只留便携 exe；托盘图标与设置窗高度维持现状。
