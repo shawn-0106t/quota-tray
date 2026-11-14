@@ -26,7 +26,9 @@ def body_of(html: str) -> str:
     """Inner body HTML, minus the module scripts and the root id."""
     match = re.search(r"<body>(.*)</body>", html, re.S)
     assert match, "no <body>"
-    inner = re.sub(r"<script\b[^>]*>.*?</script>", "", match.group(1), flags=re.S)
+    # Case-insensitive on purpose: HTML tag names are, and a missed <SCRIPT>
+    # would ship live product JS into the review page (CodeQL py/bad-tag-filter).
+    inner = re.sub(r"<script\b[^>]*>.*?</script\s*>", "", match.group(1), flags=re.S | re.I)
     # A page can host several windows; duplicate ids would be invalid, and the
     # card styling only ever needs `.root`.
     inner = inner.replace('<div id="root">', '<div class="root">')
@@ -393,7 +395,7 @@ def build() -> str:
        skills.css gives the (already scoped) .root a viewport height. The stage
        rules tie on specificity with those and win only by coming last, so they
        must stay at the end of the block: .win-skills .root collides with the
-       scoped `{prefix_selectors}` copy, and the later declaration takes it. */
+       scoped prefix_selectors() copy, and the later declaration takes it. */
     html, body {{
       padding: 0;
       background: #e7e7e4;
@@ -481,7 +483,13 @@ money_note = "16:42 on 2026-11-14"
 
 def main() -> None:
     out = ROOT / "demo" / "ui-demo.html"
-    out.write_text(build().replace("{money_note}", money_note), encoding="utf-8", newline="\n")
+    html = build().replace("{money_note}", money_note)
+    # The template is a format string: an un-doubled brace in a comment gets
+    # interpolated (a `<function ... at 0x...>` repr once shipped this way) and
+    # makes the output differ on every run.
+    if "<function" in html or " at 0x" in html:
+        raise SystemExit("ui-demo.html contains a Python repr - escape the braces in the template")
+    out.write_text(html, encoding="utf-8", newline="\n")
     print("wrote", out, out.stat().st_size, "bytes")
 
 
