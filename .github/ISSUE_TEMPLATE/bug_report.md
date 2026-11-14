@@ -22,7 +22,7 @@ labels:
 ## Environment
 
 - Windows version: <!-- e.g. Windows 11 24H2 build 26100 -->
-- Quota Tray version: <!-- the release tag, e.g. v0.1.0 -->
+- Quota Tray version: <!-- the release tag, e.g. v1.0.0 -->
 - Provider tab: <!-- Kimi / DeepSeek / both -->
 - Portable mode? <!-- yes if a portable.dat sits next to the exe -->
 

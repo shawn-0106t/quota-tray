@@ -30,7 +30,7 @@
 | 合并版仓库 | 新建独立 repo，两个原仓库不动 | 原仓库有各自的 CI/发布线，合并进去会污染语义 |
 | 产品名 | **Quota Tray**；`com.shawnqi.quotatray`；`quota-tray.exe` | — |
 | 托盘 / 应用图标 | 双条配额条（`#8c74b1` 透明底，7u 宽、radius 1.6），由 `demo/make_icon.py` 生成三件套 | 复用面板的进度条语言；四个候选里只有它在 16px 仍读得出形状（2026-11-14 用户选定 A）。图标是品牌标示，不属于 §3.5 对面板强调色的两条职责 |
-| 版本 | 0.1.0 起 | — |
+| 版本 | 1.0.0 起 | — |
 | DeepSeek 登录捕获 | 进 v1 | 与现版功能对齐；代价是 WebView2 COM 互操作是本项目风险最高的一块 |
 | DeepSeek 凭证存储 | `config_dir()/deepseek-credentials.json`，值用 Windows DPAPI 加密（`dpapi:` 前缀），旧版文件首次运行一次性导入 | API Key 能花钱，不该落明文盘；存储跟着 `config_dir()` 走，便携模式才带得走；旧文件只读不写，旧应用不受影响 |
 

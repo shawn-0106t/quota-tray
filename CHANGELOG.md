@@ -5,20 +5,27 @@ All notable changes to Quota Tray are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each section carries
 the English notes first, then the Chinese mirror.
 
-## [Unreleased]
+## [1.0.0] — 2026-11-14
+
+First stable release. Behaviour is unchanged from 0.1.0 — same app, with the
+release gate now in place (full review, CI on every push, branch protection,
+CodeQL, Dependabot) and the dependency set current.
 
 ### Changed
 
 - Dependency updates: `vite` 8.3.8, `tauri-plugin-opener` 2.7.3 and `base64`
-  0.23.1 (the last is a major bump; the credential blob encoding is unchanged
-  and its DPAPI round-trip test still passes). Nothing user-visible, so these
-  did not warrant a release of their own.
+  0.23.1. The base64 major only touches the DPAPI credential blob's
+  `STANDARD.encode` / `STANDARD.decode`, whose output is unchanged — the
+  round-trip test and `--test-login`'s real request both still pass.
 
 ### 中文
 
+首个稳定版本。行为与 0.1.0 一致——同一套程序，只是发布门禁到位（全量审查、
+每次推送跑 CI、branch protection、CodeQL、Dependabot），依赖也升到当前版本。
+
 - **变更**：依赖升级——`vite` 8.3.8、`tauri-plugin-opener` 2.7.3、`base64`
-  0.23.1（最后一个是大版本；凭证 blob 的编码没变，DPAPI 往返测试仍通过）。没有
-  用户可见变化，因此没有为它们单独发版。
+  0.23.1（只影响 DPAPI 凭证 blob 的 `STANDARD.encode` / `STANDARD.decode`，
+  输出不变；往返测试与 `--test-login` 的真实请求都通过）。
 
 ## [0.1.0] — 2026-11-14
 

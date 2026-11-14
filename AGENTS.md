@@ -204,7 +204,7 @@ Ported from the parent project's tag-triggered draft pipeline (2026-11-14).
 **Cutting a release**
 
 1. Bump the version in three places — `package.json`, `src-tauri/tauri.conf.json`, `Cargo.toml` (`src-tauri/Cargo.lock` follows) — and add the P5 row to `PLAN.md` §8 if the phase plan moves.
-2. Finalize `CHANGELOG.md`: move the section out of `Unreleased` and date it (`## [0.1.0] — 2026-11-14`). `.github/workflows/release.yml` refuses to compose notes for a section that still says `Unreleased`, so this is a hard gate, not a habit.
+2. Finalize `CHANGELOG.md`: move the section out of `Unreleased` and date it (`## [1.0.0] — 2026-11-14`). `.github/workflows/release.yml` refuses to compose notes for a section that still says `Unreleased`, so this is a hard gate, not a habit.
 3. Run the local gates: `npx tsc --noEmit`, `npm run build`, `cargo fmt --check` + `cargo clippy --all-targets -- -D warnings` + `cargo test` in `src-tauri`, then `npx tauri build` and the `--test-*` self-checks against the release exe.
 4. Push the `v<x.y.z>` tag. The tag must equal the `tauri.conf.json` version — the workflow verifies it before building.
 5. `release.yml` runs gitleaks over the full history, builds the portable exe (`--no-bundle`), packs the source zip and checksums, and **opens a draft Release** with three assets: `QuotaTray.exe` (portable), `QuotaTray-v<version>.zip` (source + portable exe at its root) and `SHA256SUMS.txt`. There is no installer: the app ships as a single portable exe. The body is generated from the matching CHANGELOG section (English half plus the 中文 half, which that file keeps in the same section).
