@@ -5,6 +5,21 @@ All notable changes to Quota Tray are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each section carries
 the English notes first, then the Chinese mirror.
 
+## [Unreleased]
+
+### Changed
+
+- Dependency updates: `vite` 8.3.8, `tauri-plugin-opener` 2.7.3 and `base64`
+  0.23.1 (the last is a major bump; the credential blob encoding is unchanged
+  and its DPAPI round-trip test still passes). Nothing user-visible, so these
+  did not warrant a release of their own.
+
+### 中文
+
+- **变更**：依赖升级——`vite` 8.3.8、`tauri-plugin-opener` 2.7.3、`base64`
+  0.23.1（最后一个是大版本；凭证 blob 的编码没变，DPAPI 往返测试仍通过）。没有
+  用户可见变化，因此没有为它们单独发版。
+
 ## [0.1.0] — 2026-11-14
 
 ### Added
