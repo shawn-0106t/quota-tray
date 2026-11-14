@@ -1,6 +1,6 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-14 17:30（第九轮结束，P5 完成，四个提交已全部落地，工作区干净）。
+> 快照：2026-11-14 17:50（第九轮结束 + 一次登录窗交互修补，五个提交已落地，工作区干净）。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
@@ -36,13 +36,16 @@
 ## 提交记录（第九轮，四个提交，每个都能独立构建）
 
 ```
+26fbe6a fix(app): open the DeepSeek sign-in window above the settings sheet
 9252a08 docs: record P5, the release process and the review fixes
 c2fa3f9 docs(readme): bilingual README with generated screenshots
-d0ea0a5 feat(release): NSIS bundle, packaging script, CI and draft-release pipeline
+d0ea0a5 feat(release): NSIS packaging script, CI and draft-release pipeline
 bb57658 fix(app): queue sign-in candidates, date stale stamps, pass fmt/clippy
 ```
 
 拆分理由：`bb57658` 是行为修复 + 过 fmt/clippy 门（含 `cargo fmt` 的机械改动，不拆），`d0ea0a5` 只碰构建与发布线，README 与截图（生成物）单独一个提交，文档与进度快照最后一起收口。`CHANGELOG` 仍停在 `## [0.1.0] — Unreleased` —— 那是发布门，打 tag 前才改日期。
+
+**`26fbe6a` 是用户实测后补的一刀**：登录窗是四个窗口里唯一没设 `always_on_top` 的，于是它开在「刚点 Sign in… 的那个置顶设置窗」下面；两个窗叠在同一点，关闭按钮全变得含糊。现在登录窗也置顶（最后创建 → 压在置顶带最上面）、打开时把设置窗收起、关窗后放回来；`close_settings` 会把 hide 结果写进 `webview.log`。验证：`--test-login` 期间枚举窗口得到 `DeepSeek sign-in | Visible=True | Topmost=True`。
 
 ## 本轮验证结果
 
