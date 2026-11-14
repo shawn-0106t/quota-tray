@@ -1,12 +1,12 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-14 17:50（第九轮结束 + 一次登录窗交互修补，五个提交已落地，工作区干净）。
+> 快照：2026-11-14 19:03（第九轮结束 + 用户实测后的四刀修补，13 个提交，工作区干净）。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
 ## 一句话
 
-**P1–P5 全部完成**。第九轮做完 P5：`npx tauri build` 出便携 exe + 按用户 NSIS 安装包、`scripts/release/make_release_zip.py` 打包（源码 zip + 三件资产 + SHA256SUMS）、`.github/workflows/{ci,release}.yml`（gitleaks 门 + tag 触发草稿 Release）、中英双语 README + 生成的两张截图，并委派了一次独立 code review（报 2 Blocker / 3 Major / 3 Minor，全部已修并复验）。
+**P1–P5 全部完成**，第九轮又在用户实测后修掉了三个真 bug：登录窗在主线程上建窗导致**空白且关不掉**、`Clear` 被登录窗的自动捕获**写回**、设置窗展开手工粘贴块被夹高**切掉底部**（滚动条还落在窗口边缘、阴影被裁成硬边）。三者都已复现、修复、复验，文档同步。
 
 **还差两件只能人做的事**：① 真人在登录窗里输一次账号密码；② 建 GitHub remote、打 `v0.1.0` tag、publish 草稿 Release。
 
@@ -20,100 +20,77 @@
 | P3 DeepSeek 后端 | 完成（`13822ce`） |
 | P4 设置窗分区 / 托盘合并 / 登录捕获 | 完成（`855035a`） |
 | 计划外：图标 / Kimi 统计 / 一页 demo | 完成（`855035a`、`9b23b74`） |
-| **P5 打包 / 发布线 / README / 代码审查** | **完成（本轮）** |
+| P5 打包 / 发布线 / README / 代码审查 | 完成（`bb57658`…`9252a08`） |
+| 实测修补：登录窗 / Clear / 设置窗滚动与阴影 | 完成（`26fbe6a`…`940ae42`） |
 
-## 本轮做了什么
-
-1. **打包**：`src-tauri/tauri.conf.json` 的 `bundle.targets` 从 `all` 改成 `["nsis"]`，`installMode = currentUser`、安装界面 English + SimpChinese。产物：`target/release/quota-tray.exe`（便携）+ `target/release/bundle/nsis/Quota Tray_0.1.0_x64-setup.exe`（按用户安装包，不弹 UAC）。
-2. **发布线**：
-   - `.github/workflows/ci.yml`：gitleaks（全历史、8.29.1 钉版）+ `windows-latest` 上 `npm ci` / `tsc --noEmit` / `npm run build` / `cargo fmt --check` / `cargo clippy --all-targets -D warnings` / `cargo build --locked` / `cargo test --locked`。
-   - `.github/workflows/release.yml`：`v*` tag 必须等于 `tauri.conf.json` 的 version；CHANGELOG 对应小节若仍写 `Unreleased` 直接失败；构建 + 打包 + `gh release create --draft`（四个资产），发布仍人工。
-   - `scripts/release/make_release_zip.py`：版本只从 `tauri.conf.json` 读；文件集取自 `git ls-files`；zip 根带便携 exe；三件资产改名 + `sha256sum` 兼容的 `SHA256SUMS.txt`；`.part` 中转，失败不会留下不匹配的校验对。
-3. **README.md**：英文在前、中文在后；截图由 `demo/make_readme_shots.py` 从 `demo/ui-demo.html` 裁出（`docs/screenshot-{light,dark}.png`），不手工截图。
-4. **独立审查**：委派只读 review（`explore` agent + code-review skill，见下方「审查」）。
-5. **`demo/shot.sh` 修复**：输出路径为绝对路径时浏览器拿到 `C:/repo/C:/...`，截不出图；现在绝对路径原样透传。
-
-## 提交记录（第九轮，四个提交，每个都能独立构建）
+## 提交记录（第九轮，13 个，每个都能独立构建）
 
 ```
+940ae42 fix(settings): scroll inside the card, with a hairline scrollbar; tighten the shadow
+4cf6061 fix(settings): scroll the sheet when the window is clamped
+5682d67 fix(app): Clear must not be undone by an open sign-in window
+f2bc122 fix(app): build the sign-in window off the main thread
+e8be518 fix(app): drop the redundant post-build focus call in the sign-in window
+cef31b2 fix(app): keep window work off the sign-in open/close critical path
+3326bc9 docs(status): record the sign-in window fix
 26fbe6a fix(app): open the DeepSeek sign-in window above the settings sheet
+4a15ae7 docs(status): record the P5 commits, pin the review route that works
 9252a08 docs: record P5, the release process and the review fixes
 c2fa3f9 docs(readme): bilingual README with generated screenshots
-d0ea0a5 feat(release): NSIS packaging script, CI and draft-release pipeline
+d0ea0a5 feat(release): NSIS bundle, packaging script, CI and draft-release pipeline
 bb57658 fix(app): queue sign-in candidates, date stale stamps, pass fmt/clippy
 ```
 
-拆分理由：`bb57658` 是行为修复 + 过 fmt/clippy 门（含 `cargo fmt` 的机械改动，不拆），`d0ea0a5` 只碰构建与发布线，README 与截图（生成物）单独一个提交，文档与进度快照最后一起收口。`CHANGELOG` 仍停在 `## [0.1.0] — Unreleased` —— 那是发布门，打 tag 前才改日期。
+## 用户实测后的三个 bug（都已复现 → 修复 → 复验）
 
-**`26fbe6a` 是用户实测后补的一刀**：登录窗是四个窗口里唯一没设 `always_on_top` 的，于是它开在「刚点 Sign in… 的那个置顶设置窗」下面；两个窗叠在同一点，关闭按钮全变得含糊。现在登录窗也置顶（最后创建 → 压在置顶带最上面）、打开时把设置窗收起、关窗后放回来；`close_settings` 会把 hide 结果写进 `webview.log`。验证：`--test-login` 期间枚举窗口得到 `DeepSeek sign-in | Visible=True | Topmost=True`。
+| 现象 | 根因 | 修法 | 验证 |
+|---|---|---|---|
+| 点 `Sign in…` 出现**空白且关不掉**的窗口（只能最小化），日志里连 `login: sign-in window opened` 都没有 | `open_login` 是同步命令，Tauri 把同步命令跑在**主线程**；`WebviewWindowBuilder::build()` 又要跳到主线程并等它完成 —— 窗口建出来了，命令永远不返回，后面的导航 / 日志 / 收窗全没跑 | `open_login` / `close_login` 把活交给 async runtime；收起设置窗放在建窗之后；去掉建窗后多余的 `set_focus()` | 在设置窗里真实 `click()` 按钮走 IPC：旧构建只有 `clicked`、新构建 `login: sign-in window opened` → `settings: hide`，页面渲染出 DeepSeek 登录页，`WM_CLOSE` 后 `login: sign-in window closed` 且设置窗回来 |
+| `Clear` 之后 usage token 还在（API key 确实没了） | `Clear` 本身没问题（文件里 `apiKey` 为空、之后的两次写入都是登录窗的 `candidate verified and saved`）；登录窗的职责就是捕获 console 已有会话里的 token，所以清掉后再点 `Sign in…` 会自动写回 | `Clear` 顺手关掉登录窗；`LoginState.epoch` 让 Clear 之前发起的验证丢弃结果；设置窗写明「再登录会存回 token」；`Clear` 写一行日志 | 设置窗点 Clear 后文件两字段为空；日志有 `credentials: cleared (apiKey=false userToken=false)` |
+| 设置窗展开「Paste a credential instead」显示不全；滚动条在窗口边缘、阴影像硬边 | 窗口被夹在工作区 90%（本机 752 逻辑高 → 677），展开后内容 824，`overflow: hidden` 直接切掉；`body` 滚动让滚动条落在透明窗口边缘；`0 12px 40px` 的阴影超出 28px 留白被窗口裁断 | `#root { max-height: calc(100vh - 56px); overflow-y: auto }` 卡片自己滚；滚动条 8px 轨道 / 4px 内缩细线（`--hair`，hover `--ink-3`）；上报高度改 `max(offsetHeight, scrollHeight)`；阴影收到 `0 8px 18px` | 真实页面量：收起 `root=596`（+56=652，不滚动）、展开 `root=768`（+56=824，`scrollHeight=824`）；在 404×677 下渲染确认细滚动条在卡片内、阴影在留白内淡出；`check_contrast.py` 65/65 |
 
 ## 本轮验证结果
 
 | 项 | 结果 |
 |---|---|
 | `cargo test --locked` | **29 passed** |
-| `cargo fmt --check` | 通过（此前不过：7 个文件有 diff，已 `cargo fmt`） |
-| `cargo clippy --all-targets --locked -- -D warnings` | 通过（此前 `client.rs:117` needless_borrow） |
+| `cargo fmt --check` / `cargo clippy --all-targets -- -D warnings` | 通过（这两条都是 CI 硬门） |
 | `npx tsc --noEmit` / `npm run build` | 通过 |
-| `npx tauri build` | 通过：exe 7.18 MB + NSIS 2.50 MB（`targets = ["nsis"]`） |
-| `--test-fetch`（release exe） | `error: null`，5h 0% / week 1%，Extra `NotActivated` |
-| `--test-deepseek` | 余额 ¥41.85，1 个模型，余额与用量均无错误 |
-| `--test-update` | `local=2.6.1 latest=2.6.2 updateAvailable=True` |
-| `--test-usage` | `scan1 files=430 req(7d)=3424 req(today)=1062 ms=109` / `scan2 … ms=31`，两遍一致 |
-| `--test-login` | `credentialSource=file`、`verify=ok`、五个窗口 OK、`capture channel OK`、`fetch capture OK` |
-| 打包产物 | `sha256sum -c SHA256SUMS.txt` 三条全 OK；zip 82 个文件 + 根目录 `QuotaTray.exe`，无 `target/`、`dist/`、`node_modules/` |
-| 安装包 | 静默安装 `exit=0`（无 UAC）→ `%LOCALAPPDATA%\Quota Tray` 下 exe 可跑 `--test-update` → 静默卸载 `exit=0`，开始菜单与安装目录都清干净 |
-| 探测污染守卫 | `--test-login` 跑完后 `deepseek-endpoints.json` 的 mtime 仍是 13:26（未被 probe 改写） |
-| 跨天戳 | `fmtUpdated` 用 node type-strip 直接跑：同日 `Updated 18:14`、昨天 `Updated 11/13 09:05`、去年 `Updated 12/31 23:59`、坏值空串 |
-
-## 审查（第九轮）
-
-委派了一个只读 review agent（本会话的 `Agent` 只有 `plan` / `coder` / `explore` 三种，没有 `code-reviewer`；`~/.kimi-code/bin/kimi-review.cmd` 走 `kimi-code/k3.1-pro`，本机订阅无权限，实测报 `provider.auth_error`）。用的是 `explore`（工具集只读，不能改代码）+ `~/.agents/skills/code-review` 的方法，任务文本要求证伪、假设至少两处错误。
-
-它报了 8 条，全部成立、全部已修：
-
-| # | 级别 | 问题 | 修法 |
-|---|---|---|---|
-| 1 | Blocker | CI 的 `cargo fmt --check` 在现有树上直接失败（7 文件 20 处） | `cargo fmt` |
-| 2 | Blocker | `release.yml` 的 notes 步骤在 Windows runner 上按 ANSI 码页写中文，`UnicodeEncodeError` 或乱码 | 该步骤加 `PYTHONUTF8: "1"` |
-| 3 | Major | `Updated M/D HH:MM` 只写在文档里，`fmtUpdated` 从来不带日期 → 昨天缓存读成今天 | `common.ts` 按本地日期加前缀 |
-| 4 | Major | README 截图的裁剪框切掉设置窗右边约 41px | `CROP` 改 `(40, 430, 2740, 1720)`，并加画布尺寸断言 |
-| 5 | Major | 验证进行中到达的新 token 被丢弃，页面又不会重发 → 等于白登一次 | `LoginState.pending` + 失败后重试队列里的候选 |
-| 6 | Minor | `--test-login` 的 probe 会把学到的端点覆盖成编译期默认值 | probe URL 带 `quotatray=probe`，宿主拒绝学习 |
-| 7 | Minor | 打包脚本 rollback 会恢复一份描述旧 exe 的校验文件 | 失败时删掉校验文件，不留不匹配的一对 |
-| 8 | Minor | 截图脚本在布局漂移时给黑边而不报错 | 尺寸断言后再裁 |
-
-我自己复跑 CI 的门时又抓到一条它没跑到的：`cargo clippy -D warnings` 报 `client.rs:117` needless_borrow（`client()` 已返回 `&Client`），已修。
+| `npx tauri build` | exe 7.20 MB + NSIS 2.50 MB，同一次构建打包 |
+| `--test-fetch` / `--test-deepseek` / `--test-update` / `--test-usage` | 全绿（Kimi `error: null`；DeepSeek 余额随账号变动；两遍扫描请求数一致） |
+| `--test-ui` / `--test-login` | 四个窗口 OK；`verify=ok`、`LoginWindow capture channel OK`、`fetch capture OK` |
+| 发布资产 | `sha256sum -c SHA256SUMS.txt` 三条全 OK；zip 82 个文件，含根目录 `QuotaTray.exe` |
+| 装机 | 静默安装 → 跑起来 → 静默卸载，开始菜单、安装目录、Uninstall 注册项都清干净 |
+| 设计评审 | `demo/ui-demo.html` 与两张 README 截图按新 token 重新生成；`check_contrast.py` 65/65 |
+| 独立审查 | 报 2 Blocker / 3 Major / 3 Minor，全部修复；我自己复跑 CI 门又补了一条 clippy |
 
 ## 下一步（都只能人做或要你拍板）
 
-1. **真人登录验证**（唯一没被自动化覆盖的一步）：设置窗点 `Sign in…` → 在窗里登账号 → 标题变 `verified, saved` → 面板出数。会覆盖 `deepseek-credentials.json` 的 `userToken`（同账号等价）。
-2. **发布**：建 remote（建议仓库名 `quota-tray`）→ 把 `CHANGELOG.md` 的 `## [0.1.0] — Unreleased` 改成带日期的标题 → `git tag v0.1.0` → push tag。workflow 会开一个草稿 Release，人工 review 后再 publish。
+1. **真人登录验证**：设置窗点 `Sign in…` → 在窗里登录 → 标题变 `verified, saved` → 关窗后设置窗回来。
+2. **发布**：建 remote（建议仓库名 `quota-tray`）→ 把 `CHANGELOG.md` 的 `## [0.1.0] — Unreleased` 改成带日期的标题 → `git tag v0.1.0` → push tag。workflow 会开草稿 Release，人工 review 后再 publish。
 3. **要你拍板**：
-   - 安装包留不留？现在 release 里是「便携 exe 为主 + 可选按用户 NSIS」。不想要安装包就把 `bundle.targets` 改成 `[]`、删掉 release 里的那件资产即可。
-   - 托盘图标要不要再做一版带 DeepSeek 元素的双色标（现在定的是纯紫双条）。
-   - 缓存块是否也放进设置窗的 Kimi 只读区（现在只在面板）。
+   - 安装包留不留（现在 release 是「便携 exe 为主 + 可选按用户 NSIS」，改 `bundle.targets` 为 `[]` 即可去掉）。
+   - 托盘图标要不要再做一版带 DeepSeek 元素的双色标。
+   - 设置窗展开时要不要临时放宽到 96% 工作区（现在是固定 90% + 卡片内滚动）。
 
-## 接手必须知道的（在原有 8 条之上新增）
+## 接手必须知道的（新增/更新）
 
-1. **CI 有 fmt / clippy 门**：`cargo fmt --check` 与 `cargo clippy --all-targets -- -D warnings` 都是硬门，改完 Rust 先本地跑这两条，否则推上去必红。
-2. **发布资产是四件**：`QuotaTray.exe`、`QuotaTray_<ver>_x64-setup.exe`、`QuotaTray-v<ver>.zip`、`SHA256SUMS.txt`；名字由 `scripts/release/make_release_zip.py` 定，workflow 用 `test -f` 精确校验，改名要三处一起改（script / workflow / `AGENTS.md`）。
-3. **安装包是 per-user**：`installMode = currentUser` → 装进 `%LOCALAPPDATA%\Quota Tray`，只写 HKCU，不弹 UAC；便携 exe 才是主推。静默安装/卸载要用 `Start-Process -Wait -PassThru`（直接从 Git Bash 调用会返回 1 且什么也不做）。
-4. **截图是生成物**：`PYTHONUTF8=1 python demo/make_readme_shots.py`（依赖 Pillow + `shot.sh` 探测到的 Chromium）。改 UI 后重跑，别手裁。
-5. **`shot.sh` 现在接受绝对输出路径**：以前会拼成 `C:/repo/C:/...`。
-6. **登录候选有队列**：验证中到达的新 token 存 `LoginState.pending`，本次验证失败后重试；页面按 `lastToken` 去重，丢了就不会再来。
-7. **`--test-login` 不再污染端点**：probe URL 带 `quotatray=probe`，宿主跳过学习。
-8. 原有 8 条（图标生成物 / 托盘 48px / Kimi 数字是本机 / 扫描节奏 / ui-demo 生成物 / 登录窗无 IPC 面 / 环境事实 / 不 cat 密文）仍然有效。
+1. **同步命令跑在主线程**：任何 `#[tauri::command]` 里都**不要**直接 `WebviewWindowBuilder::build()`——它会跳主线程并等待，结果就是「窗口出现但一片空白、关不掉」。用 `tauri::async_runtime::spawn` 把建窗挪走（`open_login` / `close_login` 已经是这个写法）。这是本轮最难找的 bug，`--test-login` 和启动钩子都绕开了它，最后靠「真实点击按钮」才复现。
+2. **窗口程序没有控制台**：`install_panic_log()`（main.rs）把 panic 写进 `webview.log`；静默 panic 和卡死看起来一模一样。
+3. **日志现在能自证**：`login: sign-in window opened` / `login: sign-in window closed` / `settings: hide -> Ok(()) visible=…` / `credentials: cleared …`。用户报「点 X 没反应」时先看这四行。
+4. **Clear 的边界**：`Clear` 会关登录窗、丢弃在飞的验证；但**再点 `Sign in…` 仍会把 console 会话里的 token 存回来**——那是那个窗口的职责，不是 bug。设置窗有一行说明。
+5. **设置窗高度是「上限 90% + 卡片内滚动」**：`#root` 自己 `max-height` + `overflow-y: auto`，滚动条 4px 内缩细线；上报 `max(offsetHeight, scrollHeight)` 才不会自我缩小。
+6. **阴影必须收在 28px 留白内**：`--shadow: 0 8px 18px`；更大的模糊会被窗口边缘裁成硬边。
+7. 原有 8 条（图标生成物 / 托盘 48px / Kimi 数字是本机 / 扫描节奏 / ui-demo 生成物 / 登录窗无 IPC 面 / 环境事实 / 不 cat 密文）仍然有效。
 
-## 环境现状（2026-11-14 17:26）
+## 环境现状（2026-11-14 19:03）
 
-- **Kimi 配额接口**：通（`error: null`），5h 0% / week 1%，Extra `NotActivated`。
-- **Kimi 本机统计**：7d 3,424 请求 / today 1,062 请求；走树 109 ms、只 stat 31 ms。
-- **DeepSeek**：余额 ¥41.85（账号在动，别拿数值当验收）。
-- `%APPDATA%\QuotaTray`：credentials / endpoints / models / cache / kimi-usage.json；仍无 `settings.json`（没点过 Save）。
+- **Kimi 配额接口**：通（`error: null`）；但 **Kimi CLI 的 OAuth token 已过期**（设置窗红字 `Expired — sign in with the Kimi CLI`），需要在 CLI 里重新登录一次。
+- **DeepSeek**：API key 已按用户操作清空；usage token 来自登录窗的自动捕获（同账号可用）。
+- `%APPDATA%\QuotaTray`：credentials / endpoints / models / cache / kimi-usage.json / webview.log；仍无 `settings.json`（没点过 Save）。
 - 本轮安装验证后系统已清干净：无 `%LOCALAPPDATA%\Quota Tray`、无开始菜单快捷方式、无 Uninstall 注册项。
-- 本轮结束时无后台进程残留。
+- 工作区干净，HEAD `940ae42`；`QuotaTray.exe`（便携）、`QuotaTray_0.1.0_x64-setup.exe`、`QuotaTray-v0.1.0.zip`、`SHA256SUMS.txt` 留在仓库根（gitignored，与 HEAD 同哈希）。
 
 ## 新对话开场建议
 
-> 接手 Quota Tray（本地 git 仓库，无 remote，HEAD 是 P5 那一提交）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`；要看 UI 直接开 `demo/ui-demo.html`（生成物，别手改），文档里的截图由 `demo/make_readme_shots.py` 生成。P1–P5 全部完成、CI 与发布线已就位、独立审查的 8 条全修完。剩下的是人的动作：一次真人登录验证，以及建 remote / 打 tag / publish；安装包留不留等待拍板。
+> 接手 Quota Tray（本地 git 仓库，无 remote，HEAD=`940ae42`）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`；要看 UI 直接开 `demo/ui-demo.html`（生成物，别手改），README 截图由 `demo/make_readme_shots.py` 生成。P1–P5 完成、CI 与发布线就位、独立审查 8 条全修、用户实测的 3 个 bug（登录窗空白、Clear 被写回、设置窗切底）也已修完并复验。剩下的是人的动作：真人登录一次、建 remote / 打 tag / publish。
