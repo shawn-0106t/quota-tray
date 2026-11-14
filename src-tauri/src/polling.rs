@@ -58,8 +58,6 @@ pub async fn safe_refresh_deepseek(app: &AppHandle) -> DeepseekResult {
         }
     }
     *st.last_deepseek.write().unwrap() = Some(r.clone());
-    // Nothing renders DeepSeek yet (the provider tab is Phase 2's remainder),
-    // so the event is what the pane will subscribe to.
     let _ = app.emit("deepseek-updated", &r);
     if r.balance.is_some() || r.usage.is_some() {
         deepseek::save_cache(&r);

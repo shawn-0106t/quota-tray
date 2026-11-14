@@ -1,7 +1,6 @@
 // DeepSeek backend (PLAN §5.2 / §6): official balance, console usage, official
-// display names and an atomic last-good cache. The provider tab and the pane
-// are the remaining Phase 2 work, so this stops at the IPC boundary for now —
-// nothing here renders.
+// display names and an atomic last-good cache. This stops at the IPC boundary —
+// the panel pane renders it; the thresholds live in the frontend (PLAN §5.2).
 
 pub mod client;
 pub mod credentials;
@@ -58,15 +57,16 @@ pub struct UsageInfo {
     pub cache_hit_rate: Option<f64>,
     pub today_tokens: i64,
     pub today_cost: f64,
-    /// First-seen order, as the console reports it. `visible_models` is what a
-    /// pane should render.
+    /// Models worth rendering, already filtered and capped by `visible_models`
+    /// at the end of `fetch_diag` — the pane draws this list as-is.
     pub by_model: Vec<ModelUsage>,
 }
 
 impl UsageInfo {
     /// Cards worth rendering (PLAN §5.2): the console sends all-zero placeholder
     /// rows, and the pane shows at most four models by month cost. Stable order,
-    /// so equal-cost rows keep the response order.
+    /// so equal-cost rows keep the response order. `fetch_diag` applies this to
+    /// the payload it returns, so callers render `by_model` without re-filtering.
     pub fn visible_models(&self) -> Vec<&ModelUsage> {
         let mut list: Vec<&ModelUsage> = self
             .by_model
@@ -180,6 +180,12 @@ pub async fn fetch_diag(verbose: bool) -> (DeepseekResult, Vec<String>) {
 
     if let Some(usage) = result.usage.as_mut() {
         client::apply_display_names(usage, creds.api_key.as_deref(), &mut diag).await;
+        // The pane renders `visible_models` only, so filter once here: the IPC
+        // payload, the `deepseek-updated` event and the cache then carry
+        // exactly what is drawn, and no second filter can drift from this one
+        // (PLAN §5.2). The verbose trail above already logged every row.
+        let visible: Vec<ModelUsage> = usage.visible_models().into_iter().cloned().collect();
+        usage.by_model = visible;
     }
 
     (result, diag.lines)

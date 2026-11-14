@@ -11,6 +11,8 @@ pub struct SettingsData {
     pub theme: String,        // system | light | dark
     pub refresh_minutes: i64, // 1 | 5 | 10 | 30
     pub auto_start: bool,
+    /// Provider tab the panel shows: `kimi` | `deepseek` (PLAN §4 / §7).
+    pub active_tab: String,
 }
 
 impl Default for SettingsData {
@@ -19,6 +21,7 @@ impl Default for SettingsData {
             theme: "system".to_string(),
             refresh_minutes: 5,
             auto_start: false,
+            active_tab: "kimi".to_string(),
         }
     }
 }
@@ -55,7 +58,11 @@ pub fn load() -> SettingsData {
     let Ok(text) = fs::read_to_string(file_path()) else {
         return SettingsData::default();
     };
-    serde_json::from_str(&text).unwrap_or_default()
+    let mut data: SettingsData = serde_json::from_str(&text).unwrap_or_default();
+    // Normalise once here so every reader — panel, commands — sees a valid tab
+    // even after a hand edit (PLAN §7).
+    data.active_tab = normalize_tab(&data.active_tab).to_string();
+    data
 }
 
 pub fn save(data: &SettingsData) {
@@ -63,6 +70,17 @@ pub fn save(data: &SettingsData) {
     let _ = fs::create_dir_all(&dir);
     if let Ok(json) = serde_json::to_string_pretty(data) {
         let _ = fs::write(file_path(), json);
+    }
+}
+
+/// Provider tab names as persisted in `ActiveTab` (PLAN §7). Anything that is
+/// not `deepseek` reads as `kimi`, so a hand-edited or stale value can never
+/// leave the panel with no pane selected.
+pub fn normalize_tab(tab: &str) -> &'static str {
+    if tab == "deepseek" {
+        "deepseek"
+    } else {
+        "kimi"
     }
 }
 
@@ -88,5 +106,40 @@ pub fn apply_auto_start(data: &SettingsData) {
         }
     } else {
         let _ = key.delete_value("QuotaTray");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The persisted shape and the fallback are a contract (PLAN §7): a
+    // settings.json written before `ActiveTab` existed must still load, and a
+    // saved tab must survive the round trip.
+    #[test]
+    fn settings_without_active_tab_falls_back_to_kimi() {
+        let d: SettingsData =
+            serde_json::from_str(r#"{"Theme":"dark","RefreshMinutes":5,"AutoStart":true}"#)
+                .expect("legacy settings.json parses");
+        assert_eq!(d.active_tab, "kimi");
+        assert_eq!(d.theme, "dark");
+        assert!(d.auto_start);
+    }
+
+    #[test]
+    fn settings_keeps_the_saved_active_tab() {
+        let d: SettingsData = serde_json::from_str(
+            r#"{"Theme":"light","RefreshMinutes":30,"AutoStart":false,"ActiveTab":"deepseek"}"#,
+        )
+        .expect("settings with ActiveTab parses");
+        assert_eq!(d.active_tab, "deepseek");
+    }
+
+    #[test]
+    fn unknown_tab_names_normalise_to_kimi() {
+        assert_eq!(normalize_tab("deepseek"), "deepseek");
+        assert_eq!(normalize_tab("kimi"), "kimi");
+        assert_eq!(normalize_tab(""), "kimi");
+        assert_eq!(normalize_tab("DeepSeek"), "kimi");
     }
 }

@@ -1,9 +1,8 @@
-// Quota Tray — Tauri 2 shell hosting the Kimi quota view; the DeepSeek backend
-// is wired but nothing renders it yet (the provider tab is the remaining P2
-// work). Imported from kimi-planbar-tray (rust edition); startup order,
-// window model and WebView2 recovery are unchanged (docs/SPEC.md section 20).
-// Self-check command line args are handled in main.rs BEFORE the
-// single-instance check.
+// Quota Tray — Tauri 2 shell hosting the Kimi quota and DeepSeek balance/usage
+// panes behind a segmented provider tab. Imported from kimi-planbar-tray (rust
+// edition); startup order, window model and WebView2 recovery are unchanged
+// (docs/SPEC.md section 20). Self-check command line args are handled in
+// main.rs BEFORE the single-instance check.
 
 pub mod credentials;
 pub mod deepseek;
@@ -117,6 +116,7 @@ pub struct SettingsDto {
     pub theme: String,
     pub refresh_minutes: i64,
     pub auto_start: bool,
+    pub active_tab: String,
 }
 
 impl From<&SettingsData> for SettingsDto {
@@ -125,6 +125,7 @@ impl From<&SettingsData> for SettingsDto {
             theme: d.theme.clone(),
             refresh_minutes: d.refresh_minutes,
             auto_start: d.auto_start,
+            active_tab: d.active_tab.clone(),
         }
     }
 }
@@ -191,12 +192,27 @@ fn refresh_now(app: AppHandle) {
     });
 }
 
-/// DeepSeek half of the state. Deliberately not folded into `get_state`: the
-/// pane and the provider tab are Phase 2's remaining work, and the Kimi DTO
-/// stays untouched until they land (PLAN §8 order adjustment).
+/// DeepSeek half of the state: the initial payload for the DeepSeek pane.
+/// Kept out of `get_state` on purpose — the settings and skills windows also
+/// call `get_state` and have no use for the per-model usage list.
 #[tauri::command]
 fn get_deepseek(app: AppHandle) -> Option<DeepseekResult> {
     app.state::<AppState>().last_deepseek.read().unwrap().clone()
+}
+
+/// Provider tab selected in the panel (PLAN §4). Persisted so the next launch
+/// opens on the same tab; the pollers keep running for both providers either
+/// way, so switching only changes what is rendered.
+#[tauri::command]
+fn set_active_tab(app: AppHandle, tab: String) {
+    let tab = settings::normalize_tab(&tab);
+    let st = app.state::<AppState>();
+    let mut cur = st.settings.write().unwrap();
+    if cur.active_tab == tab {
+        return;
+    }
+    cur.active_tab = tab.to_string();
+    settings::save(&cur);
 }
 
 #[tauri::command]
@@ -485,6 +501,7 @@ fn invoke_handlers() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'sta
     tauri::generate_handler![
         get_state,
         get_deepseek,
+        set_active_tab,
         refresh_now,
         open_settings,
         close_settings,

@@ -33,10 +33,55 @@ export interface UpdateStatus {
   checkFailed: boolean;
 }
 
+/** DeepSeek payload (PLAN §5.2). Mirrors deepseek/mod.rs, camelCase. */
+export interface DeepseekBalance {
+  isAvailable: boolean;
+  currency: string;
+  total: number;
+  granted: number;
+  toppedUp: number;
+}
+
+export interface DeepseekModelUsage {
+  model: string;
+  /** Official vendor name when known; already resolved by the backend. */
+  displayName: string;
+  monthTokens: number;
+  monthRequests: number;
+  monthCost: number;
+  /** 0-100; null when the model has no prompt tokens at all. */
+  cacheHitRate?: number | null;
+  todayTokens: number;
+  todayCost: number;
+}
+
+export interface DeepseekUsage {
+  monthTokens: number;
+  monthRequests: number;
+  monthCost: number;
+  cacheHitRate?: number | null;
+  todayTokens: number;
+  todayCost: number;
+  /** Already filtered and capped at four by the backend: draw as-is. */
+  byModel: DeepseekModelUsage[];
+}
+
+export interface DeepseekResult {
+  balance?: DeepseekBalance | null;
+  usage?: DeepseekUsage | null;
+  /** Balance and usage fail independently (PLAN §5.2): one code each. */
+  balanceError?: string | null;
+  usageError?: string | null;
+  fetchedAt: string;
+}
+
+export type ProviderTab = 'kimi' | 'deepseek';
+
 export interface SettingsDto {
   theme: string; // system | light | dark
   refreshMinutes: number;
   autoStart: boolean;
+  activeTab: string; // kimi | deepseek
 }
 
 export interface AppStateDto {
@@ -64,7 +109,7 @@ export async function initTheme(): Promise<AppStateDto> {
   return state;
 }
 
-// ---- Formatting (SPEC 12.3 / 12.5) ----
+// ---- Formatting (PLAN §5.2: money is always two decimals) ----
 
 /** FormatReset: span = at - now, English countdown text. */
 export function formatReset(atIso: string): string {
@@ -86,14 +131,65 @@ export function formatReset(atIso: string): string {
   return `Resets in ${Math.max(1, minutes)}m`;
 }
 
-/** FmtYuan: cents -> ¥, fraction omitted for whole yuan. */
+/** FmtYuan: cents -> ¥, always two decimals — the panel never shows `¥10` or
+    `¥8.2` next to `¥49.52` (user decision 2026-11-14). */
 export function fmtYuan(cents: number): string {
   if (cents < 0) return '-' + fmtYuan(-cents);
   const yuan = Math.floor(cents / 100);
   const frac = cents % 100;
-  return '¥' + yuan + (frac > 0 ? '.' + String(frac).padStart(2, '0') : '');
+  return `¥${yuan}.${String(frac).padStart(2, '0')}`;
 }
 
 export function clampPercent(percent: number): number {
   return Math.min(100, Math.max(0, percent));
+}
+
+// ---- DeepSeek formatting and thresholds (PLAN §3.1 / §5.2) ----
+//
+// The DeepSeek payload carries money in YUAN (snapped to a 1e-8 yuan quantum),
+// unlike Kimi's cents -> use fmtMoney, not fmtYuan.
+
+/** Balance under this many yuan is a failure, not a number (PLAN §5.2). */
+export const LOW_BALANCE_YUAN = 10;
+/** Cache hit rate under this percentage is a failure (PLAN §5.2). */
+export const LOW_CACHE_HIT = 60;
+
+/** FmtMoney: DeepSeek money is yuan (not cents) — always two decimals, same
+    rule as fmtYuan (user decision 2026-11-14). */
+export function fmtMoney(yuan: number, currency = 'CNY'): string {
+  const symbol = currency === 'USD' ? '$' : '¥';
+  return symbol + yuan.toFixed(2);
+}
+
+/** FmtTokens: 1.33M / 284K / 96, two decimals at most and no trailing zeros. */
+export function fmtTokens(tokens: number): string {
+  const trim = (s: string): string => s.replace(/\.?0+$/, '');
+  if (tokens >= 1_000_000) return `${trim((tokens / 1_000_000).toFixed(2))}M`;
+  if (tokens >= 1_000) return `${trim((tokens / 1_000).toFixed(1))}K`;
+  return String(tokens);
+}
+
+/** `cache 80%` (one decimal, no trailing zero); `cache --` when unknown. */
+export function fmtHitRate(rate: number | null | undefined): string {
+  if (rate == null) return 'cache --';
+  return `cache ${rate.toFixed(1).replace(/\.0$/, '')}%`;
+}
+
+/** PLAN §5.2: an unavailable or nearly empty balance is red. */
+export function isLowBalance(total: number, isAvailable: boolean): boolean {
+  return !isAvailable || total < LOW_BALANCE_YUAN;
+}
+
+/** PLAN §5.2: a cache hit rate under 60% is red — low means wasted cache. */
+export function isLowCacheHit(rate: number | null | undefined): boolean {
+  return rate != null && rate < LOW_CACHE_HIT;
+}
+
+/** Panel stamp text for a fetch time: `Updated HH:MM` in local time. */
+export function fmtUpdated(atIso: string): string {
+  const d = new Date(atIso);
+  if (Number.isNaN(d.getTime())) return '';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `Updated ${hh}:${mm}`;
 }

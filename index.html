@@ -7,15 +7,28 @@
   </head>
   <body>
     <div id="root">
-      <!-- Header (PLAN §3.1): wordmark + last-updated stamp -->
+      <!-- Header (PLAN §3.1): wordmark + last-updated stamp, then the provider
+           tab. The control is the shared .seg component from theme.css — the
+           same one the settings window uses, so the accent ring appears here
+           for free (PLAN §3.4). -->
       <div class="hdr">
         <div class="hdr-top">
           <span class="brand">Quota Tray</span>
           <span class="stamp" id="last-updated"></span>
         </div>
+        <div class="seg provider" role="radiogroup" aria-label="Provider">
+          <label>
+            <input type="radio" name="provider" value="kimi" checked />
+            <span class="seg-item">Kimi</span>
+          </label>
+          <label>
+            <input type="radio" name="provider" value="deepseek" />
+            <span class="seg-item">DeepSeek</span>
+          </label>
+        </div>
       </div>
 
-      <section class="pane">
+      <section class="pane" id="pane-kimi">
         <!-- Two bare readout columns -->
         <div class="quota">
           <div class="field">
@@ -53,6 +66,26 @@
               <span class="badge" id="badge" hidden>Update</span>
             </span>
           </div>
+        </div>
+      </section>
+
+      <!-- DeepSeek tab (PLAN §3.1): balance block, one row per model, total row.
+           The model list arrives already filtered and capped at four, so this
+           pane draws `byModel` as-is. A usage failure replaces the rows with a
+           hint line; the balance block keeps its own status either way. -->
+      <section class="pane" id="pane-deepseek" hidden>
+        <div class="balance">
+          <div class="row-main">
+            <span class="label">Balance</span>
+            <span class="status" id="ds-status"></span>
+          </div>
+          <div class="num" id="ds-total-num"><b id="ds-total">--</b></div>
+          <div class="note" id="ds-detail" hidden></div>
+        </div>
+        <div class="mrows" id="ds-models"></div>
+        <div class="total" id="ds-summary" hidden>
+          <span id="ds-sum"></span>
+          <span id="ds-sum-today"></span>
         </div>
       </section>
 

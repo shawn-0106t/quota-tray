@@ -1,7 +1,7 @@
 /* Main panel — E layout (PLAN.md §3.1 / demo/panel-demo-e.html).
    Shared tokens and primitives live in theme.css; this file only adds the
-   panel-only pieces: the show/hide animation, the Extra-usage sub-block and
-   the ghost footer grid. */
+   panel-only pieces: the show/hide animation, the provider tab placement, the
+   DeepSeek pane, the Extra-usage sub-block and the ghost footer grid. */
 
 /* Show/hide animation (PLAN §3.6): initial state is faded out, 16px down. */
 #root {
@@ -23,6 +23,28 @@ body.leave #root {
     transform 160ms cubic-bezier(0.55, 0.055, 0.675, 0.19);
 }
 
+/* Provider tab: the shared .seg component (theme.css), panel margins only
+   (PLAN §3.4: 10 0 12). The accent ring on the active cell comes with it. */
+.seg.provider {
+  margin: 10px 0 12px;
+}
+
+/* Tab switch (PLAN §3.6): the incoming pane fades in over 120ms while the
+   window height changes in the same frame. A true cross-fade would need both
+   panes stacked in one grid cell, and that cell measures the TALLER pane — the
+   window would then be sized for the tab that is not on screen. */
+.pane.tab-in {
+  animation: pane-in 120ms linear;
+}
+@keyframes pane-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* Extra usage sub-block (monthly bar + caption) */
 .extra-meta {
   margin-top: 8px;
@@ -39,6 +61,99 @@ body.leave #root {
 }
 #version-row:hover .row-label {
   color: var(--ink-1);
+}
+
+/* ---------- DeepSeek pane (PLAN §3.1 / §3.5) ---------- */
+.balance {
+  padding: 2px 0 10px;
+}
+.status {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.status.bad {
+  color: var(--danger);
+}
+
+.mrows {
+  border-top: 1px solid var(--hair);
+}
+.mrow {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.mrow:last-child {
+  border-bottom: 0;
+}
+.mrow-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+/* The official name can be longer than anything hand-written, so it ellipses
+   inside the row; the amount stays whole (PLAN §3.4). */
+.mname {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-1);
+}
+.mcost {
+  flex: none;
+  font-size: 15px;
+  font-weight: 600;
+}
+.meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+.meta > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar.share {
+  height: 3px;
+  margin-top: 8px;
+}
+.hit.is-bad {
+  color: var(--danger);
+}
+
+.total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--hair);
+  padding: 8px 0 10px;
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+/* Replaces the model rows when usage is missing or empty; carries its own
+   bottom padding so it can close the pane on its own (PLAN §3.4). */
+.hint {
+  border-top: 1px solid var(--hair);
+  padding: 10px 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.hint.bad {
+  color: var(--danger);
 }
 
 /* Footer: grid of four equal ghost actions */
