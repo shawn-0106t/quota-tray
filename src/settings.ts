@@ -13,9 +13,12 @@ function el<T extends HTMLElement>(id: string): T {
 function reportHeight(): void {
   const root = document.getElementById('root');
   if (!root) return;
-  invoke('settings_height', { height: root.offsetHeight + SHADOW_ROOM }).catch(
-    () => undefined,
-  );
+  // The card caps itself at the viewport (`max-height`), so `offsetHeight` is
+  // the clamped box while `scrollHeight` still measures the content. Report the
+  // larger one: the backend needs the real content height to decide the window
+  // size, and the card scrolls whatever does not fit.
+  const content = Math.max(root.offsetHeight, root.scrollHeight);
+  invoke('settings_height', { height: content + SHADOW_ROOM }).catch(() => undefined);
 }
 
 /** Backfill the current settings into the controls (SPEC 13.2: every open). */

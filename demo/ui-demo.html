@@ -72,7 +72,7 @@
      against the track, under WCAG 1.4.11's 3:1 for a state cue */
   --seg-ring: #7d61a6;
   --danger: #b42318;
-  --shadow: 0 12px 40px #00000026;
+  --shadow: 0 8px 18px #0000001f;
 }
 
 :root[data-theme='dark'] {
@@ -91,7 +91,7 @@
   --seg-on: #3a3a37;
   --seg-ring: #9d88bc;
   --danger: #ff6b6b;
-  --shadow: 0 12px 40px #00000073;
+  --shadow: 0 8px 18px #00000059;
 }
 
 * {
@@ -547,7 +547,28 @@ body {
 }
 
     /* ---------- settings.css ---------- */
-    .win-settings #titlebar{
+    .win-settings .root{
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+}
+.win-settings .root::-webkit-scrollbar{
+  width: 8px;
+  height: 8px;
+}
+.win-settings .root::-webkit-scrollbar-track{
+  background: transparent;
+}
+.win-settings .root::-webkit-scrollbar-thumb{
+  background: var(--hair);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+.win-settings .root:hover::-webkit-scrollbar-thumb{
+  background: var(--ink-3);
+  background-clip: padding-box;
+}
+.win-settings #titlebar{
   cursor: default;
 }
 .win-settings .pane{

@@ -3,19 +3,38 @@
    backend resizes + re-centres it, so adding a section (P4: DeepSeek
    credentials) needs no fixed height anywhere. */
 
-/* The backend caps the window at 90% of the work area (panel.rs). On a short
-   work area that cap is smaller than the sheet — the manual-paste block alone
-   adds ~170px — and `html, body { overflow: hidden }` used to clip the rest,
-   so the bottom of the card was unreachable. The sheet scrolls instead: the
-   card keeps its natural height (the height report stays honest) and the
-   window scrolls it. */
-html,
-body {
-  height: 100%;
+/* The backend caps the window at 90% of the work area (panel.rs), which on a
+   short work area is less than the sheet: the manual-paste block alone adds
+   ~170px. The card scrolls itself in that case (`settings.ts` reports
+   `max(offsetHeight, scrollHeight)` so the height report stays honest), and the
+   scrollbar lives inside the card instead of at the transparent window edge. */
+#root {
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
 }
 
-body {
-  overflow-y: auto;
+/* Thin, theme-coloured scrollbar (WebView2 is Chromium): an 8px lane with a
+   4px thumb floating 2px inside the card's edge — the transparent border is
+   what insets it, and `background-clip` keeps the fill inside that border. */
+#root::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+#root::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#root::-webkit-scrollbar-thumb {
+  background: var(--hair);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+#root:hover::-webkit-scrollbar-thumb {
+  background: var(--ink-3);
+  background-clip: padding-box;
 }
 
 #titlebar {

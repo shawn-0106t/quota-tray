@@ -23,7 +23,7 @@
      against the track, under WCAG 1.4.11's 3:1 for a state cue */
   --seg-ring: #7d61a6;
   --danger: #b42318;
-  --shadow: 0 12px 40px #00000026;
+  --shadow: 0 8px 18px #0000001f;
 }
 
 :root[data-theme='dark'] {
@@ -42,7 +42,7 @@
   --seg-on: #3a3a37;
   --seg-ring: #9d88bc;
   --danger: #ff6b6b;
-  --shadow: 0 12px 40px #00000073;
+  --shadow: 0 8px 18px #00000059;
 }
 
 * {

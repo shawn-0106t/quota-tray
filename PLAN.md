@@ -135,7 +135,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 
 面板高度由前端测量内容后上报（`panel_height`），后端用 `LogicalSize` 改高 + `PhysicalPosition` 把窗口**右下角钉回原位**，并按工作区高度夹取；`show_panel` 先按当前 tab 定尺寸再显示，避免可见跳变。tab 选择持久化到 settings.json 的 `ActiveTab`：切换时前端调 `set_active_tab`，后端只改这一个字段并落盘，不碰两个 poller、调度与 last-good 槽位。两个 pane 只有活动那个参与布局（另一个 `hidden`），所以上报的高度天然是当前 tab 的，后端不需要按 tab 记住两套尺寸。
 
-设置窗同样内容自适应（`settings_height`），首次打开（或高度变化时）按工作区居中，同高度重复打开只钉尺寸、不动位置——用户拖动过标题栏的位置不会被重置；以后加分区（P4 的 DeepSeek 凭证）不需要再写死高度。窗口高度上限是工作区 90%，**内容比窗口高时整张卡片滚动**（`body { overflow-y: auto }`）：展开「Paste a credential instead」后约 824，在 1280×752 逻辑工作区下会被夹到 677，不滚动就会被 `overflow: hidden` 切掉底部。
+设置窗同样内容自适应（`settings_height`），首次打开（或高度变化时）按工作区居中，同高度重复打开只钉尺寸、不动位置——用户拖动过标题栏的位置不会被重置；以后加分区（P4 的 DeepSeek 凭证）不需要再写死高度。窗口高度上限是工作区 90%，**内容比窗口高时卡片自己滚动**（`#root { max-height: calc(100vh - 56px); overflow-y: auto }`，滚动条 4px、嵌在卡片内侧）：展开「Paste a credential instead」后约 824，在 1280×752 逻辑工作区下会被夹到 677，不滚动就会被切掉底部。
 
 设置窗三个分区（2026-11-14 落地）：**通用**（主题 / 刷新间隔 / 开机自启 + 底部 `Save settings`）、**Kimi 只读**（CLI 版本、凭证来源与 OAuth 到期时间）、**DeepSeek 凭证**（两个凭证各自「已配置 / 未配置 / 无法解密」，`Sign in…` 与 `Clear`，以及 `<details>` 折叠的手工粘贴兜底）。只读分区**只显示状态，永不显示凭证值**（后端没有任何字段能送出去）；红色只给真正坏掉的状态（Kimi token 过期、密文解不开），「未配置」用次级墨色——失败本身由面板 header 报。
 
