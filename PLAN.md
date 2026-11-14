@@ -1,6 +1,6 @@
 # PLAN — Quota Tray
 
-> 状态：**设计定稿，P1–P4 已落地（2026-11-14）**。
+> 状态：**设计定稿，P1–P5 已落地（2026-11-14）**。
 > 视觉基准：`demo/panel-demo-e.html` 冻结了**结构 / 字体 / token**；**所有窗口的当前成品快照**是 `demo/ui-demo.html`（由 `demo/build_ui_demo.py` 从真实 HTML/CSS 生成，改版后重跑即可，不要手改）。`demo/compare.html` 保留 A/B/C/D 四版仅作对照，不再演进。
 > 本文件是行为与设计的契约。改动设计或行为前先改这里，再改代码。
 
@@ -171,6 +171,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
   读取按前缀判断：带 `dpapi:` 的解密，不带的按明文接受（手工调试与「退回明文」的逃生口，结构不用改）。解密失败按「未配置」处理，`--test-deepseek --verbose` 必须区分 `credential source: env | file | imported | none | undecryptable`，且**永不打印密钥**。
   **一次性导入的判据是「我们的文件是否存在」，不是「值是否为空」**：`Clear` 会把文件写成空值而不是删除它，否则下一次轮询就会从旧文件把刚清掉的凭证又导回来。手工 `Clear` 对 `env` 来源无效——设置窗因此显式写出这一行。
   采用前先验证（PLAN §4）：API key 走一次 `user/balance`，浏览器 token 走一次 `usage/amount`；只有通过才落盘，坏值不会顶掉工作正常的值。
+  一次只验一个：验证期间到达的新候选顶掉队列里的旧候选，并在本次验证失败后重试——页面按自己的 `lastToken` 去重，被丢掉的候选不会被重发，等于白登一次。`--test-login` 的 probe URL 带 `quotatray=probe` 标记，宿主据此拒绝学习端点。
   有意的取舍：密钥绑当前 Windows 账号，便携盘插到别的账号下解不开（重填即可）；迁移期新旧两版不再共用凭证（旧版读不了密文，新版也不再回写旧文件）。
 - 缓存：`config_dir()/deepseek-cache.json`（原子写 temp + rename，失败保留上次成功值）。
 - 错误码：`key-invalid` / `token-expired` / `rate-limited` / `server-error` / `http-N` / `network-error` / `parse-error`；余额与用量两类错误互相独立。
@@ -240,7 +241,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 | **P2（已完成 2026-11-14）** | 面板 UI 重写（E 版 token）+ tab + 自适应高度。**已完成**：四个窗口统一字体/结构与 D 的骨架、强调色换成静紫（E 版）、面板与设置窗内容自适应、kimi-cu 端到端验过；分段 tab（E 的紫 ring）+ DeepSeek 面板（真实数据、阈值、错误文案、`ActiveTab` 持久化） | 连点 tab 30 次不跳位、底部贴边不变；`--test-ui` 通过；截图与 `panel-demo-e.html` 对照一致 |
 | **P3（已完成 2026-11-14）** | DeepSeek 后端移植 + 双 poller + fixtures 解析测试 | ✅ `cargo test` 18 passed；✅ 同机对比旧版 `--test-fetch` 逐字段一致（仅展示名按 §6.1 取官方名）；✅ `--test-deepseek` 通过；旧版 `--test-fixtures` ALL PASS |
 | **P4** | 设置窗（通用 / Kimi 只读 / DeepSeek 凭证）+ 托盘合并 tooltip + 登录捕获窗 | ✅ 设置落盘后重启生效（`ActiveTab` 之外的字段未改动）；✅ 设置窗三个分区渲染真实状态；✅ 登录窗捕获 → 验证 → DPAPI 落盘 → 事件 → 刷新；✅ `--test-login` 打印凭证来源 + `verify=ok` + `LoginWindow OK` + `LoginWindow capture channel OK`；✅ 托盘 tooltip 三行合并（见 §5.3） |
-| **P5** | 打包、端到端验证、README、独立 code review | `npx tauri build` 出单 exe；`--test-fetch` / `--test-deepseek` / `--test-ui` / `--test-login` 全绿；端到端脚本通过；审查报告无 Blocker |
+| **P5（已完成 2026-11-14）** | 打包、发布线、README、独立 code review | ✅ `npx tauri build` 出便携 exe + 按用户 NSIS 安装包（`bundle.targets = ["nsis"]`，不弹 UAC）；✅ `--test-fetch` / `--test-deepseek` / `--test-update` / `--test-usage` / `--test-ui` / `--test-login` 全绿；✅ 装机验证：静默安装 → 跑起来 → 静默卸载，系统清干净；✅ 中英双语 `README.md` + 生成的 `docs/screenshot-{light,dark}.png`；✅ `.github/workflows/{ci,release}.yml` + `scripts/release/make_release_zip.py`（tag → 草稿 Release，gitleaks 前置，正文取自 CHANGELOG，`sha256sum -c` 通过）；✅ 独立 code review 报 2 Blocker / 3 Major / 3 Minor，全部修复并复验（明细见 `STATUS.md`）。**未做**：建 remote、打 tag、真人在登录窗里输账号（需要人）。 |
 
 **顺序调整（2026-11-14 决定）**：P2 剩余的分段 tab 移到 P3 之后。理由是先让 DeepSeek 有真实数据，tab 一次做对，不做空态占位面板。tab 于同日随后落地，验收仍是「连点 30 次不跳位、底边与右边缘不动」。
 
@@ -284,3 +285,4 @@ PYTHONUTF8=1 python demo/check_contrast.py # token 对的 WCAG 比值
 | DeepSeek 缓存 / 展示名 / 端点 | `config_dir()/deepseek-{cache,models,endpoints}.json` |
 | Kimi 本地用量索引 | `config_dir()/kimi-usage.json`（每个会话文件的已读字节 + 按天小计，只留 30 天） |
 | 日志 | `config_dir()/webview.log` |
+| Release 资产 | `QuotaTray.exe`（便携）、`QuotaTray_<ver>_x64-setup.exe`（按用户 NSIS）、`QuotaTray-v<ver>.zip`（源码 + 便携 exe）、`SHA256SUMS.txt` |

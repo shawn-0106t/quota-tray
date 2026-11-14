@@ -60,9 +60,12 @@ the English notes first, then the Chinese mirror.
   the next sign-in.
 - A candidate token is verified with one real `amount` request before it
   replaces the stored one; a rejected candidate leaves the credential alone and
-  the window open with the reason in its title. `Clear` empties the credential
-  file but keeps it, so the one-time legacy import cannot resurrect what the
-  user just removed.
+  the window open with the reason in its title. The console emits several
+  intermediate tokens during sign-in, so a token that arrives while another is
+  being verified replaces the queued one and is retried when that verification
+  fails — the page never resends a token it already reported. `Clear` empties
+  the credential file but keeps it, so the one-time legacy import cannot
+  resurrect what the user just removed.
 - The manual fallback survived: a collapsed "Paste a credential instead" block
   in the settings window verifies each non-empty field and saves only what
   passes.
@@ -72,7 +75,28 @@ the English notes first, then the Chinese mirror.
   host parser without a human signing in.
 - The sign-in hook also reports the shape of the console's own usage request, so
   a moved endpoint and a bumped `x-app-version` are learned from the live page
-  and remembered in `deepseek-endpoints.json` (`PLAN.md` §6.3).
+  and remembered in `deepseek-endpoints.json` (`PLAN.md` §6.3). The
+  `--test-login` probe carries a marker the host refuses to learn from, so a
+  diagnostic run cannot overwrite what the console taught the app.
+- A bilingual `README.md` (English half, then 中文) with requirements,
+  install/portable/autostart notes, the data-source table per provider, the
+  privacy boundary, the self-check table and the build commands.
+- `docs/screenshot-{light,dark}.png`: the README's two screenshots, cropped out
+  of the all-windows demo by `demo/make_readme_shots.py` - generated like every
+  other review asset, never hand-cropped.
+- A release pipeline: `.github/workflows/ci.yml` (gitleaks over the full
+  history, then fmt/clippy/build/test and the frontend type-check on
+  `windows-latest`) and `.github/workflows/release.yml` (a `v*` tag must match
+  `tauri.conf.json`, then build, package and open a **draft** Release whose
+  notes come from the matching CHANGELOG section; publishing stays manual).
+- `scripts/release/make_release_zip.py`: source snapshot (`git ls-files`, so it
+  cannot drift from `.gitignore`) with the portable exe at the zip root, the
+  staged release assets and a `sha256sum`-compatible `SHA256SUMS.txt`, all
+  written through `.part` files so a failed run never leaves a mismatched pair.
+- `npx tauri build` now also produces a per-user NSIS installer
+  (`bundle.targets = ["nsis"]`, `installMode = currentUser`, English and
+  Simplified Chinese installer UI) beside the portable exe, so the app can be
+  installed into the user profile without elevation.
 
 ### Changed
 
@@ -158,6 +182,12 @@ the English notes first, then the Chinese mirror.
   sign-in title bar - generated from the shipped markup and stylesheets by
   `demo/build_ui_demo.py`, so it cannot drift from the product.
 
+### Fixed
+
+- `demo/shot.sh` produced no screenshot when the output path was absolute: the
+  script pasted `$PWD` in front of it unconditionally, so the browser was handed
+  `C:/repo/C:/elsewhere/x.png`. Absolute paths now pass through untouched.
+
 ### 中文
 
 - **新增**：Phase 1 基线导入——`kimi-planbar-tray` 的 rust 版（Tauri 2 +
@@ -199,7 +229,9 @@ the English notes first, then the Chinese mirror.
   IPC 命令面（因此不需要 `remote` capability，也不需要 ACL 条目）。窗口是临时的：
   关闭即销毁、不在 recovery 集合里，下次登录重新创建。
 - **新增**：候选 token 先用一次真实 `amount` 请求验证，通过才替换已存的凭证；被拒的
-  候选保持窗打开、原因写在窗口标题上，已存凭证不受影响。`Clear` 把凭证文件写成空值
+  候选保持窗打开、原因写在窗口标题上，已存凭证不受影响。登录过程会吐多个中间
+  token，所以验证期间到达的新候选会顶掉排队中的那个，并在本次验证失败后重试——
+  页面不会把已经上报过的 token 再发一次。`Clear` 把凭证文件写成空值
   而不删除它，否则一次性旧版导入会把刚清掉的凭证导回来。
 - **新增**：手工兜底保留——设置窗里折叠的「Paste a credential instead」会逐个验证
   非空字段，只有通过的才落盘。
@@ -208,6 +240,8 @@ the English notes first, then the Chinese mirror.
   导航被拦 + 宿主解析」三件事的证据，不需要真人登录。
 - **新增**：登录窗的 hook 还上报 console 自己用量请求的形状，端点搬家与
   `x-app-version` 升版都能从活页面学到并记进 `deepseek-endpoints.json`（`PLAN.md` §6.3）。
+  `--test-login` 的 probe 带一个宿主拒绝学习的标记，诊断命令不会覆盖 console
+  教会的端点。
 - **变更**：header 时间戳跟着当前 tab 走（`Updated HH:MM` / `Fetch failed` /
   `Not configured`）；DeepSeek 缓存跨天时显示 `Updated M/D HH:MM`，避免把前一天的
   数据读成刚取的。
@@ -267,3 +301,22 @@ the English notes first, then the Chinese mirror.
 - **新增**：`demo/ui-demo.html`——所有窗口一页看全（两个面板 tab、设置窗、技能窗、
   托盘菜单、通知区、登录窗标题栏），由 `demo/build_ui_demo.py` 从真实 HTML/CSS
   生成，不会与产品走样。
+- **新增**：中英双语 `README.md`（英文在前、中文在后）——运行要求、安装 / 便携 /
+  自启、两个 provider 的数据来源表、隐私边界、自检命令表与构建命令。
+- **新增**：`docs/screenshot-{light,dark}.png`——README 的两张截图，由
+  `demo/make_readme_shots.py` 从「所有窗口一页」里裁出；与其它评审产物一样是
+  生成物，不手工截图。
+- **新增**：发布线——`.github/workflows/ci.yml`（全历史 gitleaks，再在
+  `windows-latest` 上跑 fmt / clippy / build / test 与前端类型检查）与
+  `.github/workflows/release.yml`（`v*` tag 必须与 `tauri.conf.json` 版本一致，
+  然后构建、打包并开一个**草稿** Release，正文取自 CHANGELOG 对应小节；
+  发布仍是人工动作）。
+- **新增**：`scripts/release/make_release_zip.py`——源码快照（取自 `git ls-files`，
+  不会与 `.gitignore` 走样）内含便携版 exe，外带 release 资产改名与
+  `sha256sum` 兼容的 `SHA256SUMS.txt`；全部经 `.part` 中转，失败时不会留下
+  与校验和不匹配的那一半。
+- **新增**：`npx tauri build` 现在除便携 exe 外还产出按用户安装的 NSIS 安装包
+  （`bundle.targets = ["nsis"]`、`installMode = currentUser`、安装界面中英双语），
+  不需要管理员权限即可装进用户配置。
+- **修复**：`demo/shot.sh` 在输出路径为绝对路径时截不到图——脚本无条件把 `$PWD`
+  拼在前面，浏览器收到的是 `C:/repo/C:/elsewhere/x.png`；现在绝对路径原样透传。
