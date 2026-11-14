@@ -25,6 +25,7 @@ use serde::{Deserialize, Serialize};
 use settings::SettingsData;
 use state::AppState;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use update::UpdateStatus;
 
@@ -612,9 +613,16 @@ fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
                 recovery::log("login: sign-in window closed");
                 // The sheet was hidden when the console opened; put it back so
                 // the user lands where they started, with fresh statuses
-                // (PLAN §4). A `--test-*` run never hid it.
+                // (PLAN §4). Scheduled, never called inline: this runs inside
+                // the close event on the main thread, and showing a window
+                // from there is a nested main-thread dispatch — the kind that
+                // turns "close" into "nothing happens".
                 if crate::app_data_dir_override().is_none() {
-                    crate::show_settings_window(window.app_handle());
+                    let handle = window.app_handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(Duration::from_millis(120)).await;
+                        crate::show_settings_window(&handle);
+                    });
                 }
                 return;
             }

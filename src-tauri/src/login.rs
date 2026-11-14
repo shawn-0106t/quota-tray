@@ -41,14 +41,6 @@ pub fn open(app: &AppHandle) {
         let st = app.state::<AppState>();
         st.login.reset();
     }
-    // The console is a real browser window; the settings sheet is an overlay
-    // that is always-on-top. Leaving it up either covers the page or hides
-    // under it, and either way the user ends up fighting two windows. Hide it
-    // here and bring it back when the sign-in window closes (lib.rs).
-    // A `--test-*` run is left alone: it shows every window on purpose.
-    if crate::app_data_dir_override().is_none() {
-        crate::close_settings(app.clone());
-    }
     if let Some(w) = app.get_webview_window(LABEL) {
         // Reopening: keep it where it is, but bring it forward again — a stale
         // hidden window would otherwise stay behind the topmost overlays.
@@ -85,6 +77,24 @@ pub fn open(app: &AppHandle) {
             recovery::log("login: sign-in window opened");
         }
         Err(e) => recovery::log(&format!("login: window build failed: {e}")),
+    }
+    // The console is a real browser window; the settings sheet is a topmost
+    // overlay. Leaving it up either covers the page or hides under it, so it
+    // is hidden here and restored when the sign-in window closes (lib.rs).
+    //
+    // Deliberately *after* `build()` and off the calling thread: the sheet's
+    // hide path schedules a settle timer that hops onto the main thread ~150ms
+    // later, which is exactly when the new window is being created — nesting
+    // the two dispatches is how a "sign in" click could hang the app with a
+    // blank, unclosable window. If the build itself goes wrong, the user keeps
+    // the sheet instead of losing it. A `--test-*` run is left alone: it shows
+    // every window on purpose.
+    if crate::app_data_dir_override().is_none() {
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(80)).await;
+            crate::close_settings(handle);
+        });
     }
 }
 
