@@ -17,14 +17,14 @@
 > | 9 Maintenance Boundaries and Documentation Map | Replaced by this repository's `AGENTS.md` / `PLAN.md` / `STATUS.md` |
 > | 10 Window Specifications | Sizes follow `PLAN.md` §4 (the panel and the settings window are content-sized; Skills stays 404x520) |
 > | 11 Color Scheme | Replaced by `PLAN.md` §3.2 |
-> | 12 Panel UI Structure | Replaced by `PLAN.md` §3 and `demo/panel-demo-e.html`; rewritten as two tabs in P2 |
+> | 12 Panel UI Structure | Replaced by `PLAN.md` §3 and `demo/panel-demo-e.html`; rewritten as two tabs in P2. 12.5 currency formatting → `PLAN.md` §5.2 (two decimals always, 2026-11-14) |
 > | 13 Settings Window UI Structure | Applies; P4 adds the DeepSeek credentials section |
 > | 14 Tray Behavior | Applies; the merged tooltip covers both providers (P4) |
 > | 15 Animations | Applies (`PLAN.md` §3.6 restates the same timings) |
 > | 16 Data and API | Kimi half applies; DeepSeek is specified in `PLAN.md` §5.2 / §6 |
 > | 17 CLI Version Check | Applies |
 > | 18 Settings Persistence | Applies; adds the `ActiveTab` field (`PLAN.md` §7) |
-> | 19 Test/Self-Check Commands | `--test-fetch` / `--test-update` / `--test-ui` apply; `--test-deepseek` / `--test-login` belong to P3/P4 and are not implemented |
+> | 19 Test/Self-Check Commands | `--test-fetch` / `--test-update` / `--test-ui` / `--test-deepseek` apply; `--test-login` belongs to P4 and is not implemented |
 > | 20 Other Implementation Details | Applies; the named mutex is now `QuotaTray.SingleInstance` and the config directory is `%APPDATA%\QuotaTray` |
 > | 21 Skills Read-Only Window | Applies |
 > | 22 WebView2 Failure Detection and Recovery | Applies |
@@ -391,8 +391,8 @@ Overall: `Grid Margin=16`, 5 rows. All copy is in English (terminology aligned w
   - Text: `"Used {FmtYuan(used)} this month / {FmtYuan(limit)} limit"`, `FontSize=11`, `Margin=0,8,0,0`, `TextSecondaryBrush`
 
 ### 12.5 Currency formatting (`FmtYuan`, unit: cents → yuan)
+> Superseded by `PLAN.md` §5.2 as of 2026-11-14: **always two decimals** — `1234 → "¥12.34"`, `10000 → "¥100.00"`. The old "whole yuan drops the fraction" rule no longer applies (side by side, `¥100` and `¥49.52` read as two different units).
 - Negative: `"-" + FmtYuan(-cents)`
-- `¥{cents/100}`, appending `.{frac:00}` when the remainder > 0; decimals omitted for whole yuan. E.g. `1234 → "¥12.34"`, `10000 → "¥100"`
 
 ### 12.6 Version row (Row 3)
 - The whole row is a clickable card: `Margin=0,12,0,12`, `Padding=14,10`, `CornerRadius=12`, `Cursor=Hand`, `ToolTip="View Kimi Code releases"`

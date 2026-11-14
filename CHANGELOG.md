@@ -37,9 +37,35 @@ the English notes first, then the Chinese mirror.
 - A separate poller for DeepSeek with its own schedule and last-good slot, so
   one provider's failure never blanks or retimes the other. Refresh and hover
   prefetch now cover both providers.
+- The Kimi/DeepSeek segmented tab and the DeepSeek pane: balance block
+  (`Available` / `Insufficient balance`, `Granted … · Topped up …`), one row
+  per model (official display name, month cost, token-share bar, cache hit rate
+  and today's cost), and a month total row. Usage failures replace the rows
+  with a single hint line; balance and usage report independently.
+- The selected tab persists as `ActiveTab` in `settings.json`, so the next
+  launch opens on the same provider.
+- Thresholds from `PLAN.md` §5.2 are live in the pane: a cache hit rate under
+  60% and a balance under ¥10 (or `is_available=false`) turn red. They only
+  colour output and live in the frontend, so no unused Rust is shipped.
 
 ### Changed
 
+- The panel's header stamp follows the active tab (`Updated HH:MM` /
+  `Fetch failed` / `Not configured`), and a DeepSeek cache older than today
+  prints `Updated M/D HH:MM` instead of a bare time.
+- Every money value now prints two decimals (`¥3.00`, `¥0.00`, `¥49.52`) in
+  both providers. The WPF parent's "whole yuan drops the fraction" rule is
+  deliberately not carried over: next to `¥49.52`, a `¥3` reads like a
+  different unit.
+- The DeepSeek payload is now filtered where it is produced:
+  `visible_models` (drop all-zero placeholder rows, keep the top four by month
+  cost) runs at the end of `fetch_diag`, so the IPC result, the
+  `deepseek-updated` event and the cache carry exactly the rows the pane draws,
+  and the frontend does not repeat the rule.
+- Switching tabs fades the incoming pane in over 120ms while the window height
+  changes in the same frame. A true cross-fade was not used: stacked panes
+  measure the taller one, and the bottom-anchored window would have jumped to a
+  height belonging to the tab that is not on screen.
 - All four windows now share the frozen D design language: warm paper cards,
   hairline rows, uppercase micro-labels, 30/600 tabular numerals, one blue for
   usage and one red for failures. The settings and skills windows drop their
@@ -107,6 +133,26 @@ the English notes first, then the Chinese mirror.
   解析（4 份 fixtures 从父仓库移植）、凭证前缀处理与 DPAPI 往返。
 - **新增**：DeepSeek 独立 poller，自带调度与 last-good 槽位——任一 provider
   失败都不会清空或改写另一个；Refresh 与托盘悬停预取现在覆盖两个 provider。
+- **新增**：Kimi/DeepSeek 分段 tab 与 DeepSeek 面板——余额块（`Available` /
+  `Insufficient balance`、`Granted … · Topped up …`）、每模型一行（官方展示名、
+  本月金额、token 份额条、命中率与今日消费）、本月合计行；用量失败时整块换成
+  一行提示，余额与用量各自报错互不影响。
+- **新增**：选中的 tab 持久化到 `settings.json` 的 `ActiveTab`，下次启动仍停在
+  同一个 provider。
+- **新增**：`PLAN.md` §5.2 的两个阈值落地——命中率 <60% 标红、余额 <¥10 或
+  `is_available=false` 标红；只决定颜色，放在前端，不往 Rust 里塞死代码。
+- **变更**：header 时间戳跟着当前 tab 走（`Updated HH:MM` / `Fetch failed` /
+  `Not configured`）；DeepSeek 缓存跨天时显示 `Updated M/D HH:MM`，避免把前一天的
+  数据读成刚取的。
+- **变更**：所有金额一律两位小数（`¥3.00` / `¥0.00` / `¥49.52`），两个 provider
+  统一；旧版「整元省略小数」的规则不再沿用——放在 `¥49.52` 旁边，`¥3` 会被读成
+  另一个单位。
+- **变更**：DeepSeek 载荷在生产处就过滤——`visible_models`（去掉全零占位行、
+  按本月消费取前 4）改在 `fetch_diag` 结尾执行，IPC 结果、`deepseek-updated`
+  事件与缓存都只留面板要画的行，前端不再重复同一条规则。
+- **变更**：切 tab 时入场 pane 淡入 120ms，窗口高度同帧变更。没有做真正的交叉
+  淡入——两个 pane 叠在一格里量出的是较高的那个，底部锚定的窗口会跳到没显示的
+  那个 tab 的高度。
 - **变更**：四个窗口统一到定稿 D 版视觉——暖纸底、发丝线分行、大写微标签、
   30/600 等宽数字、单一蓝表示用量、单一红表示故障；设置窗与技能窗不再是旧的
   扁平皮肤，托盘菜单改为 ghost 列表。

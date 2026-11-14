@@ -17,14 +17,14 @@
 > | 9 维护边界与文档地图 | 由本仓库 `AGENTS.md` / `PLAN.md` / `STATUS.md` 取代 |
 > | 10 窗口规格 | 尺寸以 `PLAN.md` §4 为准（面板与设置窗内容自适应；Skills 窗固定 404×520） |
 > | 11 配色方案 | 由 `PLAN.md` §3.2 取代 |
-> | 12 面板 UI 结构 | 由 `PLAN.md` §3 与 `demo/panel-demo-e.html` 取代；P2 重写为双 tab |
+> | 12 面板 UI 结构 | 由 `PLAN.md` §3 与 `demo/panel-demo-e.html` 取代；P2 重写为双 tab。12.5 金额格式化 → `PLAN.md` §5.2（2026-11-14 起一律两位小数） |
 > | 13 设置窗 UI 结构 | 适用，P4 增补 DeepSeek 凭证区 |
 > | 14 托盘行为 | 适用；合并版 tooltip 覆盖两个 provider（P4） |
 > | 15 动画 | 适用（`PLAN.md` §3.6 复述同套时序） |
 > | 16 数据与 API | Kimi 部分适用；DeepSeek 见 `PLAN.md` §5.2 / §6 |
 > | 17 CLI 版本检查 | 适用 |
 > | 18 设置持久化 | 适用；新增 `ActiveTab` 字段（`PLAN.md` §7） |
-> | 19 自检命令 | `--test-fetch` / `--test-update` / `--test-ui` 适用；`--test-deepseek` / `--test-login` 属 P3/P4，尚未实现 |
+> | 19 自检命令 | `--test-fetch` / `--test-update` / `--test-ui` / `--test-deepseek` 适用；`--test-login` 属 P4，尚未实现 |
 > | 20 其他实现细节 | 适用；命名互斥锁改为 `QuotaTray.SingleInstance`，配置目录改为 `%APPDATA%\QuotaTray` |
 > | 21 Skills 只读窗口 | 适用 |
 > | 22 WebView2 故障检测与恢复 | 适用 |
@@ -392,8 +392,8 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
   - 文本：`"Used {FmtYuan(used)} this month / {FmtYuan(limit)} limit"`，`FontSize=11`，`Margin=0,8,0,0`，`TextSecondaryBrush`
 
 ### 12.5 金额格式化（`FmtYuan`，单位：分 → 元）
+> 2026-11-14 起由 `PLAN.md` §5.2 取代：**一律两位小数**——`1234 → "¥12.34"`、`10000 → "¥100.00"`。原先「整元省略小数」的规则不再适用（面板里 `¥100` 与 `¥49.52` 并存会被读成两种单位）。
 - 负数：`"-" + FmtYuan(-cents)`
-- `¥{cents/100}`，余数 > 0 时追加 `.{frac:00}`；整元省略小数。例：`1234 → "¥12.34"`，`10000 → "¥100"`
 
 ### 12.6 版本行（Row 3）
 - 整行可点击卡片：`Margin=0,12,0,12`，`Padding=14,10`，`CornerRadius=12`，`Cursor=Hand`，`ToolTip="View Kimi Code releases"`

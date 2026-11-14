@@ -1,6 +1,6 @@
 # PLAN — Quota Tray
 
-> 状态：**设计定稿，代码待落地**（Phase 1 起）。
+> 状态：**设计定稿，P1–P3 与 P2 剩余部分（2026-11-14）已落地**。
 > 视觉基准：`demo/panel-demo-e.html`（唯一准绳；`demo/compare.html` 保留 A/B/C/D 四版仅作对照，不再演进）。
 > 本文件是行为与设计的契约。改动设计或行为前先改这里，再改代码。
 
@@ -56,7 +56,9 @@
 └───────────────────────────────────────────────────────┘
 ```
 
-DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted … Topped up …` → 每模型一行（名称 + 金额 / 占比条 / `1.33M tok · cache 80%` + `today ¥0.30`）→ 合计行。
+DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted … Topped up …` → 每模型一行（名称 + 金额 / 占比条 / `1.33M tok · cache 80%` + `today ¥0.30`）→ 合计行（`This month ¥3.00 · 2.45M tok` + `today ¥0.30`）。用量失败时模型行整块换成一行提示（`.hint`），合计行隐藏；余额块与模型列表各自独立报错（§5.2）。
+
+header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一起换（`Updated 18:14` / `Fetch failed` / `Not configured`）。跨天缓存的 DeepSeek 数据显示 `Updated M/D HH:MM`，避免把昨天的时间读成今天。
 
 **关键几何**：Kimi 读数区是**两列裸文本**（无填充、无描边、无圆角），列间距 24px，标签与下方行标签左对齐到面板 14px 内边距。
 
@@ -92,11 +94,14 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 
 | 组件 | 规格 |
 |---|---|
-| 分段控件 | margin `10 0 12`，padding 3，轨道 radius 12；格高 30、radius 8、`flex: 1`；活动格 `--seg-on` + `inset 0 0 0 1px --seg-ring`。**`--seg-ring` 就是强调色**（2026-11-14 起）：填充差只有 1.14 / 1.33，靠它补到 4.46 / 4.82 才过 1.4.11。面板 tab 与设置窗分段控件是同一个组件、同一个 token，不允许再出现「只靠填充差」的第三处 |
+| 分段控件 | margin `10 0 12`，padding 3，轨道 radius 12；格高 30、radius 8、`flex: 1`；活动格 `--seg-on` + `inset 0 0 0 1px --seg-ring`。**`--seg-ring` 就是强调色**（2026-11-14 起）：填充差只有 1.14 / 1.33，靠它补到 4.46 / 4.82 才过 1.4.11。面板 tab 与设置窗分段控件是同一个组件、同一个 token，不允许再出现「只靠填充差」的第三处；面板侧只多一个 `.seg.provider` 的 margin，标记仍是 `<label><input type=radio>` + `.seg-item`（键盘用方向键切换） |
 | 读数列 | `grid-template-columns: 1fr 1fr; gap: 24px`，列内 padding `10 0 11` |
 | 进度条 | 高 4、radius 2、轨道 `--hair-soft`、填充 `--accent-bar`、`margin-top: 9`；模型占比条高 3、`margin-top: 8` |
 | 分行 | `border-top: 1px --hair`，padding `9 0`；**最后一个子块** `padding-bottom: 10`（父容器不再加底部内边距，否则该行会光学偏上） |
-| 模型行 | 名称单行省略（`min-width: 0` + `text-overflow: ellipsis`、`white-space: nowrap`），金额固定右对齐、不参与省略 —— 官方展示名可能比手写表长，不能顶掉金额 |
+| DeepSeek 余额块 | padding `2 0 10`；`BALANCE` 标签与右侧状态（11/400 `--ink-2`，`Available` 不着色、`Insufficient balance` 用红）同一行；大数字沿用 30/600，`is-danger` 时转红；说明行 `Granted … · Topped up …` |
+| DeepSeek 模型行 | 与普通行同高（`9 0`），行间 hair、末行不画底线；名称 12.5/500 单行省略 + `title`（官方名可能很长），金额 15/600 右对齐不参与省略；占比条用模型 token 份额（`monthTokens / 本组最大值`，非金额份额）；meta 行 `token · cache 命中率` 与 `today` 分列两端 |
+| DeepSeek 合计行 | hair 顶线，padding `8 0 10`，10.5/400 `--ink-2`，左右两列 |
+| 提示行 `.hint` | 顶线 + padding `10 0`；11/400/1.5 `--ink-2`；故障态用 `--danger`。它可能单独收尾整块，所以自带底部内边距（本表「分行」那条规则） |
 | chip | **tag 形状**：radius 4（不是胶囊）、padding `2 8`、`--tint` 底 + `--accent-ink` 字；深浅两主题都要真的看出底色，浅色因此用 18% |
 | footer | `grid 4`，`gap 2`，padding 5，按钮高 42、radius 8、图标 16、hover 底 `--seg-track` |
 | 开关 | 轨道 38×20、radius 9999、1px `--ink-2` 描边；钮 14、inset 2；开启态轨道 `--ink-1`、钮 `--paper`、位移 18px；150ms 过渡；整行是点击目标；**单色，不占强调色**（强调色只给用量） |
@@ -111,8 +116,8 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 ### 3.6 动效
 
 - 面板开场：opacity 160ms linear + translateY 16→0 220ms `cubic-bezier(.215,.61,.355,1)`；收场 130/160ms，结束后回调后端真正隐藏（沿用 kimi 的 `finish_hide` 语义）。
-- tab 切换：内容 120ms 交叉淡入，窗口高度同帧变更（底部锚定）。
-- 全局 `prefers-reduced-motion` 关闭过渡。
+- tab 切换：内容 120ms 淡入，窗口高度同帧变更（底部锚定）。实现是一次「入场 pane 淡入」而不是真正的交叉淡入：交叉淡入要把两个 pane 叠在同一格里，而那一格量出来是**较高**的那个 pane，高度就会按没显示的那个 tab 算，底部锚定跟着跳。淡入期间只有 opacity 变，`offsetHeight` 不受影响，实测高度与内容同帧。
+- 全局 `prefers-reduced-motion` 同时关掉过渡与动画。
 
 ## 4. 窗口与信息架构
 
@@ -124,7 +129,7 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 | `menu` | 188 × N | 托盘光标处 | Open / Refresh / Settings / Skills / Exit |
 | `login`（DeepSeek） | ~900 × 680 | 居中 | 临时窗，不进 recovery 集合 |
 
-面板高度由前端测量内容后上报（`panel_height`），后端用 `LogicalSize` 改高 + `PhysicalPosition` 把窗口**右下角钉回原位**，并按工作区高度夹取；`show_panel` 先按当前 tab 定尺寸再显示，避免可见跳变。tab 选择持久化到 settings.json 的 `ActiveTab`。
+面板高度由前端测量内容后上报（`panel_height`），后端用 `LogicalSize` 改高 + `PhysicalPosition` 把窗口**右下角钉回原位**，并按工作区高度夹取；`show_panel` 先按当前 tab 定尺寸再显示，避免可见跳变。tab 选择持久化到 settings.json 的 `ActiveTab`：切换时前端调 `set_active_tab`，后端只改这一个字段并落盘，不碰两个 poller、调度与 last-good 槽位。两个 pane 只有活动那个参与布局（另一个 `hidden`），所以上报的高度天然是当前 tab 的，后端不需要按 tab 记住两套尺寸。
 
 设置窗同样内容自适应（`settings_height`），首次打开（或高度变化时）按工作区居中，同高度重复打开只钉尺寸、不动位置——用户拖动过标题栏的位置不会被重置；以后加分区（P4 的 DeepSeek 凭证）不需要再写死高度。
 
@@ -151,8 +156,18 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
   有意的取舍：密钥绑当前 Windows 账号，便携盘插到别的账号下解不开（重填即可）；迁移期新旧两版不再共用凭证（旧版读不了密文，新版也不再回写旧文件）。
 - 缓存：`config_dir()/deepseek-cache.json`（原子写 temp + rename，失败保留上次成功值）。
 - 错误码：`key-invalid` / `token-expired` / `rate-limited` / `server-error` / `http-N` / `network-error` / `parse-error`；余额与用量两类错误互相独立。
-- 解析：`data.biz_data` 既可能是对象也可能是数组（取 `[0]`）；`total[]` 按模型聚合，`REQUEST` 计请求不计 token，`PROMPT_CACHE_HIT/MISS_TOKEN` 算命中率；`days[]` 只取本地今天；金额保 double 精度、token 取整（`round_ties_even`，即 .NET `Math.Round` 的默认中点舍入）；**金额按 1e-8 元量子归整**（与本页钱包 `amountLeft` 同一单位）—— 逐条 f64 求和的末位漂移会让面板显示 `24.279870719999998` 而不是 `24.27987072`，归整后与旧版 decimal 逐位一致；过滤全零占位模型；按本月消费降序取前 4。
-- 阈值：命中率 <60% 标红（不含琥珀档）；余额 < ¥10 或 `is_available=false` 标红。
+- 解析：`data.biz_data` 既可能是对象也可能是数组（取 `[0]`）；`total[]` 按模型聚合，`REQUEST` 计请求不计 token，`PROMPT_CACHE_HIT/MISS_TOKEN` 算命中率；`days[]` 只取本地今天；金额保 double 精度、token 取整（`round_ties_even`，即 .NET `Math.Round` 的默认中点舍入）；**金额按 1e-8 元量子归整**（与本页钱包 `amountLeft` 同一单位）—— 逐条 f64 求和的末位漂移会让面板显示 `24.279870719999998` 而不是 `24.27987072`，归整后与旧版 decimal 逐位一致。过滤全零占位与取前 4 由 `visible_models` 在 fetch 边界执行，见下方「展示口径」最后一条。
+- 阈值：命中率 <60% 标红（不含琥珀档）；余额 < ¥10 或 `is_available=false` 标红。两个判定只在**前端**（`common.ts` 的 `isLowCacheHit` / `isLowBalance`）存在——它们只决定颜色、不影响数据，放进 Rust 就会成为没有调用方的死代码。
+- 展示口径：
+  - 金额一律**两位小数**（`¥3.00` / `¥0.00` / `¥49.52`；2026-11-14 用户决定）：旧版 `FmtMoney` 的「整元省略小数」不再沿用，Kimi 的 `fmtYuan(cents)` 同步改成两位，避免同一面板里出现两种写法。DeepSeek 的单位是**元**、Kimi 的是**分**，两个入口不要混用；`currency == "USD"` 用 `$`。`demo/panel-demo-e.html` 的示例金额与 `docs/SPEC.md` §12.5 已同步这条规则；A–D 四版是被否决的历史对照，里面的 `¥10` / `¥100` 保持原样，**不要拿它们当格式依据**。
+  - token：`1.33M` / `284K`（M 最多两位、K 最多一位、去掉尾零）。
+  - 命中率：一位小数、无尾零；没有 prompt token 的行显示 `cache --`（不着色）。
+  - 模型占比条是 **token 份额**（本模型本月 token ÷ 本组最大），不是金额份额。
+  - 过滤全零占位与「按本月消费取前 4」在 `fetch_diag` 结尾统一做一次：IPC 载荷、`deepseek-updated` 事件与 `deepseek-cache.json` 里都只留面板要画的行，前端不再二次筛选，两份逻辑不可能漂移。诊断行（`--verbose` 的逐模型一行）在那之前打印，所以仍能看到全部模型。
+- 错误码 → 文案（配合 §5.3：数字保留、状态行说明）：
+  - 余额：`no-api-key` → `Not configured` + 说明行 `API key not set`；`key-invalid` → `Key invalid`；`rate-limited` → `Rate limited`；其余（含 `http-N` / `network-error` / `parse-error`）→ `Fetch failed`。
+  - 用量（整块换成一行提示）：`no-user-token` → `Usage token not configured`（不写「仅余额可用」——余额块自己会说，两个凭证都缺时那句还会自相矛盾）；`token-expired` → `Usage token expired — sign in again to sync`；`rate-limited` → `Usage was rate limited — retrying in 30s`；其余 → `Usage fetch failed — retrying in 30s`。本月没有用量（模型列表为空）→ `No usage data this month`，不着红。
+  - header 时间戳跟当前 tab：`no-api-key` → `Not configured`；其他错误 → `Fetch failed`；正常 → `Updated HH:MM`，非当天 → `Updated M/D HH:MM`（DeepSeek 会跨会话复用缓存，只写时刻会把昨天读成今天）。
 
 ### 5.3 轮询与失败语义
 
@@ -186,7 +201,7 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 - **面板交互**：托盘左键开合；失焦自动隐藏（settings/skills 打开时抑制）；隐藏后 300ms 内的托盘点击忽略（同一次点击造成的失焦）。**关掉设置窗要补一次收起判定**：抑制期间那次 blur 已经被丢掉，关窗也不会再产生新的 blur，所以 `close_settings` 之后 150ms 检查「面板可见且未获焦点」则收起（150ms 是留给 Windows 把焦点交还面板的时间）。
 - **WebView2 recovery**：沿用 kimi 的策略——`ProcessFailed` 时就地重建窗口，不重启进程，`ExitRequested` 时 `prevent_exit`；重建单飞 + 1/2/5s 退避 + 30s 内 3 次封顶；诊断写 `webview.log`，永不写 token。
 - **错误呈现**：所有 IO / 注册表 / 进程 / HTTP 失败都静默吞掉，只通过界面文字与状态字段暴露，**不弹对话框**。
-- **settings.json**：`{ Theme, RefreshMinutes, AutoStart, ActiveTab }`，PascalCase，`serde(default)` 容忍缺字段；`ActiveTab` 缺省回 `kimi`。
+- **settings.json**：`{ Theme, RefreshMinutes, AutoStart, ActiveTab }`，PascalCase，`serde(default)` 容忍缺字段；`ActiveTab` 缺省回 `kimi`，写入时也只接受 `kimi` / `deepseek` 两个值（其他一律当 `kimi`）。
 
 ## 8. 阶段计划与验收
 
@@ -194,12 +209,12 @@ DeepSeek tab 用同一套骨架：`BALANCE` + `Available` / `¥66.50` / `Granted
 |---|---|---|
 | **P0（已完成）** | 四版静态 demo + 设计定稿 + 本文件 | `demo/compare.html` 可切主题/provider/状态；`heights.py` 出高度表；`check_contrast.py` 全通过 |
 | **P1（已完成）** | 仓库化、拷入 `kimi-planbar-tray/rust/` 基线、改名 Quota Tray、拷入 SPEC/LICENSE | `cargo build` + `npm run build` + `tsc --noEmit` 通过；`--test-fetch` / `--test-ui` 通过；旧 UI 能跑 |
-| **P2（视觉与高度已完成，tab 顺延）** | 面板 UI 重写（E 版 token）+ tab + 自适应高度。**已完成**：四个窗口统一字体/结构与 D 的骨架、强调色换成静紫（E 版）、面板与设置窗内容自适应、kimi-cu 端到端验过 | 连点 tab 30 次不跳位、底部贴边不变；`--test-ui` 通过；截图与 `panel-demo-e.html` 对照一致。**剩余**：分段 tab（含 E 的紫 ring）+ DeepSeek 面板（见下方顺序调整） |
+| **P2（已完成 2026-11-14）** | 面板 UI 重写（E 版 token）+ tab + 自适应高度。**已完成**：四个窗口统一字体/结构与 D 的骨架、强调色换成静紫（E 版）、面板与设置窗内容自适应、kimi-cu 端到端验过；分段 tab（E 的紫 ring）+ DeepSeek 面板（真实数据、阈值、错误文案、`ActiveTab` 持久化） | 连点 tab 30 次不跳位、底部贴边不变；`--test-ui` 通过；截图与 `panel-demo-e.html` 对照一致 |
 | **P3（已完成 2026-11-14）** | DeepSeek 后端移植 + 双 poller + fixtures 解析测试 | ✅ `cargo test` 18 passed；✅ 同机对比旧版 `--test-fetch` 逐字段一致（仅展示名按 §6.1 取官方名）；✅ `--test-deepseek` 通过；旧版 `--test-fixtures` ALL PASS |
 | **P4** | 设置窗（通用 / Kimi 只读 / DeepSeek 凭证）+ 托盘合并 tooltip + 登录捕获窗 | 设置落盘后重启生效；真账号走通捕获 → 验证 → 保存 → 面板出数；`--test-login` 通过 |
 | **P5** | 打包、端到端验证、README、独立 code review | `npx tauri build` 出单 exe；`--test-fetch` / `--test-deepseek` / `--test-ui` / `--test-login` 全绿；端到端脚本通过；审查报告无 Blocker |
 
-**顺序调整（2026-11-14 决定）**：P2 剩余的分段 tab 移到 P3 之后。理由是先让 DeepSeek 有真实数据，tab 一次做对，不做空态占位面板；tab 落地时的验收仍是「连点 30 次不跳位、底边与右边缘不动」。
+**顺序调整（2026-11-14 决定）**：P2 剩余的分段 tab 移到 P3 之后。理由是先让 DeepSeek 有真实数据，tab 一次做对，不做空态占位面板。tab 于同日随后落地，验收仍是「连点 30 次不跳位、底边与右边缘不动」。
 
 ## 9. 风险与未决
 

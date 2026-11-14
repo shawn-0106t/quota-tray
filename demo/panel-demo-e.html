@@ -17,6 +17,10 @@
        3. The Update chip is a tag (radius 4) and its light fill is 18% of the accent,
           not 10%: at 10% it lifted only 1.12 off the paper and read as no fill at all,
           while the dark one lifted 1.24.
+     Sample figures are data, not style, but they follow the panel's formatters: money
+     always carries two decimals since 2026-11-14 (`Granted ¥10.00`, `¥100.00`, PLAN §5.2),
+     so a comparison against this file does not mistake the old whole-yuan rule for a
+     rendering bug.
      Why 264deg / 28%: the user's own palette (previously #B3A3CC at 72% lightness).
      Its hue and chroma were right; only the lightness ladder had to be split per theme. -->
 <meta name="color-scheme" content="light dark">
@@ -324,7 +328,7 @@ body:not(.bare) .stage { padding-bottom: 96px; }
         </div>
         <div class="extra-meta" id="k-extra-meta" hidden>
           <div class="bar"><i id="k-extra-bar" style="width:42%"></i></div>
-          <div class="extra-note" id="k-extra-note">¥42.50 of ¥100 this month</div>
+          <div class="extra-note" id="k-extra-note">¥42.50 of ¥100.00 this month</div>
         </div>
       </div>
 
@@ -346,7 +350,7 @@ body:not(.bare) .stage { padding-bottom: 96px; }
           <span class="status" id="d-status">Available</span>
         </div>
         <div class="num"><b id="d-total">¥66.50</b></div>
-        <div class="note" id="d-detail">Granted ¥10 · Topped up ¥56.50</div>
+        <div class="note" id="d-detail">Granted ¥10.00 · Topped up ¥56.50</div>
       </div>
       <div class="mrows" id="d-models"></div>
       <div class="total" id="d-total-row">
@@ -445,16 +449,16 @@ body:not(.bare) .stage { padding-bottom: 96px; }
   const KIMI = {
     normal: { week: 12, five: 31, extra: 'No data', meta: false, version: '0.39.1', badge: true, stamp: 'Updated 18:14', bad: false },
     four:   { week: 12, five: 31, extra: 'No data', meta: false, version: '0.39.1', badge: true, stamp: 'Updated 18:14', bad: false },
-    hot:    { week: 86, five: 94, extra: '¥8.20', meta: true, limitPct: 92, note: '¥92.00 of ¥100 this month', version: '0.39.1', badge: true, stamp: 'Updated 18:14', bad: false },
+    hot:    { week: 86, five: 94, extra: '¥8.20', meta: true, limitPct: 92, note: '¥92.00 of ¥100.00 this month', version: '0.39.1', badge: true, stamp: 'Updated 18:14', bad: false },
     err:    { week: 12, five: 31, extra: 'No data', meta: false, version: '0.39.1', badge: false, stamp: 'Fetch failed', bad: true },
     nocred: { week: null, five: null, extra: 'Not activated', meta: false, version: 'Not detected', badge: false, stamp: 'No token', bad: true },
   };
 
   const DS = {
-    normal: { balance: '¥66.50', status: ['Available', 'ok'], detail: 'Granted ¥10 · Topped up ¥56.50', sum: 'This month ¥3.00 · 2.45M tok', today: 'today ¥0.30', models: 'normal', hint: '' },
-    four:   { balance: '¥66.50', status: ['Available', 'ok'], detail: 'Granted ¥10 · Topped up ¥56.50', sum: 'This month ¥3.40 · 2.83M tok', today: 'today ¥0.32', models: 'four', hint: '' },
-    hot:    { balance: '¥6.40', status: ['Insufficient balance', 'bad'], detail: 'Granted ¥0 · Topped up ¥56.40', sum: 'This month ¥3.00 · 2.45M tok', today: 'today ¥0.30', models: 'normal', hint: '' },
-    err:    { balance: '¥66.50', status: ['Available', 'ok'], detail: 'Granted ¥10 · Topped up ¥56.50', sum: '', today: '', models: null, hint: 'Usage token expired — open Settings and sign in again to sync.' },
+    normal: { balance: '¥66.50', status: ['Available', 'ok'], detail: 'Granted ¥10.00 · Topped up ¥56.50', sum: 'This month ¥3.00 · 2.45M tok', today: 'today ¥0.30', models: 'normal', hint: '' },
+    four:   { balance: '¥66.50', status: ['Available', 'ok'], detail: 'Granted ¥10.00 · Topped up ¥56.50', sum: 'This month ¥3.40 · 2.83M tok', today: 'today ¥0.32', models: 'four', hint: '' },
+    hot:    { balance: '¥6.40', status: ['Insufficient balance', 'bad'], detail: 'Granted ¥0.00 · Topped up ¥56.40', sum: 'This month ¥3.00 · 2.45M tok', today: 'today ¥0.30', models: 'normal', hint: '' },
+    err:    { balance: '¥66.50', status: ['Available', 'ok'], detail: 'Granted ¥10.00 · Topped up ¥56.50', sum: '', today: '', models: null, hint: 'Usage token expired — open Settings and sign in again to sync.' },
     nocred: { balance: '--', status: ['Not configured', 'bad'], detail: 'API key not set', sum: '', today: '', models: null, hint: 'Open Settings to add your DeepSeek API key and usage token.' },
   };
 
