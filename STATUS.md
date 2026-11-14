@@ -1,33 +1,35 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-14 20:40（**v0.1.0 已 publish**，Dependabot 三个 PR 已合并，`main` 走到依赖升级后的提交；下一步是等下一个功能版本）。
+> 快照：2026-11-14 21:05（**v1.0.0 已 publish**；`main` 干净、CI 绿、告警清零）。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
 ## 一句话
 
-**v0.1.0 已在 `https://github.com/shawn-0106t/quota-tray` 正式发布**（2026-11-14 12:35 UTC），三件资产核对过、告警清零。发版后的依赖 PR 已全部合并，本机门禁（tsc / vite / 29 tests）与 CI 都绿。**这些依赖升级没有用户可见变化，没有另发版本**——下一个版本留给有实际变更的时候。
+**v1.0.0 已在 `https://github.com/shawn-0106t/quota-tray` 发布**（2026-11-14 13:02 UTC，Latest），行为与 0.1.0 一致——版本号表达的是「发布门禁到位 + 依赖当前」：全量审查、每次推送跑 CI、branch protection、CodeQL、Dependabot、社区文档齐备，依赖升到 vite 8.3.8 / tauri-plugin-opener 2.7.3 / base64 0.23.1。
 
-## 发版记录（2026-11-14）
+## 两次发版的记录（2026-11-14）
 
-| 项 | 结果 |
+| 项 | v1.0.0 | v0.1.0 |
+|---|---|---|
+| tag | `v1.0.0`（annotated）→ `e984c61` | `v0.1.0`（annotated）→ `39f691d` |
+| publish | 2026-11-14 13:02 UTC（Latest） | 2026-11-14 12:35 UTC |
+| 资产 | `QuotaTray.exe` 7.17 MB、`QuotaTray-v1.0.0.zip` 3.97 MB（92 项 = 91 源文件 + 根目录 exe）、`SHA256SUMS.txt` | 同名同构，版本 0.1.0 |
+| 资产校验 | 三件下载到本地 `sha256sum -c` → 两条 **OK** | 同 |
+| 发布产物自检 | `--test-ui` 四个窗口 OK；`FileVersion` = 1.0.0；zip 内 `Cargo.toml` = 1.0.0 | `--test-ui` OK、`--test-fetch` `error: null` |
+| notes | 取自 CHANGELOG 的 `## [1.0.0] — 2026-11-14` 段（英 + 中） | 取自 0.1.0 段 |
+| 发版决策 | 依赖升级本身不单独发版（无用户可见变化），但用户要求以 1.0.0 声明稳定态，于是并入本次 | 首次发布 |
+
+其余基础设施（两次发版共用）：仓库 public、`main` 受 `Build & test (windows-latest)` required check 保护且禁 force-push；secret scanning + push protection、CodeQL default setup（actions / python / js-ts / rust）、Dependabot + security updates、私密漏洞报告全部开启；社区文档八项齐、`community/profile` health = **100**。
+
+| 事件 | 处置 |
 |---|---|
-| 仓库 | `https://github.com/shawn-0106t/quota-tray`（public），`main` 受 `Build & test (windows-latest)` required check 保护，禁 force-push |
-| main 上的 CI | 三次全绿：`8136cba`（发版准备）、`947a514`（社区文档）、`39f691d`（CodeQL 修复 + 门禁文档） |
-| tag | `v0.1.0`（annotated）→ `39f691d`；tag 与 `tauri.conf.json` 版本一致（workflow 校验过） |
-| 发版 workflow | 全绿：gitleaks 全历史 → 构建 exe → 打包 → 生成 notes → 开草稿 |
-| 草稿 Release → 正式 | `v0.1.0` 于 2026-11-14 12:35 UTC **publish**（latest）；三件资产：`QuotaTray.exe` 7.17 MB、`QuotaTray-v0.1.0.zip` 3.96 MB（92 文件，根目录含便携 exe）、`SHA256SUMS.txt` |
-| 资产校验 | 把三件下载到本地跑 `sha256sum -c SHA256SUMS.txt` → 两条 **OK** |
-| 发布产物自检 | 下载回来的 `QuotaTray.exe --test-ui` 四个窗口 OK、`--test-fetch` `error: null` |
-| notes | 取自 CHANGELOG 的 `## [0.1.0] — 2026-11-14` 段（英 + 中）+ 全量 changelog 链接 + 三件资产说明 + SmartScreen 提示 |
-| 仓库设置 | secret scanning + push protection、CodeQL default setup（actions / python / js-ts / rust 四种语言）、Dependabot + security updates、私密漏洞报告，均已开启 |
-| 社区文档 | `CONTRIBUTING` / `CODE_OF_CONDUCT` / `SECURITY` / issue 模板 / PR 模板 / `.github/dependabot.yml` 齐了，`community/profile` health = **100** |
-| CodeQL | 报了一条 **high**（`py/bad-tag-filter`，`demo/build_ui_demo.py` 的 `<script>` 剥离正则）→ `aea5218` 加 `re.I`，第二轮换了个说法（`</script\s*>` 匹配不到 `</script\t\n bar>`），`4e123c2` 改成 `</script[^>]*>` 并给 `<body>` 也加 `re.I`；`main` 上扫描 0 结果，**两条告警都是 fixed**，生成物字节未变 |
+| CodeQL `py/bad-tag-filter`（high，`demo/build_ui_demo.py`） | `aea5218` 加 `re.I`；第二轮换成尾标签 `[^>]*` 的写法（`4e123c2`），`<body>` 也加 `re.I`；`main` 扫描 0 结果，两条告警 **fixed**，生成物字节未变 |
+| Dependabot 三个升级 | #1 vite 8.3.8、#2 tauri-plugin-opener 2.7.3、#3 base64 0.23.1（major）全部 squash 合并；合并后重跑 `tsc` / `vite build` / 29 tests（含 DPAPI 往返）全绿 |
+| `glib` 依赖告警（GHSA-wrw7-89jp-8q8g） | Windows 目标下不进依赖图（`cargo tree -i glib --target x86_64-pc-windows-msvc` 无输出），当前 Tauri 线无 0.20 可解 → 按 `not_used` 关闭并附证据 |
+| 本地验证的一个洞 | 合并后那次 `npm run build` 用的是 `node_modules` 里的旧 vite（lock 已更新但没重装）；已用 `npm ci` + 重建补齐，并跑真实路径验证 |
 
-| 依赖 PR | Dependabot #1（vite 8.3.8）、#2（tauri-plugin-opener 2.7.3）、#3（base64 0.23.1，major）全部 squash 合并；合并后本机 `tsc` / `vite build` / `cargo test --locked` 29 passed（含 DPAPI 往返），CI 绿。记录写进 `CHANGELOG.md` 的 `## [Unreleased]` |
-| 依赖告警 | `glib`（GHSA-wrw7-89jp-8q8g）在 Windows 目标下不进依赖图（`cargo tree -i glib --target x86_64-pc-windows-msvc` 无输出），当前 Tauri 线也没有 0.20 可解 → 按 `not_used` 关闭，附证据。**没有为依赖升级另发版本**：无用户可见变化 |
-
-**没有待办的动作**：release 已发布、PR 已合并、告警已清。下一个版本等有实际变更时再走同一套流程（tag 触发草稿）。
+**没有待办的动作**：release 已发布、PR 已合并、告警已清。
 
 ## 发版前的三步（已完成，留档）
 
@@ -74,10 +76,9 @@
 
 ## 剩下（都不是发版动作）
 
-1. **不需要为依赖升级再发一版**：vite / tauri-plugin-opener / base64 三个升级没有用户可见变化，已记进 `CHANGELOG.md` 的 `## [Unreleased]`；它们会随下一个真实版本一起出去。触发新版本的条件：用户可见的 bug 修复、安全修复、或功能变更。
-2. 下次发版的流程没变：CHANGELOG 把 `Unreleased` 段落定版并写日期 → 打 `v<x.y.z>` tag → workflow 开草稿 → 核对资产 → publish。
-
-> 四步发版动作（建 remote / CHANGELOG 定版 / tag / 开草稿）与 publish 均已于 2026-11-14 完成，记录见上面「发版记录」。
+1. **Kimi CLI 的 token 在 2026-11-14 20:50 过期了**（`expires_at` 正好落在那一刻），需要人在 CLI 里重新登录一次；在那之前面板的 Kimi 页显示 `Expired — sign in with the Kimi CLI`，`--test-fetch` 报 `no-token`。这是环境状态，不是缺陷。
+2. 下次发版的流程：CHANGELOG 加 `## [Unreleased]` 段记录变更 → 定版写日期 → 打 `v<x.y.z>` tag → workflow 开草稿 → 核对资产与 `SHA256SUMS.txt` → publish。触发新版本的条件：用户可见的 bug 修复、安全修复、功能变更。
+3. Dependabot 每周会开新 PR；合并走 required check，major 单独评估，合完本地按 `npm ci` + 重建的方式验一遍（别只看 `npm run build`）。
 
 ## 接手必须知道的
 
@@ -92,19 +93,19 @@
 8. 原有几条仍然有效：图标是生成物、托盘嵌 48px、Kimi 数字是本机口径、扫描节奏、`ui-demo.html` 是生成物、登录窗没有 IPC 面。
 9. **README 截图有护栏**：`make_readme_shots.py` 的 `CROP` 是按 DOM 实测的固定框，脚本会先断言「裁切外圈是单一背景色」再出图。改舞台 padding、改窗宽、改演示页排版后，它要么自己过、要么直接报错要求重测——不要手工裁图。
 
-## 环境现状（2026-11-14 20:40）
+## 环境现状（2026-11-14 21:05）
 
-- **Kimi**：token 有效，`--test-fetch` 返回 `error: null`；5h 0%、week 1%。
-- **DeepSeek**：API key 与 usage token 都已配置（`--test-login` 报 `credentialSource=file`、`apiKeyConfigured=true`、`verify=ok`）；余额 ¥38.58。
+- **Kimi**：**token 已过期**（20:50），需在 CLI 重新登录；`--test-fetch` 目前报 `no-token`，面板显示过期提示。
+- **DeepSeek**：API key 与 usage token 都已配置（`--test-login` 报 `credentialSource=file`、`apiKeyConfigured=true`、`verify=ok`）；余额 ¥34.64。
 - `%APPDATA%\QuotaTray`：credentials / endpoints / models / cache / kimi-usage / `settings.json`（`Theme=system`、`RefreshMinutes=5`、`AutoStart=false`、`ActiveTab=kimi`）/ `webview.log`。
-- 仓库根留三件本地构建的产物（gitignored）：`QuotaTray.exe`、`QuotaTray-v0.1.0.zip`、`SHA256SUMS.txt`；它们的哈希与 Release 里 runner 构建的那份不同（正常，两个 commit/两次构建）。
+- 仓库根留三件本地构建的产物（gitignored）：`QuotaTray.exe`（1.0.0）、`QuotaTray-v1.0.0.zip`、`SHA256SUMS.txt`；哈希与 Release 里 runner 构建的那份不同（正常，两台机器/两次构建）。
 - **仓库根那个 `QuotaTray.exe` 进程被关掉了**（它锁着产物文件，`make_release_zip.py` 会 `PermissionError`）。要再跑就双击根目录的 exe；再次打包前先退出它。
-- git：`main` 已包含三个依赖 PR 的 squash 合并 + 本文档收尾提交，`origin/main` 同步，工作区干净；tag `v0.1.0` 仍在发布时的 `39f691d`。
+- git：`main` 干净并与 `origin/main` 同步；两个 tag `v0.1.0`（`39f691d`）与 `v1.0.0`（`e984c61`）。
 
 ## 新对话开场建议
 
 > 接手 Quota Tray（`https://github.com/shawn-0106t/quota-tray`，本地目录同名仓库，工作区干净）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`；UI 看 `demo/ui-demo.html`（生成物，别手改），README 截图由 `demo/make_readme_shots.py` 生成。
 >
-> 状态：**v0.1.0 已发布**（2026-11-14），三件资产核对过、exe 自检通过；CodeQL 与依赖告警都已清零；Dependabot 三个升级已合并并记进 `## [Unreleased]`。当前没有待办动作，下一个版本在有实际变更时按同一套流程走（CHANGELOG 定版 → tag → 草稿 → publish）。
+> 状态：**v1.0.0 已发布**（2026-11-14 13:02 UTC，Latest；v0.1.0 留在同一页），三件资产下载校验过、发布 exe 自检通过；CodeQL 与依赖告警清零；Dependabot 三个升级已合并。当前没有待办动作；唯一的环境事项是本机 Kimi CLI token 在 20:50 过期，需要重新登录一次。
 >
 > 用户已拍板：只发便携 exe（无安装包）；托盘图标保持纯紫双条；设置窗高度维持「工作区 90% 上限 + 卡片内滚动」。
