@@ -12,7 +12,7 @@
 > | 4 Tech Stack and Dependencies | Applies |
 > | 5 Data Flow | Kimi half applies; DeepSeek is specified in `PLAN.md` §5.2 |
 > | 6 Security and Privacy | Applies |
-> | 7 Build, Test, and Release | Build and self-check commands apply; the release pipeline is redefined by `PLAN.md` §8 P5 |
+> | 7 Build, Test, and Release | Build and self-check commands apply; the release pipeline is defined by `PLAN.md` §8 P5 (portable exe only, no installer) |
 > | 8 Runtime Requirements | Applies |
 > | 9 Maintenance Boundaries and Documentation Map | Replaced by this repository's `AGENTS.md` / `PLAN.md` / `STATUS.md` |
 > | 10 Window Specifications | Sizes follow `PLAN.md` §4 (the panel and the settings window are content-sized; Skills stays 404x520) |
@@ -24,7 +24,7 @@
 > | 16 Data and API | Kimi half applies; DeepSeek is specified in `PLAN.md` §5.2 / §6 |
 > | 17 CLI Version Check | Applies |
 > | 18 Settings Persistence | Applies; adds the `ActiveTab` field (`PLAN.md` §7) |
-> | 19 Test/Self-Check Commands | `--test-fetch` / `--test-update` / `--test-ui` / `--test-deepseek` apply; `--test-login` belongs to P4 and is not implemented |
+> | 19 Test/Self-Check Commands | `--test-fetch` / `--test-update` / `--test-ui` / `--test-deepseek` / `--test-login` apply |
 > | 20 Other Implementation Details | Applies; the named mutex is now `QuotaTray.SingleInstance` and the config directory is `%APPDATA%\QuotaTray` |
 > | 21 Skills Read-Only Window | Applies |
 > | 22 WebView2 Failure Detection and Recovery | Applies |

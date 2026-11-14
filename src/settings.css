@@ -74,7 +74,7 @@
   height: 0;
 }
 /* Off: outlined track + ink dot. On: ink track + paper dot shifted right.
-   Monochrome on purpose — blue stays reserved for usage (PLAN §3.5). */
+   Monochrome on purpose — the accent stays reserved for usage (PLAN §3.5). */
 .switch {
   position: relative;
   width: 38px;

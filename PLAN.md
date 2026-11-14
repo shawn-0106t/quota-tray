@@ -1,7 +1,7 @@
 # PLAN — Quota Tray
 
 > 状态：**设计定稿，P1–P5 已落地（2026-11-14）**。
-> 视觉基准：`demo/panel-demo-e.html` 冻结了**结构 / 字体 / token**；**所有窗口的当前成品快照**是 `demo/ui-demo.html`（由 `demo/build_ui_demo.py` 从真实 HTML/CSS 生成，改版后重跑即可，不要手改）。`demo/compare.html` 保留 A/B/C/D 四版仅作对照，不再演进。
+> 视觉基准：`demo/panel-demo-e.html` 冻结了**结构 / 字体 / 强调色与其余 token**；唯一的例外是 `--shadow`——E 之后按实测从 `0 12px 40px` 收紧到 `0 8px 18px`（§3.2），因为 40px 模糊会被 28px 的阴影留白裁成硬边，这一项以本文件与 `src/theme.css` 为准，**不要照 E 复原**。**所有窗口的当前成品快照**是 `demo/ui-demo.html`（由 `demo/build_ui_demo.py` 从真实 HTML/CSS 生成，改版后重跑即可，不要手改）。`demo/compare.html` 保留 A/B/C/D 四版仅作对照，不再演进。
 > 本文件是行为与设计的契约。改动设计或行为前先改这里，再改代码。
 
 ---
@@ -85,7 +85,6 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 | `--seg-track` | `#f1f0ec` | `#262624` | 分段控件轨道；footer hover 底 |
 | `--seg-on` | `#ffffff` | `#3a3a37` | 活动格底 |
 | `--seg-ring` | `#7d61a6` | `#9d88bc` | 活动格内描边 = 强调色。原来的中性发丝线对轨道只有 1.16 / 1.82，不满足 1.4.11；换紫后 4.46 / 4.82，面板 tab 与设置窗分段控件共用同一个值 |
-| 阴影 | `0 12px 40px #00000026` | `0 12px 40px #00000073` | 面板悬浮阴影（case 的 menu 档） |
 
 ### 3.3 排版
 
@@ -242,7 +241,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 | **P2（已完成 2026-11-14）** | 面板 UI 重写（E 版 token）+ tab + 自适应高度。**已完成**：四个窗口统一字体/结构与 D 的骨架、强调色换成静紫（E 版）、面板与设置窗内容自适应、kimi-cu 端到端验过；分段 tab（E 的紫 ring）+ DeepSeek 面板（真实数据、阈值、错误文案、`ActiveTab` 持久化） | 连点 tab 30 次不跳位、底部贴边不变；`--test-ui` 通过；截图与 `panel-demo-e.html` 对照一致 |
 | **P3（已完成 2026-11-14）** | DeepSeek 后端移植 + 双 poller + fixtures 解析测试 | ✅ `cargo test` 18 passed；✅ 同机对比旧版 `--test-fetch` 逐字段一致（仅展示名按 §6.1 取官方名）；✅ `--test-deepseek` 通过；旧版 `--test-fixtures` ALL PASS |
 | **P4** | 设置窗（通用 / Kimi 只读 / DeepSeek 凭证）+ 托盘合并 tooltip + 登录捕获窗 | ✅ 设置落盘后重启生效（`ActiveTab` 之外的字段未改动）；✅ 设置窗三个分区渲染真实状态；✅ 登录窗捕获 → 验证 → DPAPI 落盘 → 事件 → 刷新；✅ `--test-login` 打印凭证来源 + `verify=ok` + `LoginWindow OK` + `LoginWindow capture channel OK`；✅ 托盘 tooltip 三行合并（见 §5.3） |
-| **P5（已完成 2026-11-14）** | 打包、发布线、README、独立 code review | ✅ `npx tauri build` 出便携 exe + 按用户 NSIS 安装包（`bundle.targets = ["nsis"]`，不弹 UAC）；✅ `--test-fetch` / `--test-deepseek` / `--test-update` / `--test-usage` / `--test-ui` / `--test-login` 全绿；✅ 装机验证：静默安装 → 跑起来 → 静默卸载，系统清干净；✅ 中英双语 `README.md` + 生成的 `docs/screenshot-{light,dark}.png`；✅ `.github/workflows/{ci,release}.yml` + `scripts/release/make_release_zip.py`（tag → 草稿 Release，gitleaks 前置，正文取自 CHANGELOG，`sha256sum -c` 通过）；✅ 独立 code review 报 2 Blocker / 3 Major / 3 Minor，全部修复并复验（明细见 `STATUS.md`）。**未做**：建 remote、打 tag、真人在登录窗里输账号（需要人）。 |
+| **P5（已完成 2026-11-14）** | 打包、发布线、README、独立 code review | ✅ `npx tauri build` 只出便携 exe（`bundle.targets = []`；2026-11-14 决定不再提供 NSIS 安装包）；✅ `--test-fetch` / `--test-deepseek` / `--test-update` / `--test-usage` / `--test-ui` / `--test-login` 全绿；✅ 中英双语 `README.md` + 生成的 `docs/screenshot-{light,dark}.png`；✅ `.github/workflows/{ci,release}.yml` + `scripts/release/make_release_zip.py`（tag → 草稿 Release，gitleaks 前置，正文取自 CHANGELOG，`sha256sum -c` 通过）；✅ 独立 code review 报 2 Blocker / 3 Major / 3 Minor，全部修复并复验（明细见 `STATUS.md`）。**未做**：建 remote、打 tag、真人在登录窗里输账号（需要人）。 |
 
 **顺序调整（2026-11-14 决定）**：P2 剩余的分段 tab 移到 P3 之后。理由是先让 DeepSeek 有真实数据，tab 一次做对，不做空态占位面板。tab 于同日随后落地，验收仍是「连点 30 次不跳位、底边与右边缘不动」。
 
@@ -286,4 +285,4 @@ PYTHONUTF8=1 python demo/check_contrast.py # token 对的 WCAG 比值
 | DeepSeek 缓存 / 展示名 / 端点 | `config_dir()/deepseek-{cache,models,endpoints}.json` |
 | Kimi 本地用量索引 | `config_dir()/kimi-usage.json`（每个会话文件的已读字节 + 按天小计，只留 30 天） |
 | 日志 | `config_dir()/webview.log` |
-| Release 资产 | `QuotaTray.exe`（便携）、`QuotaTray_<ver>_x64-setup.exe`（按用户 NSIS）、`QuotaTray-v<ver>.zip`（源码 + 便携 exe）、`SHA256SUMS.txt` |
+| Release 资产 | `QuotaTray.exe`（便携）、`QuotaTray-v<ver>.zip`（源码 + 便携 exe）、`SHA256SUMS.txt`（不含安装包，2026-11-14 决定） |

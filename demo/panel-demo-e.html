@@ -22,7 +22,12 @@
      so a comparison against this file does not mistake the old whole-yuan rule for a
      rendering bug.
      Why 264deg / 28%: the user's own palette (previously #B3A3CC at 72% lightness).
-     Its hue and chroma were right; only the lightness ladder had to be split per theme. -->
+     Its hue and chroma were right; only the lightness ladder had to be split per theme.
+     One deliberate divergence from the shipped app, kept frozen with the rest of E:
+     --shadow here is still `0 12px 40px`. The product tightened it to `0 8px 18px`
+     after user testing, because 40px of blur is clipped by the 28px shadow margin and
+     reads as a hard ring around the card. PLAN §3.2 and src/theme.css are the source of
+     truth for that token; do not copy this file's value back into the app. -->
 <meta name="color-scheme" content="light dark">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Quota Tray — panel demo E (frozen design)</title>

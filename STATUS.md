@@ -1,160 +1,89 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-14 19:10（第九轮结束 + 用户实测后的修补，15 个提交，工作区干净；下一轮做发版前的去安装包 + 全量审查 + 全量测试）。
+> 快照：2026-11-14 20:10（发版前准备轮结束：去安装包 + 全量审查 + 增量复验 + 全量测试 + 设计 case 草稿；20 个文件改动 + 1 个新增，**未提交**，HEAD `d325458`）。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
 ## 一句话
 
-**P1–P5 全部完成**，第九轮又在用户实测后修掉了三个真 bug：登录窗在主线程上建窗导致**空白且关不掉**、`Clear` 被登录窗的自动捕获**写回**、设置窗展开手工粘贴块被夹高**切掉底部**（滚动条还落在窗口边缘、阴影被裁成硬边）。三者都已复现、修复、复验，文档同步。
+**v0.1.0 的代码与产物已就绪，可以发版**：只发便携 exe（NSIS 安装包已移除），整棵树过了一次独立审查（无 Blocker，1 Major + 2 Minor + 8 处文档矛盾全部修掉），静态门 / 六条 `--test-*` / 打包校验全绿。剩下四步只有人能做的：建 remote、push 看 CI、给 CHANGELOG 补日期、打 tag 并核对草稿 Release。
 
-**还差两件只能人做的事**：① 真人在登录窗里输一次账号密码；② 建 GitHub remote、打 `v0.1.0` tag、publish 草稿 Release。
+## 本轮做完的三件事
 
-## 阶段状态
+| 步 | 内容 | 结果 |
+|---|---|---|
+| 1 | 去掉 NSIS 安装包，只留便携 exe | `tauri.conf.json` 的 `bundle.targets = []`、`bundle.windows.nsis` 整块删除；`release.yml` 改 `--no-bundle`、资产列表三件、notes 与清单同步；`make_release_zip.py` 只认一个 exe；README / AGENTS / PLAN / CHANGELOG 一并改口 |
+| 2 | 对整棵树做一次全量 code review | 只读 `explore` + `~/.agents/skills/code-review`，报 1 Major / 2 Minor / 8 处文档矛盾，**全部修掉**（明细见下节） |
+| 3 | 全量测试 | 见「本轮验证结果」；含 CI 那条 `--no-bundle` 路径与便携模式实测 |
 
-| 阶段 | 状态 |
-|---|---|
-| P0 设计探索 + 定稿 | 完成 |
-| P1 仓库化 / 导入 / 改名 | 完成（`b43b3e7`） |
-| P2 视觉 + 高度 + tab | 完成（`d892eeb`…`8ab1f86`） |
-| P3 DeepSeek 后端 | 完成（`13822ce`） |
-| P4 设置窗分区 / 托盘合并 / 登录捕获 | 完成（`855035a`） |
-| 计划外：图标 / Kimi 统计 / 一页 demo | 完成（`855035a`、`9b23b74`） |
-| P5 打包 / 发布线 / README / 代码审查 | 完成（`bb57658`…`9252a08`） |
-| 实测修补：登录窗 / Clear / 设置窗滚动与阴影 | 完成（`26fbe6a`…`940ae42`） |
+另新增 `docs/case-quota-tray-panel.md`：把现在这套 UI 写成 `rationalism-design` skill 的 case 草稿（窄面板高密度这一档，现有 8 个 case 都缺）。正文是英文、按现有 case 的骨架（When to Use / Colors / Type / Layout / Signature / Components / Anti-Examples / Why It Holds），末尾附「并入 skill 时还要做什么」。它是**草稿、不是产品文档**，用户会在新对话里并进 skill。
 
-## 提交记录（第九轮，15 个，每个都能独立构建）
+## 审查发现与处置
 
-```
-281fd36 docs(agents): the shadow must fit the 28px margin
-03622c2 docs: sync P5 and the user-testing fixes
-940ae42 fix(settings): scroll inside the card, with a hairline scrollbar; tighten the shadow
-4cf6061 fix(settings): scroll the sheet when the window is clamped
-5682d67 fix(app): Clear must not be undone by an open sign-in window
-f2bc122 fix(app): build the sign-in window off the main thread
-e8be518 fix(app): drop the redundant post-build focus call in the sign-in window
-cef31b2 fix(app): keep window work off the sign-in open/close critical path
-3326bc9 docs(status): record the sign-in window fix
-26fbe6a fix(app): open the DeepSeek sign-in window above the settings sheet
-4a15ae7 docs(status): record the P5 commits, pin the review route that works
-9252a08 docs: record P5, the release process and the review fixes
-c2fa3f9 docs(readme): bilingual README with generated screenshots
-d0ea0a5 feat(release): NSIS bundle, packaging script, CI and draft-release pipeline
-bb57658 fix(app): queue sign-in candidates, date stale stamps, pass fmt/clippy
-```
-
-## 用户实测后的三个 bug（都已复现 → 修复 → 复验）
-
-| 现象 | 根因 | 修法 | 验证 |
-|---|---|---|---|
-| 点 `Sign in…` 出现**空白且关不掉**的窗口（只能最小化），日志里连 `login: sign-in window opened` 都没有 | `open_login` 是同步命令，Tauri 把同步命令跑在**主线程**；`WebviewWindowBuilder::build()` 又要跳到主线程并等它完成 —— 窗口建出来了，命令永远不返回，后面的导航 / 日志 / 收窗全没跑 | `open_login` / `close_login` 把活交给 async runtime；收起设置窗放在建窗之后；去掉建窗后多余的 `set_focus()` | 在设置窗里真实 `click()` 按钮走 IPC：旧构建只有 `clicked`、新构建 `login: sign-in window opened` → `settings: hide`，页面渲染出 DeepSeek 登录页，`WM_CLOSE` 后 `login: sign-in window closed` 且设置窗回来 |
-| `Clear` 之后 usage token 还在（API key 确实没了） | `Clear` 本身没问题（文件里 `apiKey` 为空、之后的两次写入都是登录窗的 `candidate verified and saved`）；登录窗的职责就是捕获 console 已有会话里的 token，所以清掉后再点 `Sign in…` 会自动写回 | `Clear` 顺手关掉登录窗；`LoginState.epoch` 让 Clear 之前发起的验证丢弃结果；设置窗写明「再登录会存回 token」；`Clear` 写一行日志 | 设置窗点 Clear 后文件两字段为空；日志有 `credentials: cleared (apiKey=false userToken=false)` |
-| 设置窗展开「Paste a credential instead」显示不全；滚动条在窗口边缘、阴影像硬边 | 窗口被夹在工作区 90%（本机 752 逻辑高 → 677），展开后内容 824，`overflow: hidden` 直接切掉；`body` 滚动让滚动条落在透明窗口边缘；`0 12px 40px` 的阴影超出 28px 留白被窗口裁断 | `#root { max-height: calc(100vh - 56px); overflow-y: auto }` 卡片自己滚；滚动条 8px 轨道 / 4px 内缩细线（`--hair`，hover `--ink-3`）；上报高度改 `max(offsetHeight, scrollHeight)`；阴影收到 `0 8px 18px` | 真实页面量：收起 `root=596`（+56=652，不滚动）、展开 `root=768`（+56=824，`scrollHeight=824`）；在 404×677 下渲染确认细滚动条在卡片内、阴影在留白内淡出；`check_contrast.py` 65/65 |
+| 级 | 发现 | 处置 |
+|---|---|---|
+| Major | `demo/ui-demo.html` 的舞台 CSS 排在 `theme.css` 之前，被同特异性的 `html, body { background: transparent; overflow: hidden }` 覆盖：评审页不能滚动（半页窗口滚不到）、浅色底丢成纯白、`.win-skills .root { height: 464px }` 是死规则（同名规则被 scoped 注入版压掉），skills 卡被拉成视口高 | 舞台规则改为最后注入（`html, body` + `.win-skills .root`），重新生成 `demo/ui-demo.html` 与两张 README 截图：浅色底由纯白回到 `#e7e7e4`，与深色的 `#0f0f12` 成对；实测 skills 卡从视口高回到 **464px**、settings 606px |
+| Minor（复验时补） | 舞台 30px 上内边距恢复后整页下移 60 设备像素，`make_readme_shots.py` 的固定裁切框因此切进第三张卡、顶部还留半行 demo 小标题；脚本只校验画布尺寸，静默通过 | 裁切框按 `getBoundingClientRect()` 实测重算为 `(30, 500, 2682, 1810)`，并加一条「裁切外圈必须是单一背景色」断言：以后布局再漂移会直接报错，不再悄悄切掉标题。新图 1200×593 |
+| Minor | 评审页 skills 行写了 `skill-item`，产品是 `skill`（`src/skills.ts:36`），所以发丝线与 9px 内边距全丢 | 改类名并重新生成 |
+| Minor | recovery 的 `ReloadThenRebuild` 首次失败只 `window.reload()`，之后不发 `panel-show`；而 `#root` 初始 `opacity: 0`，只有 `panel-show` 会加 `enter` → 面板可见时渲染进程崩一次，就留下一个能点、却什么都没有的窗口 | `main.ts` 在 bootstrap 末尾判断窗口是否已经可见，可见就先画首帧（`getCurrentWindow().isVisible()`，权限在 `core:default` 的 `window:default` 里）；启动时窗口隐藏，首帧淡入不受影响 |
+| 文档 | `PLAN.md` 阴影行仍是 `0 12px 40px`（与同表 `--shadow` 行和 `theme.css` 相反）；`AGENTS.md` 写 settings 404x464（实际 404x360）；`docs/SPEC{,_EN}.md` 说 `--test-login` 未实现、发布线“待 P5 定义”；`demo/panel-demo-e.html` 与 `PLAN.md` / `AGENTS.md` 把 E 说成「冻结的 token 来源」（实际 `--shadow` 在 E 之后按实测收紧过）；`demo/make_icon.py` 页脚说托盘嵌 32px（代码是 48px）；`CHANGELOG.md` 写「one blue」（实际紫）与「404x347 today」；`README.md` 写「Nothing is logged」（实际写 `webview.log`，只是不含 token） | 全部按**已实现的 UI** 改掉，方向一律是「代码为准、反写文档」：产品 HTML/CSS/TS 一行没为了迁就 demo 或文档而改。E 的像素保持冻结，只在文件头注释里写明 `--shadow` 这一处刻意例外（PLAN §3.2 与 `theme.css` 为准，别照 E 复原）；`make_icon.py` 的页脚改动同时重新生成了 `demo/icon-demo.html`（三张图标本身字节未变） |
 
 ## 本轮验证结果
 
 | 项 | 结果 |
 |---|---|
+| `cargo fmt --check` / `cargo clippy --all-targets --locked -- -D warnings` | 通过 |
 | `cargo test --locked` | **29 passed** |
-| `cargo fmt --check` / `cargo clippy --all-targets -- -D warnings` | 通过（这两条都是 CI 硬门） |
 | `npx tsc --noEmit` / `npm run build` | 通过 |
-| `npx tauri build` | exe 7.20 MB + NSIS 2.50 MB，同一次构建打包 |
-| `--test-fetch` / `--test-deepseek` / `--test-update` / `--test-usage` | 全绿（Kimi `error: null`；DeepSeek 余额随账号变动；两遍扫描请求数一致） |
+| `npx tauri build`（本地路径） | exe 7.20 MB，`target/release/bundle/` **不再生成** |
+| `npx tauri build --no-bundle`（CI 路径） | 同样只出 exe，无 bundle 目录 |
+| `PYTHONUTF8=1 python scripts/release/make_release_zip.py` | `QuotaTray.exe` + `QuotaTray-v0.1.0.zip`（3.8 MB，82 个文件，根目录含便携 exe）+ `SHA256SUMS.txt` 三件 |
+| `sha256sum -c SHA256SUMS.txt` | 两条全 OK；zip 内 `CHANGELOG.md` / `AGENTS.md` / `src/main.ts` / `demo/ui-demo.html` 与工作区逐字节一致 |
+| `--test-fetch` | `error: null`（Kimi OAuth token 已恢复有效） |
+| `--test-deepseek --verbose` | 余额与用量正常；`deepseek-flash` 官方名生效 |
+| `--test-update` | `local=2.6.1 latest=2.6.2 updateAvailable=True` |
+| `--test-usage` | 两遍扫描请求数一致（3815 / 1453）；`scan1` 218ms、`scan2` 72ms |
 | `--test-ui` / `--test-login` | 四个窗口 OK；`verify=ok`、`LoginWindow capture channel OK`、`fetch capture OK` |
-| 发布资产 | `sha256sum -c SHA256SUMS.txt` 三条全 OK；zip 82 个文件，含根目录 `QuotaTray.exe` |
-| 装机 | 静默安装 → 跑起来 → 静默卸载，开始菜单、安装目录、Uninstall 注册项都清干净 |
-| 设计评审 | `demo/ui-demo.html` 与两张 README 截图按新 token 重新生成；`check_contrast.py` 65/65 |
-| 独立审查 | 报 2 Blocker / 3 Major / 3 Minor，全部修复；我自己复跑 CI 门又补了一条 clippy |
+| 便携模式 | exe + 空 `portable.dat` 放临时目录跑 `--test-deepseek`，凭证 / 端点 / 模型缓存落在该目录，不写 `%APPDATA%` |
+| 开机自启 | HKCU Run 下无 QuotaTray 值，与 `settings.json` 的 `AutoStart=false` 一致（只验了「关」这一侧） |
+| 设计评审 | `build_ui_demo.py` / `make_readme_shots.py` / `make_icon.py` / `heights.py` / `check_contrast.py` 全部跑过；高度表未变，对比度 65/65 |
+| 旧产物 | 仓库根的 `QuotaTray_0.1.0_x64-setup.exe` 已删除，不再属于任何一步 |
 
-## 已拍板（2026-11-14，用户在第九轮末尾决定）
+**没验到的**：recovery 的 reload 补救没有用真实的渲染进程崩溃跑过（强制崩溃要 DevTools 或注入故障）。已确认的是类型检查 / 构建通过、`allow-is-visible` 在 ACL 里、启动路径（窗口隐藏时 `isVisible()=false`）行为不变。
 
-| 项 | 决定 | 落地情况 |
-|---|---|---|
-| 安装包 | **只发便携 exe**，去掉 NSIS 安装包 | **未落地**，见下一节第 1 步 |
-| 托盘图标 | 保持现在的纯紫双条，不再出双色版 | 无需改动 |
-| 设置窗高度 | 保持「工作区 90% 上限 + 卡片内滚动」，不做 96% 展开 | 无需改动 |
+## 只剩这四步（都要人来做）
 
-**真人登录验证已完成**：`webview.log` 里有三次 `candidate verified and saved`，`--test-login` 报 `verify=ok`，DeepSeek 用量页有数。这一步不再需要重做。
+1. 建 remote（建议 `quota-tray`），push 到 main 看 `ci.yml` 绿不绿（action pin / gitleaks / `cargo build --locked` 这三处只有真 runner 能验）。
+2. `CHANGELOG.md` 把 `## [0.1.0] — Unreleased` 改成带日期，否则 `release.yml` 会硬失败。
+3. `git tag v0.1.0 && git push origin v0.1.0`；tag 必须等于 `tauri.conf.json` 的版本（workflow 会校验）。
+4. 草稿 Release 出来后核对三件资产与 `SHA256SUMS.txt`，然后 publish（发布永远是人工动作）。
 
-## 下一轮：发版前（用户在新的对话里发起）
+## 接手必须知道的
 
-### 第 1 步：去掉安装包，只留便携 exe
-
-按这个清单改，一处都不能漏（漏一处就会让 release 资产与文档对不上）：
-
-| 文件 | 改法 |
-|---|---|
-| `src-tauri/tauri.conf.json` | `bundle.targets` → `[]`；`bundle.windows.nsis` 整块删掉；`bundle.icon` 保留（exe 图标仍用它） |
-| `.github/workflows/release.yml` | 构建步骤 `npx tauri build` → `--no-bundle`；删 `test -f "QuotaTray_${version}_x64-setup.exe"`；`gh release create` 的资产列表去掉 setup.exe；notes 里的 Assets 段改成两件 |
-| `scripts/release/make_release_zip.py` | `binaries()` 删掉 NSIS 那条（只剩便携 exe 进 zip + 作为资产）；docstring 的「three assets / four assets」表述同步 |
-| `README.md` | 「Optional installer」那条 bullet 删掉（中英两处）；首段「no installer」保持 |
-| `AGENTS.md` | Release process 的「four assets」→「three assets」；Build 段里 NSIS 安装包的说法；Remove「安装包是 per-user …」这条 trap（连同 `Start-Process` 静默安装那条环境说明） |
-| `PLAN.md` | §11 的「Release 资产」行改成两件 + 校验文件 |
-| `CHANGELOG.md` | 中英各加一条 Changed：「不再提供 NSIS 安装包，只发便携 exe」 |
-
-验收：`npx tauri build` 只产出 exe（不再有 `bundle/nsis/`）；`PYTHONUTF8=1 python scripts/release/make_release_zip.py` 产出 `QuotaTray.exe` + `QuotaTray-v0.1.0.zip` + `SHA256SUMS.txt` 三件；`sha256sum -c` 全 OK；`--test-ui` / `--test-login` 仍绿。
-
-### 第 2 步：全量 code review
-
-- 范围是**发版提交的整棵树**，不是 diff：`src-tauri/src/**`、`src/**`、`.github/workflows/**`、`scripts/release/**`、`demo/*.py`、`demo/shot.sh`，以及文档与代码是否互相矛盾（README / AGENTS / PLAN / CHANGELOG）。
-- 委派方式按 `AGENTS.md`「Environment notes」：本会话 `Agent` 没有 `code-reviewer` 类型，`kimi-review.cmd` 钉的 `kimi-code/k3.1-pro` 在本机订阅无权限 → 用只读 `explore` + `~/.agents/skills/code-review`，任务文本要求证伪（假设至少两处错误）。**它的结论必须自己复跑 CI 门核对**（上一轮它漏了 clippy）。
-- 重点复核上一轮修过的三处，确认没有被后续改动碰坏：登录窗在主线程外建窗、`Clear` 的 epoch 与关窗、设置窗 `max(offsetHeight, scrollHeight)` 上报与卡片内滚动。
-- 验收：无 Blocker；每条发现要么修掉，要么在 STATUS 里写明不修的理由。
-
-### 第 3 步：全量测试
-
-```bash
-# 静态门
-(cd src-tauri && cargo fmt --check && cargo clippy --all-targets --locked -- -D warnings && cargo test --locked)
-npx tsc --noEmit && npm run build && npx tauri build
-
-# 运行时自检（release exe，逐条看输出）
-./src-tauri/target/release/quota-tray.exe --test-fetch
-./src-tauri/target/release/quota-tray.exe --test-deepseek --verbose
-./src-tauri/target/release/quota-tray.exe --test-update
-./src-tauri/target/release/quota-tray.exe --test-usage
-./src-tauri/target/release/quota-tray.exe --test-ui
-./src-tauri/target/release/quota-tray.exe --test-login --verbose
-
-# 打包与设计评审
-PYTHONUTF8=1 python scripts/release/make_release_zip.py && sha256sum -c SHA256SUMS.txt
-PYTHONUTF8=1 python demo/build_ui_demo.py
-PYTHONUTF8=1 python demo/make_readme_shots.py
-PYTHONUTF8=1 python demo/heights.py && PYTHONUTF8=1 python demo/check_contrast.py
-```
-
-另外人工过一遍这几条（自动化覆盖不到）：便携模式（exe 旁放空 `portable.dat` 后配置是否落在同目录）、开机自启开关写/删 HKCU 值、两个 tab 各连点 30 次不跳位且右下角不动、设置保存后重启生效（`ActiveTab` 除外）。
-
-### 第 4 步：发版（只有人能做）
-
-建 remote（建议 `quota-tray`）→ 先 push 看 CI 绿不绿（action pin / NSIS 下载 / gitleaks 这三处只有真 runner 能验）→ `CHANGELOG.md` 的 `## [0.1.0] — Unreleased` 改成带日期 → `git tag v0.1.0 && git push origin v0.1.0` → 草稿 Release 出来人工核对资产与 `SHA256SUMS.txt` → publish。
-
-## 接手必须知道的（新增/更新）
-
-1. **同步命令跑在主线程**：任何 `#[tauri::command]` 里都**不要**直接 `WebviewWindowBuilder::build()`——它会跳主线程并等待，结果就是「窗口出现但一片空白、关不掉」。用 `tauri::async_runtime::spawn` 把建窗挪走（`open_login` / `close_login` 已经是这个写法）。这是本轮最难找的 bug，`--test-login` 和启动钩子都绕开了它，最后靠「真实点击按钮」才复现。
-2. **窗口程序没有控制台**：`install_panic_log()`（main.rs）把 panic 写进 `webview.log`；静默 panic 和卡死看起来一模一样。
-3. **日志现在能自证**：`login: sign-in window opened` / `login: sign-in window closed` / `settings: hide -> Ok(()) visible=…` / `credentials: cleared …`。用户报「点 X 没反应」时先看这四行。
-4. **Clear 的边界**：`Clear` 会关登录窗、丢弃在飞的验证；但**再点 `Sign in…` 仍会把 console 会话里的 token 存回来**——那是那个窗口的职责，不是 bug。设置窗有一行说明。
+1. **本轮的 20 个改动 + 1 个新增还没提交**：`git status` 一眼可见；工作区就是发版内容，`git add -A` 即可（先看一遍 diff）。新增的是 `docs/case-quota-tray-panel.md`（设计 case 草稿，不是产品文档）。上一轮的三条交接（主线程建窗 / 窗口程序没有控制台 / Clear 的边界）仍然有效。
+   **UI 的单一真源是产品本身**（`index.html` / `settings.html` / `skills.html` / `menu.html` + `src/*.css|ts` + Rust 行为）：`demo/ui-demo.html`、`demo/icon-demo.html`、`docs/screenshot-*.png` 都是从它生成的，文档是照着它反写的。冻结的 A–E 五版 demo 保留历史像素，其中 E 的 `--shadow` 仍写 40px —— 那是刻意例外，`PLAN.md` §3.2 / `src/theme.css` 才是准。
+2. **同步命令跑在主线程**：任何 `#[tauri::command]` 里都**不要**直接 `WebviewWindowBuilder::build()`——它会跳主线程并等待，结果就是「窗口出现但一片空白、关不掉」。`open_login` / `close_login` 都已交给 `tauri::async_runtime::spawn`。
+3. **reload 与 rebuild 是两条路**：`rebuild` 会等页面加载再调 `show_panel`（所以有 `panel-show`）；`reload` 不会，才需要在 `main.ts` 里按窗口可见性补首帧。以后再动是恢复逻辑，两条路都要想一遍。
+4. **评审页的样式顺序是契约**：`demo/build_ui_demo.py` 把 `#root` 换成 `.root`（`body_of()` 去重复 id、`read().replace("#root", ".root")`），所以舞台覆盖必须写成 **`.win-skills .root`**，与 scoped 版同特异性、靠「排在最后」取胜；写成 `#root` 会一条也匹配不到（这个坑已经踩过一次）。产品 CSS 先注入、舞台规则最后注入，挪回前面评审页就又不能滚、浅色底又丢。
 5. **设置窗高度是「上限 90% + 卡片内滚动」**：`#root` 自己 `max-height` + `overflow-y: auto`，滚动条 4px 内缩细线；上报 `max(offsetHeight, scrollHeight)` 才不会自我缩小。
-6. **阴影必须收在 28px 留白内**：`--shadow: 0 8px 18px`；更大的模糊会被窗口边缘裁成硬边。
-7. 原有 8 条（图标生成物 / 托盘 48px / Kimi 数字是本机 / 扫描节奏 / ui-demo 生成物 / 登录窗无 IPC 面 / 环境事实 / 不 cat 密文）仍然有效。
+6. **阴影必须收在 28px 留白内**：`--shadow: 0 8px 18px`；更大的模糊会被窗口边缘裁成硬边。`PLAN.md` 里那张表已删掉旧的 40px 行。
+7. **发版只发便携 exe**：`bundle.targets = []` + `--no-bundle`，资产三件；`make_release_zip.py` 的 `binaries()` 只有一个 exe。别再往回收安装包。
+8. 原有几条仍然有效：图标是生成物、托盘嵌 48px、Kimi 数字是本机口径、扫描节奏、`ui-demo.html` 是生成物、登录窗没有 IPC 面。
+9. **README 截图有护栏**：`make_readme_shots.py` 的 `CROP` 是按 DOM 实测的固定框，脚本会先断言「裁切外圈是单一背景色」再出图。改舞台 padding、改窗宽、改演示页排版后，它要么自己过、要么直接报错要求重测——不要手工裁图。
 
-## 环境现状（2026-11-14 19:03）
+## 环境现状（2026-11-14 19:30）
 
-- **Kimi 配额接口**：通（`error: null`）；但 **Kimi CLI 的 OAuth token 已过期**（设置窗红字 `Expired — sign in with the Kimi CLI`），需要在 CLI 里重新登录一次。
-- **DeepSeek**：API key 已按用户操作清空；usage token 来自登录窗的自动捕获（同账号可用）。
-- `%APPDATA%\QuotaTray`：credentials / endpoints / models / cache / kimi-usage.json / webview.log；仍无 `settings.json`（没点过 Save）。
-- 本轮安装验证后系统已清干净：无 `%LOCALAPPDATA%\Quota Tray`、无开始菜单快捷方式、无 Uninstall 注册项。
-- 工作区干净，HEAD `940ae42`；`QuotaTray.exe`（便携）、`QuotaTray_0.1.0_x64-setup.exe`、`QuotaTray-v0.1.0.zip`、`SHA256SUMS.txt` 留在仓库根（gitignored，与 HEAD 同哈希）。
+- **Kimi**：token 已恢复有效，`--test-fetch` 返回 `error: null`；5h 0%、week 1%。
+- **DeepSeek**：API key 与 usage token 都已配置（`--test-login` 报 `credentialSource=file`、`apiKeyConfigured=true`、`verify=ok`）；余额 ¥38.58。
+- `%APPDATA%\QuotaTray`：credentials / endpoints / models / cache / kimi-usage / `settings.json`（`Theme=system`、`RefreshMinutes=5`、`AutoStart=false`、`ActiveTab=kimi`）/ `webview.log`。
+- 仓库根留三件产物（gitignored）：`QuotaTray.exe`、`QuotaTray-v0.1.0.zip`、`SHA256SUMS.txt`；旧的 `QuotaTray_0.1.0_x64-setup.exe` 已删。
+- **仓库根那个 `QuotaTray.exe` 进程本轮被关掉了**：它锁着产物文件，`make_release_zip.py` 会 `PermissionError`。要再跑就双击根目录的 exe；再次打包前记得先退出它。
+- 工作区：20 个文件改动 + 1 个新增（`docs/case-quota-tray-panel.md`），HEAD `d325458`。
 
 ## 新对话开场建议
 
-> 接手 Quota Tray（本地 git 仓库，无 remote，HEAD=`281fd36`）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`；UI 看 `demo/ui-demo.html`（生成物，别手改），README 截图由 `demo/make_readme_shots.py` 生成。
+> 接手 Quota Tray（本地 git 仓库，无 remote，HEAD=`d325458`，工作区有 20 个改动 + 1 个新增就是本轮成果）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`；UI 看 `demo/ui-demo.html`（生成物，别手改），README 截图由 `demo/make_readme_shots.py` 生成。
 >
-> 状态：P1–P5 完成、CI 与发布线就位、独立审查 8 条全修、用户实测的三个 bug（登录窗空白 / Clear 被写回 / 设置窗切底）已修并复验、真人登录也验过了。**本轮目标只有一个：把 v0.1.0 发出去之前的准备**——按 `STATUS.md`「下一轮：发版前」四步走：
-> 1. 去掉 NSIS 安装包，只发便携 exe（清单在该节，一处都不能漏）；
-> 2. 对整棵树做一次全量 code review（委派方式与已知限制写在 `AGENTS.md`「Environment notes」，审查结论必须自己复跑 CI 门核对）；
-> 3. 跑全量测试（静态门 + 六条 `--test-*` + 打包校验 + 设计评审脚本 + 四条人工项）；
-> 4. 交回给人：建 remote、push 看 CI、给 CHANGELOG 补日期、打 `v0.1.0` tag、核对草稿 Release 后 publish。
+> 状态：v0.1.0 代码与产物就绪——只发便携 exe、全量审查修完、全量测试全绿。**下一步就是发版本身**，四步都在「只剩这四步」一节，全部需要人：建 remote、push 看 CI、给 CHANGELOG 补日期、打 tag 并核对草稿 Release。
 >
-> 用户已拍板：安装包只留便携 exe；托盘图标与设置窗高度维持现状。
+> 用户已拍板：只发便携 exe（无安装包）；托盘图标保持纯紫双条；设置窗高度维持「工作区 90% 上限 + 卡片内滚动」。

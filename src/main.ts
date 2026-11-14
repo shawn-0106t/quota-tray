@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import './theme.css';
 import './main.css';
 import {
@@ -475,4 +476,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   el('version-row').addEventListener('click', () => {
     invoke('open_releases').catch(() => undefined);
   });
+
+  // A recovery reload rebuilds this page while its window stays visible, and no
+  // panel-show follows a reload: #root would sit at opacity 0 inside a window
+  // the user can still see and click. Paint the first frame only in that case —
+  // at startup the window is hidden, and the fade must still play on the first
+  // real show (PLAN §3.6).
+  if (await getCurrentWindow().isVisible().catch(() => false)) {
+    playShow();
+  }
 });

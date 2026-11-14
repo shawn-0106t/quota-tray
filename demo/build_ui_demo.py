@@ -265,7 +265,7 @@ def build() -> str:
           list.append(group);
           for (const [name, description] of items) {
             const item = document.createElement('div');
-            item.className = 'skill-item';
+            item.className = 'skill';
             item.title = description;
             const head = document.createElement('div');
             head.className = 'skill-head';
@@ -313,15 +313,6 @@ def build() -> str:
   -->
   <style>
     /* ---------- demo stage (not part of the product) ---------- */
-    body {{
-      margin: 0;
-      padding: 30px 26px 60px;
-      background: #e7e7e4;
-      overflow: auto;
-      user-select: text;
-      -webkit-user-select: text;
-    }}
-    :root[data-theme='dark'] body {{ background: #0f0f12; }}
     .top {{ max-width: 1420px; margin: 0 auto 26px; }}
     .top h1 {{ font-size: 18px; font-weight: 600; margin: 0 0 6px; color: var(--ink-1); }}
     .top p {{ font-size: 12px; line-height: 1.6; color: var(--ink-2); margin: 0; max-width: 760px; }}
@@ -339,7 +330,6 @@ def build() -> str:
     .win {{ position: relative; }}
     /* The app's windows are 424/404/188 wide including 28px shadow room per side;
        the card inside is 368/348/132. Same here. */
-    .win-skills .root {{ height: 464px; }}
 
     /* ---------- theme.css (shared tokens + primitives) ---------- */
     {theme}
@@ -397,6 +387,26 @@ def build() -> str:
     .signin .states {{ margin-top: 10px; display: grid; gap: 6px; }}
     .signin .state {{ font-size: 10.5px; color: var(--ink-2); }}
     .signin .state code {{ font-family: inherit; color: var(--ink-1); }}
+
+    /* ---------- stage overrides, last on purpose ----------
+       theme.css resets html/body (padding 0, transparent, overflow hidden) and
+       skills.css gives the (already scoped) .root a viewport height. The stage
+       rules tie on specificity with those and win only by coming last, so they
+       must stay at the end of the block: .win-skills .root collides with the
+       scoped `{prefix_selectors}` copy, and the later declaration takes it. */
+    html, body {{
+      padding: 0;
+      background: #e7e7e4;
+      overflow: auto;
+    }}
+    :root[data-theme='dark'] body {{ background: #0f0f12; }}
+    body {{
+      margin: 0;
+      padding: 30px 26px 60px;
+      user-select: text;
+      -webkit-user-select: text;
+    }}
+    .win-skills .root {{ height: 464px; }}
   </style>
 </head>
 <body>

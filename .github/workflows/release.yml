@@ -80,10 +80,10 @@ jobs:
             exit 1
           fi
 
-      # beforeBuildCommand (npm run build) runs as part of tauri build; the NSIS
-      # bundler (tauri.conf.json -> bundle.targets) also downloads its toolchain
-      - name: Build release exe + installer
-        run: npx tauri build
+      # beforeBuildCommand (npm run build) runs as part of tauri build; the app
+      # ships as a portable exe only, so no bundler runs here
+      - name: Build release exe
+        run: npx tauri build --no-bundle
 
       - name: Package source snapshot + checksums
         env:
@@ -134,13 +134,12 @@ jobs:
               f"Full bilingual changelog: https://github.com/{repo}/blob/{tag}/CHANGELOG.md",
               "",
               "Assets: `QuotaTray.exe` (portable, Windows 10/11 x64), "
-              f"`QuotaTray_{version}_x64-setup.exe` (per-user NSIS installer, same exe), "
               f"`QuotaTray-v{version}.zip` (source snapshot, portable exe at the zip root) "
               "and `SHA256SUMS.txt` (`sha256sum -c` compatible).",
               "",
               "The exe is unsigned — SmartScreen may warn on first launch (More info → Run anyway).",
               "",
-              "<!-- Maintainer checklist: review the four assets, verify SHA256SUMS.txt, then publish. -->",
+              "<!-- Maintainer checklist: review the three assets, verify SHA256SUMS.txt, then publish. -->",
           ]))
           PY
           test -s "$RUNNER_TEMP/notes.md"
@@ -154,7 +153,6 @@ jobs:
           # Exact names, no glob: a version mismatch fails loudly here instead of
           # attaching a stale asset
           test -f "QuotaTray.exe"
-          test -f "QuotaTray_${version}_x64-setup.exe"
           test -f "QuotaTray-v${version}.zip"
           test -f "SHA256SUMS.txt"
           # gh release create is not idempotent: a failed earlier run may leave
@@ -164,5 +162,4 @@ jobs:
           fi
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
             --draft --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" \
-            QuotaTray.exe "QuotaTray_${version}_x64-setup.exe" \
-            "QuotaTray-v${version}.zip" SHA256SUMS.txt
+            QuotaTray.exe "QuotaTray-v${version}.zip" SHA256SUMS.txt

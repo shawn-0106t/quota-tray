@@ -4,9 +4,8 @@
 Outputs, all at the repository root (gitignored):
 
     QuotaTray.exe                      the portable exe under its asset name
-    QuotaTray_<version>_x64-setup.exe  the NSIS installer under its asset name
     QuotaTray-v<version>.zip           the source tree + the portable exe at the root
-    SHA256SUMS.txt                     sha256sum format, covering the three above
+    SHA256SUMS.txt                     sha256sum format, covering the two above
 
 The zip is the whole source tree as `git ls-files` sees it (tracked plus
 untracked-but-not-ignored), so it can never drift out of sync with
@@ -53,12 +52,10 @@ def version():
         return json.load(f)["version"]
 
 
-def binaries(ver):
+def binaries():
     """(repo-relative source, asset name, goes into the zip) for every exe."""
     return [
         ("src-tauri/target/release/quota-tray.exe", "QuotaTray.exe", True),
-        (f"src-tauri/target/release/bundle/nsis/Quota Tray_{ver}_x64-setup.exe",
-         f"QuotaTray_{ver}_x64-setup.exe", False),
     ]
 
 
@@ -131,7 +128,7 @@ def ensure_replaceable(paths):
 
 def main():
     ver = version()
-    assets = binaries(ver)
+    assets = binaries()
     zip_name = f"QuotaTray-v{ver}.zip"
     out = os.path.join(ROOT, zip_name)
     part = out + ".part"

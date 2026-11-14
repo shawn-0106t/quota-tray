@@ -12,7 +12,7 @@
 > | 4 技术栈与依赖 | 适用 |
 > | 5 数据流 | Kimi 部分适用；DeepSeek 见 `PLAN.md` §5.2 |
 > | 6 安全与隐私 | 适用 |
-> | 7 构建、测试与发布 | 构建与自检命令适用；发布流水线待 `PLAN.md` §8 P5 重新定义 |
+> | 7 构建、测试与发布 | 构建与自检命令适用；发布流水线见 `PLAN.md` §8 P5（只发便携 exe，无安装包） |
 > | 8 运行环境要求 | 适用 |
 > | 9 维护边界与文档地图 | 由本仓库 `AGENTS.md` / `PLAN.md` / `STATUS.md` 取代 |
 > | 10 窗口规格 | 尺寸以 `PLAN.md` §4 为准（面板与设置窗内容自适应；Skills 窗固定 404×520） |
@@ -24,7 +24,7 @@
 > | 16 数据与 API | Kimi 部分适用；DeepSeek 见 `PLAN.md` §5.2 / §6 |
 > | 17 CLI 版本检查 | 适用 |
 > | 18 设置持久化 | 适用；新增 `ActiveTab` 字段（`PLAN.md` §7） |
-> | 19 自检命令 | `--test-fetch` / `--test-update` / `--test-ui` / `--test-deepseek` 适用；`--test-login` 属 P4，尚未实现 |
+> | 19 自检命令 | `--test-fetch` / `--test-update` / `--test-ui` / `--test-deepseek` / `--test-login` 适用 |
 > | 20 其他实现细节 | 适用；命名互斥锁改为 `QuotaTray.SingleInstance`，配置目录改为 `%APPDATA%\QuotaTray` |
 > | 21 Skills 只读窗口 | 适用 |
 > | 22 WebView2 故障检测与恢复 | 适用 |

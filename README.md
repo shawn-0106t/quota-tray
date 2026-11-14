@@ -47,10 +47,6 @@ bottom-right corner.
 Download `QuotaTray.exe` from [Releases](../../releases), put it anywhere and
 run it. It is a single portable exe — no installer, no service, no admin rights.
 
-- **Optional installer**: `QuotaTray_<version>_x64-setup.exe` on the same
-  release page installs the same exe per user into `%LOCALAPPDATA%\Quota Tray`
-  and adds a Start Menu shortcut. It asks for no elevation (HKCU only) and is
-  never required — the portable exe above needs nothing installed.
 - **Portable mode**: create an empty `portable.dat` next to the exe and every
   setting, credential and cache stays in that folder instead of `%APPDATA%\QuotaTray`.
 - **Start with Windows**: *Settings → Launch at Windows startup* writes a value
@@ -84,9 +80,11 @@ local to this machine. The Kimi quota API carries no token data at all.
   window and gives that page **no** Tauri IPC surface: the only thing leaving it
   is a cancelled navigation carrying a candidate token, which is verified with a
   real request before it replaces the stored one.
-- Nothing is logged: no tokens, no keys, no message content. The app talks only
-  to `api.kimi.com`, `api.deepseek.com` and `platform.deepseek.com`, and the
-  GitHub API when checking for CLI updates. There is no telemetry endpoint.
+- Nothing is logged beyond local diagnostics: `webview.log` and the Kimi usage
+  index record counts and states, never tokens, keys or message content. The app
+  talks only to `api.kimi.com`, `api.deepseek.com` and `platform.deepseek.com`,
+  and the GitHub API when checking for CLI updates. There is no telemetry
+  endpoint.
 
 ## Command line
 
@@ -197,9 +195,6 @@ Topped up 金额）；每个模型一行，含本月消费、token 份额条、�
 从 [Releases](../../releases) 下载 `QuotaTray.exe`，放到任意目录直接运行。
 单文件绿色版：没有安装器、没有服务、不需要管理员权限。
 
-- **可选安装包**：同一页的 `QuotaTray_<version>_x64-setup.exe` 会把同一个 exe
-  按用户装进 `%LOCALAPPDATA%\Quota Tray`，并加一个开始菜单快捷方式；只写 HKCU，
-  不弹 UAC，且**不是必需**——上面的绿色版什么都不用装。
 - **便携模式**：在 exe 同级放一个空的 `portable.dat`，设置、凭证与缓存就都留在
   该目录，不写 `%APPDATA%\QuotaTray`。
 - **开机自启**：*Settings → Launch at Windows startup* 只写
@@ -229,7 +224,8 @@ Kimi 的缓存 / 解码是**本机**数字。Kimi 的额度接口本身没有任
 - `Sign in…` 窗加载 `platform.deepseek.com`，是临时窗口，且**不给该页面任何 Tauri
   IPC 命令面**：离开页面的只有一次被取消的导航，携带候选 token，且必须先通过一次
   真实请求验证才会替换已存凭证。
-- 不记录 token、密钥、对话内容：日志里没有它们，`--test-*` 也只打印状态。
+- 不记录 token、密钥、对话内容：`webview.log` 与本机用量索引只有计数与状态，
+  里面没有它们，`--test-*` 也只打印状态。
   程序只访问 `api.kimi.com`、`api.deepseek.com`、`platform.deepseek.com`，以及
   检查 CLI 版本时的 GitHub API，没有遥测端点。
 

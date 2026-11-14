@@ -11,14 +11,14 @@ Guidance for AI coding agents working in this repository. Read this first; then 
 
 This repository is the merge of two earlier first-party projects: `kimi-planbar-tray` (Tauri/rust edition) and `deepseek-planbar` (WPF edition). See `NOTICE` for lineage.
 
-**Current state: P5 is complete (2026-11-14).** P1 (baseline import), P2 (all four windows on the E tokens/layout, content-sized heights, the Kimi/DeepSeek segmented tab and the DeepSeek pane), P3 (DeepSeek credentials, balance, usage, display names, dual pollers, `--test-deepseek`, fixture tests), P4 (settings sections, the DeepSeek sign-in window, the merged tray tooltip, `--test-login`) and P5 (the NSIS bundle, the CI/draft-release workflows, the bilingual README, `scripts/release/make_release_zip.py`) are done. The panel renders both providers for real: Kimi from `get_state`/`quota-updated`, DeepSeek from `get_deepseek`/`deepseek-updated`, with the provider tab persisted as `ActiveTab`. Nothing is published yet: the repository has no remote, so the first tag and the first draft release are the maintainer's call. After P5 the maintainer tested the build and three real defects were fixed — the sign-in window built on the main thread (blank, unclosable), `Clear` being undone by the sign-in window's own capture, and the settings sheet clipping its bottom — see `CHANGELOG.md` and the traps below. Follow `PLAN.md` §8.
+**Current state: P5 is complete (2026-11-14).** P1 (baseline import), P2 (all four windows on the E tokens/layout, content-sized heights, the Kimi/DeepSeek segmented tab and the DeepSeek pane), P3 (DeepSeek credentials, balance, usage, display names, dual pollers, `--test-deepseek`, fixture tests), P4 (settings sections, the DeepSeek sign-in window, the merged tray tooltip, `--test-login`) and P5 (the release packaging — a portable exe only, no installer —, the CI/draft-release workflows, the bilingual README, `scripts/release/make_release_zip.py`) are done. The panel renders both providers for real: Kimi from `get_state`/`quota-updated`, DeepSeek from `get_deepseek`/`deepseek-updated`, with the provider tab persisted as `ActiveTab`. Nothing is published yet: the repository has no remote, so the first tag and the first draft release are the maintainer's call. After P5 the maintainer tested the build and three real defects were fixed — the sign-in window built on the main thread (blank, unclosable), `Clear` being undone by the sign-in window's own capture, and the settings sheet clipping its bottom — see `CHANGELOG.md` and the traps below. Follow `PLAN.md` §8.
 
 ## Source of truth
 
 | Question | Answer |
 |---|---|
 | 当前进度 / 交接给新 agent | `STATUS.md` |
-| What should the UI look like? | `demo/ui-demo.html` — every window on one page, generated from the shipped HTML/CSS by `demo/build_ui_demo.py`; regenerate after a UI change, never hand-edit. `demo/panel-demo-e.html` stays the frozen design origin (structure, type, tokens); `panel-demo-d.html` is the previous one and `panel-demo-a/b/c.html` the rejected alternatives — comparison only, do not evolve them. |
+| What should the UI look like? | `demo/ui-demo.html` — every window on one page, generated from the shipped HTML/CSS by `demo/build_ui_demo.py`; regenerate after a UI change, never hand-edit. `demo/panel-demo-e.html` stays the frozen design origin (structure, type, the violet accent and every other token **except** `--shadow`, which was tightened to `0 8px 18px` after E because 40px is clipped by the 28px margin — `PLAN.md` §3.2 / `src/theme.css` win there, do not restore E's value); `panel-demo-d.html` is the previous one and `panel-demo-a/b/c.html` the rejected alternatives — comparison only, do not evolve them. |
 | Layout numbers, tokens, colours | `PLAN.md` §3 |
 | Behaviour (polling, credentials, failure semantics, traps) | `PLAN.md` §5, §7 |
 | Inherited Kimi behaviour (credential chain, parsing, tray/window lifecycle, WebView2 recovery) | `docs/SPEC.md` (Chinese) / `docs/SPEC_EN.md` — read the scope table at the top first; `PLAN.md` wins where they differ |
@@ -43,7 +43,7 @@ vite.config.ts        # 4-page rollup input; 100 KB asset inlining budget
 tsconfig.json / package.json / package-lock.json
 src-tauri/            # Rust backend (Tauri 2)
   Cargo.toml          # crate quota-tray, lib quota_tray_lib
-  tauri.conf.json     # 4 windows: main 424x520, settings 404x464, skills 404x520, menu 188x160; bundle = NSIS only, per-user
+  tauri.conf.json     # 4 windows: main 424x520, settings 404x360, skills 404x520, menu 188x160; bundle.targets = [] (portable exe only)
   capabilities/default.json
   icons/              # generated double-bar mark, see demo/make_icon.py (PLAN.md §9)
   src/                # main/lib/credentials/quota/deepseek/kimi_usage/login/polling/tray/panel/settings/skills/update/theme_watch/recovery/state
@@ -52,6 +52,7 @@ src-tauri/            # Rust backend (Tauri 2)
   build.rs / Cargo.lock
 docs/SPEC.md          # inherited Kimi behaviour spec (Chinese)
 docs/SPEC_EN.md       # ... English mirror, same chapter numbers
+docs/case-quota-tray-panel.md  # design-case draft for the rationalism-design skill (not a product doc)
 docs/screenshot-*.png # README screenshots - generated by demo/make_readme_shots.py
 .github/workflows/    # ci.yml (gitleaks + build/test) and release.yml (tag -> draft release)
 scripts/release/      # make_release_zip.py: source zip + staged exes + SHA256SUMS.txt
@@ -87,8 +88,8 @@ npm install
 npm run dev            # vite only (frontend)
 npx tauri dev           # full app
 npx tauri build         # release exe in src-tauri/target/release/quota-tray.exe
-                        #   + per-user NSIS installer under target/release/bundle/nsis/
-npx tauri build --no-bundle   # exe only (what a quick check usually wants)
+                        #   (no bundles: tauri.conf.json sets bundle.targets = [])
+npx tauri build --no-bundle   # same thing; kept for the explicit form
 ```
 
 Caveats inherited from the parent project:
@@ -201,7 +202,7 @@ Ported from the parent project's tag-triggered draft pipeline (2026-11-14).
 2. Finalize `CHANGELOG.md`: move the section out of `Unreleased` and date it (`## [0.1.0] — 2026-11-14`). `.github/workflows/release.yml` refuses to compose notes for a section that still says `Unreleased`, so this is a hard gate, not a habit.
 3. Run the local gates: `npx tsc --noEmit`, `npm run build`, `cargo fmt --check` + `cargo clippy --all-targets -- -D warnings` + `cargo test` in `src-tauri`, then `npx tauri build` and the `--test-*` self-checks against the release exe.
 4. Push the `v<x.y.z>` tag. The tag must equal the `tauri.conf.json` version — the workflow verifies it before building.
-5. `release.yml` runs gitleaks over the full history, builds the exe and the NSIS installer, packs the source zip and checksums, and **opens a draft Release** with four assets: `QuotaTray.exe` (portable), `QuotaTray_<version>_x64-setup.exe` (per-user NSIS, no elevation), `QuotaTray-v<version>.zip` (source + portable exe at its root) and `SHA256SUMS.txt`. The body is generated from the matching CHANGELOG section (English half plus the 中文 half, which that file keeps in the same section).
+5. `release.yml` runs gitleaks over the full history, builds the portable exe (`--no-bundle`), packs the source zip and checksums, and **opens a draft Release** with three assets: `QuotaTray.exe` (portable), `QuotaTray-v<version>.zip` (source + portable exe at its root) and `SHA256SUMS.txt`. There is no installer: the app ships as a single portable exe. The body is generated from the matching CHANGELOG section (English half plus the 中文 half, which that file keeps in the same section).
 6. Review the draft: assets present, `SHA256SUMS.txt` matches, notes read correctly. Publishing stays manual.
 
 **CI** (`.github/workflows/ci.yml`) runs on every push to `main` and every PR: gitleaks over the full history, then on `windows-latest` `npm ci` → `tsc --noEmit` → `npm run build` → `cargo fmt --check` → `cargo clippy -D warnings` → `cargo build --locked` → `cargo test --locked`. No runtime `--test-*` self-check runs on a hosted runner: they need this machine's credentials and an interactive desktop.
@@ -217,4 +218,3 @@ Ported from the parent project's tag-triggered draft pipeline (2026-11-14).
 - Chrome is **not** installed; Edge is. Always probe at runtime (Chrome → Edge → other Chromium) — never hardcode a browser path.
 - Windows binaries cannot write to MSYS paths (`/tmp`): convert with `cygpath` (the demo scripts already do).
 - **Code-review delegation is degraded on this machine** (2026-11-14): the session `Agent` tool registers only `plan` / `coder` / `explore` — there is no `code-reviewer` type — and `~/.kimi-code/bin/kimi-review.cmd` is pinned to `kimi-code/k3.1-pro`, which this subscription cannot access (`provider.auth_error`). Use a read-only `explore` subagent pointed at `~/.agents/skills/code-review/SKILL.md`, and re-run the CI gates yourself afterwards: that reviewer found 8 real defects but missed a `cargo clippy -D warnings` error.
-- A silently-installed NSIS package must be launched with `Start-Process -Wait -PassThru`; invoking `QuotaTray_<ver>_x64-setup.exe /S` straight from Git Bash exits 1 and installs nothing.

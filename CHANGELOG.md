@@ -5,7 +5,7 @@ All notable changes to Quota Tray are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each section carries
 the English notes first, then the Chinese mirror.
 
-## [0.1.0] — Unreleased
+## [0.1.0] — 2026-11-14
 
 ### Added
 
@@ -123,13 +123,14 @@ the English notes first, then the Chinese mirror.
   cannot drift from `.gitignore`) with the portable exe at the zip root, the
   staged release assets and a `sha256sum`-compatible `SHA256SUMS.txt`, all
   written through `.part` files so a failed run never leaves a mismatched pair.
-- `npx tauri build` now also produces a per-user NSIS installer
-  (`bundle.targets = ["nsis"]`, `installMode = currentUser`, English and
-  Simplified Chinese installer UI) beside the portable exe, so the app can be
-  installed into the user profile without elevation.
 
 ### Changed
 
+- The release ships as a single portable exe: `bundle.targets` is empty and the
+  build runs `--no-bundle`, so there is no NSIS installer and no Start Menu
+  shortcut. The draft release carries `QuotaTray.exe`, `QuotaTray-v0.1.0.zip`
+  and `SHA256SUMS.txt`, and `scripts/release/make_release_zip.py` knows only
+  that exe.
 - The panel's header stamp follows the active tab (`Updated HH:MM` /
   `Fetch failed` / `Not configured`), and a DeepSeek cache older than today
   prints `Updated M/D HH:MM` instead of a bare time.
@@ -147,16 +148,16 @@ the English notes first, then the Chinese mirror.
   measure the taller one, and the bottom-anchored window would have jumped to a
   height belonging to the tab that is not on screen.
 - All four windows now share the frozen D design language: warm paper cards,
-  hairline rows, uppercase micro-labels, 30/600 tabular numerals, one blue for
-  usage and one red for failures. The settings and skills windows drop their
-  old flat WPF skin, and the tray menu becomes a plain ghost list.
+  hairline rows, uppercase micro-labels, 30/600 tabular numerals, one violet
+  accent for usage and one red for failures. The settings and skills windows
+  drop their old flat WPF skin, and the tray menu becomes a plain ghost list.
 - The main panel and the settings window are now content-sized. The frontend
   reports `panel_height` / `settings_height`; the backend resizes with
   `LogicalSize`, re-pins the panel's bottom-right corner `PhysicalPosition`
   and re-centres the settings sheet.
 - The settings sheet swaps the radio buttons and pills for the shared
-  segmented control, and its window height follows the content (404x347 today
-  instead of a fixed 464).
+  segmented control, and its window height now follows the content instead of a
+  fixed 464.
 - Product identity: `Quota Tray` / `com.shawnqi.quotatray` / `quota-tray.exe`,
   version reset to 0.1.0.
 - Single-instance mutex renamed to `QuotaTray.SingleInstance`, so the app can
@@ -214,6 +215,20 @@ the English notes first, then the Chinese mirror.
 
 ### Fixed
 
+- A recovery reload left the panel blank: the renderer was reloaded while its
+  window stayed visible, and no `panel-show` follows a reload, so `#root` kept
+  its initial `opacity: 0` inside a window the user could still see and click.
+  The page now paints its first frame when it loads into an already-visible
+  window, so a recovered crash no longer reads as a hung, empty panel.
+- `demo/ui-demo.html` was losing to its own product CSS: the demo stage rules
+  came before `theme.css`, which resets `html`/`body` at equal specificity, so
+  the page could not scroll, lost its light-theme floor and stretched the skills
+  card to the viewport. The stage rules now come last, and the skills rows use
+  the product's `skill` class. The README screenshots were re-cropped from the
+  corrected page, and `make_readme_shots.py` now refuses to write an image whose
+  crop ring is not one flat background colour — the restored 30 px stage padding
+  had moved the cards 60 device px and the fixed crop was silently cutting a
+  card and leaving half a caption line at the top.
 - `demo/shot.sh` produced no screenshot when the output path was absolute: the
   script pasted `$PWD` in front of it unconditionally, so the browser was handed
   `C:/repo/C:/elsewhere/x.png`. Absolute paths now pass through untouched.
@@ -301,7 +316,7 @@ the English notes first, then the Chinese mirror.
   扁平皮肤，托盘菜单改为 ghost 列表。
 - **变更**：主面板与设置窗改为内容自适应高度（`panel_height` /
   `settings_height`）——主面板右下角钉在工作区角 12px，设置窗改高后重新居中；
-  设置窗用分段控件替代 radio / pill，当前为 404×347。
+  设置窗用分段控件替代 radio / pill，窗口高度跟着内容走。
 - **变更**：产品标识改为 `Quota Tray` / `com.shawnqi.quotatray` /
   `quota-tray.exe`，版本归零到 0.1.0；单实例互斥锁改名
   `QuotaTray.SingleInstance`（迁移期可与两个旧版并存）；配置目录
@@ -364,8 +379,18 @@ the English notes first, then the Chinese mirror.
   不会与 `.gitignore` 走样）内含便携版 exe，外带 release 资产改名与
   `sha256sum` 兼容的 `SHA256SUMS.txt`；全部经 `.part` 中转，失败时不会留下
   与校验和不匹配的那一半。
-- **新增**：`npx tauri build` 现在除便携 exe 外还产出按用户安装的 NSIS 安装包
-  （`bundle.targets = ["nsis"]`、`installMode = currentUser`、安装界面中英双语），
-  不需要管理员权限即可装进用户配置。
+- **修复**：recovery 的 reload 路径会让面板变成一片空白——渲染进程崩溃后页面重载，
+  但窗口仍是可见的，而 `panel-show` 只由 `show_panel` 发出，`#root` 于是停在初始的
+  `opacity: 0`，用户看到的是一个能点、却什么都没有的窗口。现在页面加载时若发现窗口
+  已经可见就先画出首帧，崩一次不再像是卡死。
+- **修复**：`demo/ui-demo.html` 的舞台样式被它自己的产品 CSS 盖掉——舞台规则排在
+  `theme.css` 之前，同特异性下主题对 `html`/`body` 的重置（透明、不滚动）胜出，于是
+  评审页不能滚动、浅色底丢失、skills 卡被拉成视口高。舞台规则改为最后注入，skills 行
+  也改用产品里的 `skill` 类名。README 截图随后按新布局重裁，`make_readme_shots.py`
+  加了一条「裁切外圈必须是单一背景色」的断言——舞台 30px 内边距恢复后整页下移 60
+  设备像素，旧裁切框正悄悄切掉第三张卡、顶上还留半行小标题。
 - **修复**：`demo/shot.sh` 在输出路径为绝对路径时截不到图——脚本无条件把 `$PWD`
   拼在前面，浏览器收到的是 `C:/repo/C:/elsewhere/x.png`；现在绝对路径原样透传。
+- **变更**：只发便携 exe——`bundle.targets` 置空、构建走 `--no-bundle`，不再提供
+  NSIS 安装包与开始菜单快捷方式；草稿 Release 只有 `QuotaTray.exe`、
+  `QuotaTray-v0.1.0.zip` 与 `SHA256SUMS.txt` 三件，打包脚本也只认这一个 exe。
