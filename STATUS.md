@@ -22,7 +22,7 @@
 | notes | 取自 CHANGELOG 的 `## [0.1.0] — 2026-11-14` 段（英 + 中）+ 全量 changelog 链接 + 三件资产说明 + SmartScreen 提示 |
 | 仓库设置 | secret scanning + push protection、CodeQL default setup（actions / python / js-ts / rust 四种语言）、Dependabot + security updates、私密漏洞报告，均已开启 |
 | 社区文档 | `CONTRIBUTING` / `CODE_OF_CONDUCT` / `SECURITY` / issue 模板 / PR 模板 / `.github/dependabot.yml` 齐了，`community/profile` health = **100** |
-| CodeQL | 报告 1 条 **high**（`py/bad-tag-filter`，`demo/build_ui_demo.py` 剥离 `<script>` 大小写敏感）→ 已在 `aea5218` 修复并推上 main；告警要等下一次默认扫描落到含修复的提交才会自动变 fixed |
+| CodeQL | 报了一条 **high**（`py/bad-tag-filter`，`demo/build_ui_demo.py` 的 `<script>` 剥离正则）→ `aea5218` 加 `re.I`，第二轮换了个说法（`</script\s*>` 匹配不到 `</script\t\n bar>`），`4e123c2` 改成 `</script[^>]*>` 并给 `<body>` 也加 `re.I`；`main` 上扫描 0 结果，**两条告警都是 fixed**，生成物字节未变 |
 
 **发版后立刻要做（人）**：① 打开草稿 Release 点 Publish；② 合并 Dependabot 的三个 PR（#1 vite patch、#2 tauri-plugin-opener patch、#3 base64 **major**，各自等 CI 绿）。
 
