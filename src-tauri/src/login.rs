@@ -72,8 +72,11 @@ pub fn open(app: &AppHandle) {
         .initialization_script(HOOK_JS)
         .on_navigation(move |url| on_navigation(&handler_app, url));
     match builder.build() {
-        Ok(w) => {
-            let _ = w.set_focus();
+        Ok(_) => {
+            // No explicit `set_focus()` here: `.focused(true)` above already
+            // asked for it, and a post-build focus call is one more blocking
+            // hop onto the main thread right after the webview was created —
+            // the hop that used to wedge the window blank and unclosable.
             recovery::log("login: sign-in window opened");
         }
         Err(e) => recovery::log(&format!("login: window build failed: {e}")),
