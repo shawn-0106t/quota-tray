@@ -1,12 +1,12 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-14 15:23（第六轮）。
+> 快照：2026-11-14 17:12（第八轮结束，已全部提交，交接给新对话）。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
 ## 一句话
 
-**P2 全部完成并已提交**（代码 `26ff363`、文档 `8ab1f86`）：Kimi / DeepSeek 分段 tab 与 DeepSeek 面板落地，两个 provider 都渲染真实数据，`ActiveTab` 持久化，金额一律两位小数。下一步是 **P4**——开工前有三个小决定待拍板（见文末「要你拍板」）。
+**P1–P4 全部完成**，同日又做了三件计划外的事：托盘 / exe 图标换成自绘双条、Kimi **缓存命中与解码速度**统计上线、**所有窗口合成一页 demo**。以上全部已提交（`855035a` + `9b23b74`），工作区干净。下一步是 **P5**：打包 / 发布线 / README / 独立 code review，中间补一次真人登录验证。
 
 ## 阶段状态
 
@@ -14,92 +14,71 @@
 |---|---|
 | P0 设计探索 + 定稿 | 完成 |
 | P1 仓库化 / 导入 / 改名 | 完成（`b43b3e7`） |
-| P2 视觉 + 高度 + tab | **完成**（`d892eeb`、`7dc7761`、`1e593b0`、`3b02236`、`26ff363`、`8ab1f86`） |
+| P2 视觉 + 高度 + tab | 完成（`d892eeb`…`8ab1f86`） |
 | P3 DeepSeek 后端 | 完成（`13822ce`） |
-| P4 设置窗分区 / 托盘合并 / 登录捕获 | 未开始（`--test-login` 仍未实现） |
+| P4 设置窗分区 / 托盘合并 / 登录捕获 | 完成（`855035a`） |
+| 计划外：图标 / Kimi 统计 | 完成（`855035a`） |
+| 计划外：所有窗口一页 demo | 完成（`9b23b74`） |
 | P5 打包 / 发布 | 未开始 |
 
-## 本轮交付
+## 提交记录（第八轮）
 
-**前端**（`26ff363`）
+```
+9b23b74 docs(demo): add the generated all-windows demo
+855035a feat(app): settings sections, DeepSeek sign-in, tray tooltip, icon and Kimi stats
+21e55ae docs(status): hand off to Phase 4
+```
 
-| 文件 | 内容 |
-|---|---|
-| `index.html` | header 下加 `.seg.provider`（Kimi / DeepSeek，复用设置窗那个组件与 `--seg-ring`）；新 `#pane-deepseek`：余额块 / 模型行容器 / 合计行 / 提示行 |
-| `src/main.ts` | 双 provider 渲染、tab 切换（入场淡入 + 同帧改高 + `set_active_tab`）、header 时间戳跟当前 tab、阈值与错误文案 |
-| `src/main.css` | `.seg.provider` 的 margin、`.pane.tab-in` 120ms 淡入、DeepSeek 面板全部样式（`.balance` / `.mrows` / `.mrow` / `.mname` 省略 / `.meta` / `.total` / `.hint`） |
-| `src/common.ts` | DeepSeek DTO、`ProviderTab`、`fmtMoney` / `fmtTokens` / `fmtHitRate` / `fmtUpdated` / `isLowBalance` / `isLowCacheHit`、`SettingsDto.activeTab` |
-| `src/theme.css` | `prefers-reduced-motion` 现在连 animation 一起关 |
-
-**后端**（`26ff363`）
-
-| 文件 | 内容 |
-|---|---|
-| `src-tauri/src/settings.rs` | `SettingsData.active_tab`（PascalCase `ActiveTab`）、`normalize_tab()`、`load()` 归一化、3 个 serde 测试 |
-| `src-tauri/src/lib.rs` | `SettingsDto.active_tab`、`set_active_tab` 命令（只改这一个字段并落盘，不碰 poller） |
-| `src-tauri/src/deepseek/mod.rs` | `visible_models` 移到 `fetch_diag` 结尾执行：IPC / 事件 / 缓存里只留面板要画的行 |
-
-**模型名省略**（用户问过，记在这里省得再查）：纯 CSS flex 收缩，无 JS 截字符串——`.mname` 用 `min-width: 0` + `overflow: hidden` + `text-overflow: ellipsis` + `white-space: nowrap`，`.mcost` 用 `flex: none` 保证金额整宽不被挤（`src/main.css:90`），完整名字在 `title` 里（`src/main.ts:147`）。
-
-**金额口径**（`26ff363` + `8ab1f86`）：用户 2026-11-14 决定「一律两位小数」，`fmtMoney` 与 Kimi 的 `fmtYuan` 都已改（`¥3.00` / `¥0.00` / `¥10.00`）。规则同时写进 `demo/panel-demo-e.html`（6 处示例金额 + 文件头说明）、`docs/SPEC.md` / `SPEC_EN.md` §12.5 与两篇的章节表、`PLAN.md` §5.2、`AGENTS.md`、`CHANGELOG.md`。A–D 四版是被否决的历史对照，金额字符串保持原样，**不要拿它们当格式依据**。
+**为什么是两个提交而不是原计划的四个**：P4、图标、Kimi 统计在很多文件里是同一处上下文——`lib.rs` 同时多了 `pub mod login` 与 `pub mod kimi_usage`、`state.rs` 同时多了 `LoginState` 与 `kimi_usage` 字段、`tray.rs` 同时改了 tooltip 与图标 include、`common.ts` 同时有凭证与缓存类型。按文件拆会让中间那个提交**编译不过**（`pub mod` 指向尚未提交的模块）。所以：产品代码 + 其文档合成一个 `feat(app)`，demo 页单独一个 `docs(demo)`，每个提交都能独立构建。
 
 ## 本轮验证结果
 
 | 项 | 结果 |
 |---|---|
-| `cargo test` | **21 passed**（原 18 + settings 3） |
-| `npx tsc --noEmit` / `npm run build` | 通过 |
-| `npx tauri build --no-bundle` | 通过（release 约 7 分钟；`dist/assets/main-BBFc-G_r.js` 与源码一致） |
-| 面板高度 vs demo E | **kimi 数据态 386、DS 两模型 459、DS 四模型 601、DS 提示态 321** —— 与 `heights.py` 的 E 列逐项相同；DS 单模型（真实形状数字）388 |
-| 连续切换 | 5 次来回：386 / 388 / 386 / 388 / 386 / 388，无漂移；`set_active_tab` 每次都被调用 |
-| 真机 `--test-ui` + 持久化 `ActiveTab=deepseek` | 窗口 954×585 物理 = 424×260 CSS（DeepSeek 空态）；点 Kimi → 837（372 CSS，= demo 的 kimi nocred）；点回 DeepSeek → 585；**三次 `bottom=1728 / right=2916` 完全不动** |
-| 最终 exe 冒烟 | 837 → 点 DeepSeek → 585，`bottom/right` 不动 |
-| `--test-deepseek`（真实账号） | 余额 ¥46.81、本月 633,873,123 tok / ¥27.14073964、命中率 99.55%、`byModel` 只有 1 条（`DeepSeek-V4.1-Flash`），无错误 |
-| 视觉对照 | demo E 与真实前端（vite + 桩 IPC）并排：结构、字体、紫 ring、条宽、红色阈值、两位小数全部一致；60 字符官方名省略成 `DeepSeek-V4.1-Reasoner-Pro-Max-Extended…`，金额 `¥1234.56` 一位不少 |
+| `cargo test` | **29 passed**（原 23 + `kimi_usage` 6） |
+| `--test-usage`（release） | `scan1 files=427 requests(7d)=3168 requests(today)=806 ms=104` / `scan2 … ms=30`，两遍请求数一致 |
+| 与独立实现对齐 | Rust 聚合与另一份 Python 计算**逐位相同**（7d `99.51469034651184%`、today `99.68969791930937%`） |
+| `--test-login`（release） | `credentialSource=file`、`verify=ok`、五个窗口 OK、`LoginWindow capture channel OK`、`LoginWindow fetch capture OK` |
+| `--test-ui` / `--test-fetch` / `--test-deepseek` | 全过；Kimi 这次 `error: null`（0%），DeepSeek 余额 ¥45.44 |
+| `tsc --noEmit` / `npm run build` / `tauri build --no-bundle` | 通过（release 内嵌前端，2 分左右） |
+| 图标 | `ExtractAssociatedIcon` 抽 release exe = 双条；真机 GUI 起 5 s 无异常 |
+| 一页 demo | `demo/ui-demo.html` 浅/深各截图核对；点 Dark 生效（headless 断言 `after-dark:dark|false|true`） |
 
-## 验证方法（下一轮直接复用）
+## 第九轮要做的（按顺序）
 
-- **有数据的渲染**：临时 harness 的生成思路——读 `index.html`，在 `<script type="module" src="/src/main.ts">` 前注入桩掉的 `window.__TAURI_INTERNALS__`（`get_state` / `get_deepseek` / `panel_height` / `set_active_tab`），每次 `panel_height` 写进 `#probe[data-heights]`，`--dump-dom` 即可当高度断言。`npm run dev` 起在 1420，headless Edge 打开 `http://localhost:1420/...`。harness 里要把 `#root` 的 opacity/transform 钉死，否则虚拟时间会把入场淡入冻在半透明。用完即删，不要提交。
-- **真机**：`quota-tray.exe --test-ui` 只建窗口**不启动 poller**，所以面板里 DeepSeek 永远是空态、Kimi 永远是 `--`；它 6 秒后自杀，够抓 2–3 张图 + 2 次点击。配置目录用 `QUOTA_TRAY_APP_DATA_DIR` 指一个自己写的 `settings.json`（`--test-ui` 启动时把它拷进临时 root）。
-- **kimi-cu 截图**：透明 Tauri 窗口直接 `get_window_state` 会拿到**全黑帧**，先 `activate_window` 再抓就正常。点击坐标是**物理像素**（本机 225%：`954/424 = 2.25`）。托盘 / 任务栏窗口被 CU 排除，点托盘图标这条路走不通。
-- **`ActiveTab` 读取**：把 `settings.json` 的 `ActiveTab` 设成 `deepseek` 再跑 `--test-ui`，窗口高度会是 DeepSeek 的 260 CSS 而不是 Kimi 的 372 CSS——高度本身就是「哪个 pane 在显示」的证据。
+1. **一次真人登录验证**（唯一没被自动化覆盖的一步）：点设置窗 `Sign in…` → 在窗里登账号 → 标题变 `verified, saved` → 面板出数。注意这会覆盖 `deepseek-credentials.json` 的 `userToken`（同账号等价）。
+2. **P5**：
+   - 打包：`npx tauri build` 单 exe + 安装包；确认登录窗不被打包遗漏；
+   - 发布线：AGENTS「Release process」仍是占位，移植父仓库的 tag 触发 draft Release + gitleaks 门；
+   - README（中英双语）+ `LICENSE` / `NOTICE` 校对；
+   - **独立 code review**（AGENTS 要求委派 code-reviewer，证伪导向；委派前要先问用户模型 / 强度）。
+3. 可选：把缓存块也放进设置窗的 Kimi 只读区（现在只在面板）；托盘图标再做一版带 DeepSeek 元素的双色标。
 
-## 接手必须知道的九件事
+## 接手必须知道的
 
-1. **源仓库在本机同级目录**：`~/Documents/trae_projects/github/kimi-planbar-tray`（只用 `rust/`）、`~/Documents/trae_projects/github/deepseek-planbar`（`tray-wpf/` 是移植源）。两个原仓库不改不删。
-2. **视觉基准只有一个文件**：`demo/panel-demo-e.html`；数值与 token 在 `PLAN.md` §3。A/B/C/D 四版只是对照，不要演进。
-3. **本机 Chrome 未安装，只有 Edge**。截图/自动化必须运行时探测（Chrome → Edge），不得写死路径。headless Edge 的视口比 `--window-size` 宽约 54px、矮约 98px。
-4. **`core.autocrlf=true`**，仓库有 `.gitattributes` 强制 `eol=lf`；git 会提示 "CRLF will be replaced by LF"，属正常。
-5. **提交会过全局 pre-commit 钩子**（gitleaks + 密钥 + 隐私 + 本机路径三层）。文档/代码里不写本机绝对路径，用户目录写 `~`。**`%APPDATA%\QuotaTray\deepseek-credentials.json` 是密文，永远不要 `cat`**，要看只 `grep -c '"dpapi:'`。
-6. **改行为先改 `PLAN.md`**，同一提交里完成；`AGENTS.md` 的陷阱清单同步。`docs/SPEC.md` 是继承来的 Kimi 行为规格，与 `PLAN.md` 冲突时 `PLAN.md` 优先（§12.5 金额格式化已被取代）。
-7. **调试版 exe 走 vite devUrl**：要看 UI 必须先 `npm run dev`；前端改动热更新、Rust 改动要 `cargo build` + 重启。**release 版才内嵌前端**，验收视觉请用 `npx tauri build --no-bundle` 出来的 exe。
-8. **`--test-deepseek` 会写真实文件**：刷新 `deepseek-{endpoints,models}.json`，首次跑会做一次性凭证导入。它**不写**缓存。诊断行走 stderr，stdout 保持可 `| jq`。`--test-ui` 不跑 poller、不读真实缓存，看到的永远是空态。
-9. **金额与显示名两个坑别踩回去**：金额按 1e-8 元量子归整（否则会显示 `24.279870719999998`），且**一律两位小数**；展示名的官方名**必须**压过内置静态表。
+1. **图标是生成物**：`demo/make_icon.py` 生成 `icons/{icon.png,icon.ico,tray.png}` 与 `demo/icon-demo.html`。`src-tauri/build.rs` 那三行 `cargo:rerun-if-changed=icons/*` **不能删**——tauri-build 只盯 `tauri.conf.json`，删了换图标后 exe 里仍是旧图（本轮真踩过，`ExtractAssociatedIcon` 抽出来还是 K 标）。
+2. **托盘只吃一张 RGBA**：所以 `tray.png` 是 48px，让 100–300% DPI 都走缩小；16px 原图在 225% 会被放大发虚。
+3. **Kimi 缓存数字是本机的**：来自 `~/.kimi-code/sessions/<ws>/<sid>/agents/<agent>/wire.jsonl`，标签写 `local`；只计 `usage.record` + `usageScope=turn`（`session` 合计与 `message.meta.usage` 副本会翻倍）；命中率与速率都是**求和后再相除**。服务端 `usages` 接口没有任何 token 数据，别去那儿找。
+4. **扫描节奏**：走树（已剪到 `sessions/<ws>/<sid>/agents/<agent>/wire.jsonl` 三层）约 0.1 s，只 stat 的增量约 30 ms；后台任务每 60 s 一次、**隔分钟才走树**。索引 `config_dir()/kimi-usage.json`，只留 30 天。若布局真的变了，`collect_sessions` 会自动回落到递归搜索而不是报 0。
+5. **`demo/ui-demo.html` 是生成物**：`demo/build_ui_demo.py` 从真实 HTML/CSS 拼出来（每窗口 CSS 加作用域前缀），改 UI 后重跑，别手改。主题切换函数 `applyTheme()` 是页面里唯一的交互脚本（之前漏了 click 绑定，点 Dark 没反应，已修）。
+6. **登录窗**：临时窗、关闭即销毁、不进 recovery；捕获走「`quotatray://` 被 `on_navigation` 取消的导航」，**远程页面没有 Tauri IPC 面，不要给它加 `remote` capability**。
+7. **环境事实**：只有 Edge（截图脚本运行时探测）、本机 225% 缩放、`QUOTA_TRAY_APP_DATA_DIR` 隔离测试、`--test-ui` 不跑配额 poller 但**会跑缓存扫描**（所以它也能看到真实缓存数字）。
+8. 密钥 / 密文永远不 `cat`：`%APPDATA%\QuotaTray\deepseek-credentials.json` 是 DPAPI 密文，要看只 `grep -c '"dpapi:'`。
 
-## 环境现状（2026-11-14 15:23）
+## 环境现状（2026-11-14 17:05）
 
-- **DeepSeek 全链路可用**：余额 ¥46.81、本月 633,873,123 token、命中率 99.55%，`deepseek-flash` 一个模型（官方名 `DeepSeek-V4.1-Flash`）。账号正在使用中，数值每分钟在变——**不要用「两次实时取数是否相等」当验收**，用 fixtures + 高度/布局断言。
-- **Kimi 配额仍返回 `no-token`**（凭证链拿不到可用 token，大概率过期），所以真机 Kimi 面板是 `--` + `Fetch failed`；不是本轮引入的问题。
-- **`%APPDATA%\QuotaTray`** 有 credentials / endpoints / models / cache 四个文件，**仍无 `settings.json`**（没点过 Save，也没在真机切过 tab）。
-- 旧的 `KimiPlanbarTray-rust.exe` 可能仍在跑，托盘里会出现两个一样的 K 图标；单实例互斥锁 `QuotaTray.SingleInstance` 与两个父版互不干扰。
-- 本轮结束时无后台进程残留（vite、`--test-ui` 实例均已结束）。
-
-## 下一步：P4
-
-`PLAN.md` §8 的验收：设置落盘后重启生效；真账号走通「捕获 → 验证 → 保存 → 面板出数」；`--test-login` 通过。建议按风险从低到高：
-
-1. **设置窗分区**（纯增量）：通用 / Kimi 只读信息 / DeepSeek 凭证。设置窗高度已内容自适应（`settings_height`），加分区不用写死尺寸。Kimi 段显示 CLI 版本、凭证来源（token / api-key）、token 是否有效；DeepSeek 段显示两个凭证**是否已配置与来源**（永不含值）、登录按钮、清除按钮。
-2. **登录捕获窗**（最大风险，单独攻坚）：`--test-login` 随窗一起做。WebView2 COM 互操作要与 wry 0.39 对齐（`PLAN.md` §9 列为最高风险）；从控制台真实会话抓 userToken → 用一次真实 `amount` 请求验证 → DPAPI 落盘 → 通知面板刷新；顺带把捕获到的非敏感请求模板喂给 `PLAN.md` §6.3 的「从登录窗学习」。
-3. **托盘 tooltip 合并**（最小）：现在只有 Kimi（`Quota Tray  5h 31% · week 12%` + ` (fetch failed)`，见 `src-tauri/src/tray.rs`），合并后覆盖两个 provider，失败后缀语义不变（`PLAN.md` §5.3）。
+- **Kimi 配额接口这次是通的**：`--test-fetch` 返回 `error: null`，5h 与 week 都是 0%，Extra usage `NotActivated`。
+- **Kimi 本地统计**：7d 99.5% / 3,169 请求 / 135.8 tok/s / 首 token 1.04 s；today 99.7% / 807 请求。
+- **DeepSeek**：余额 ¥45.44（账号在动，别拿数值当验收）。
+- `%APPDATA%\QuotaTray` 现在有：credentials / endpoints / models / cache / **kimi-usage.json**（新，来自本轮的缓存扫描）；仍无 `settings.json`（没点过 Save）。
+- 本轮结束时无后台进程残留。
 
 ## 要你拍板
 
-1. **tooltip 形态**：单行 `Quota Tray  5h 31% · week 12% · DS ¥46.81`，还是两行（Kimi 一行、DeepSeek 一行，失败时在对应行尾加 ` (fetch failed)`）？建议两行，可读性更好。
-2. **DeepSeek 凭证区的兜底**：除了「打开登录窗」，是否保留手动粘贴 token 的入口（旧版是 F12 手抄）？建议保留。
-3. **登录窗的失败语义**：抓不到 token 时静默关闭 + 日志，还是窗内留一行提示可重试？建议后者（`PLAN.md` §7 只禁止弹对话框）。
-4. **托盘图标**是否换新（当前沿用 kimi 的 K 标）。
-5. **GitHub 仓库名 / 是否建 remote**（建议 `quota-tray`）。目前无 remote，历史都在本地。
+1. **托盘图标**：现在定的是纯紫双条（A 方案）；要不要再做一版带 DeepSeek 元素的双色标？
+2. **P5 的发布线**：GitHub 仓库名（建议 `quota-tray`）、是否建 remote、是否沿用父仓库的 gitleaks 门。
+3. **缓存块位置**：只留在面板，还是设置窗的 Kimi 只读区也列一份？
 
 ## 新对话开场建议
 
-> 接手 Quota Tray（当前目录已是 git repo，无 remote）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`，视觉基准是 `demo/panel-demo-e.html`。P1–P3 与 **P2 剩余的分段 tab + DeepSeek 面板**都已完成并提交（`26ff363` 代码、`8ab1f86` 文档；`cargo test` 21 passed、真机点击 585↔837 物理像素、`bottom/right` 不动）。现在做 **P4**：设置窗分区 → 登录捕获窗（`--test-login`）→ 托盘 tooltip 合并。开工前先把 STATUS 末尾「要你拍板」的五条过一遍。
+> 接手 Quota Tray（本地 git 仓库，无 remote）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`；要看 UI 直接开 `demo/ui-demo.html`（生成物，别手改）。P1–P4 与三大计划外改动都已完成并提交（HEAD=`9b23b74`，工作区干净，`cargo test` 29 passed）。下一步做 P5：打包 → 发布线 → README → 独立 code review，中间补一次真人登录验证（窗内输账号密码那一步）。
