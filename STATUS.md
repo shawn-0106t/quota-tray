@@ -20,7 +20,7 @@
 | notes | 取自 CHANGELOG 的 `## [1.0.0] — 2026-11-14` 段（英 + 中） | 取自 0.1.0 段 |
 | 发版决策 | 依赖升级本身不单独发版（无用户可见变化），但用户要求以 1.0.0 声明稳定态，于是并入本次 | 首次发布 |
 
-其余基础设施（两次发版共用）：仓库 public、`main` 受 `Build & test (windows-latest)` required check 保护且禁 force-push；secret scanning + push protection、CodeQL default setup（actions / python / js-ts / rust）、Dependabot + security updates、私密漏洞报告全部开启；社区文档八项齐、`community/profile` health = **100**。
+其余基础设施（两次发版共用）：仓库 public、`main` 受 `Build & test (windows-latest)` required check 保护且禁 force-push；secret scanning + push protection、CodeQL default setup（actions / python / js-ts / rust）、Dependabot + security updates、私密漏洞报告全部开启，且 PR 合并后自动删 head branch（`delete_branch_on_merge` 已开启，squash merge 后残留的 Dependabot 分支不再堆积）；社区文档八项齐、`community/profile` health = **100**。
 
 | 事件 | 处置 |
 |---|---|
