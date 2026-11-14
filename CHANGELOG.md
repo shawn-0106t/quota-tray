@@ -58,6 +58,11 @@ the English notes first, then the Chinese mirror.
   gets no Tauri IPC surface — no `remote` capability, no ACL entry. The window
   is temporary: destroyed on close, outside the recovery set, built again for
   the next sign-in.
+- The DeepSeek sign-in window now opens **above** the settings sheet instead of
+  underneath it: it is `always_on_top` like every other window in the app, and
+  the sheet is hidden while the console is up and restored when it closes. The
+  old arrangement put a topmost overlay and a normal window on the same spot,
+  so every close button was ambiguous and the page was half covered.
 - A candidate token is verified with one real `amount` request before it
   replaces the stored one; a rejected candidate leaves the credential alone and
   the window open with the reason in its title. The console emits several
@@ -228,6 +233,9 @@ the English notes first, then the Chinese mirror.
   通过一次被宿主取消的 `quotatray://capture` 导航送出来，远程页面拿不到任何 Tauri
   IPC 命令面（因此不需要 `remote` capability，也不需要 ACL 条目）。窗口是临时的：
   关闭即销毁、不在 recovery 集合里，下次登录重新创建。
+- **修复**：DeepSeek 登录窗现在**置顶**，不再开在设置窗下面——它与其它窗口同一档
+  `always_on_top`；打开登录窗时先把设置窗收起，关窗后再放回来。旧行为是「置顶的设置窗
+  + 普通登录窗叠在同一点」，于是每个关闭按钮都变得含糊，页面还被遮掉一半。
 - **新增**：候选 token 先用一次真实 `amount` 请求验证，通过才替换已存的凭证；被拒的
   候选保持窗打开、原因写在窗口标题上，已存凭证不受影响。登录过程会吐多个中间
   token，所以验证期间到达的新候选会顶掉排队中的那个，并在本次验证失败后重试——

@@ -131,7 +131,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 | `settings` | 404 × 自适应（内容上报，上限工作区 90%；当前约 660，展开手工粘贴约 832） | 屏幕居中 | 分区：通用 / Kimi 只读信息 / DeepSeek 凭证 |
 | `skills` | 404 × 520 | 屏幕居中 | Kimi 专属、只读、零后台开销 |
 | `menu` | 188 × N | 托盘光标处 | Open / Refresh / Settings / Skills / Exit |
-| `login`（DeepSeek） | 900 × 680（最小 640 × 480） | 居中 | 临时窗：关闭即销毁，不进 recovery 集合。内容就是 console 本身，所以保留**原生标题栏**（关窗按钮与状态行都在那里） |
+| `login`（DeepSeek） | 900 × 680（最小 640 × 480） | 居中 | 临时窗：关闭即销毁，不进 recovery 集合。内容就是 console 本身，所以保留**原生标题栏**（关窗按钮与状态行都在那里）。**必须置顶**（与其它窗口同一档），否则会开在设置窗下面；打开时顺手把设置窗收起、关窗后再放回来——两个置顶窗叠在一起时，点哪个关窗都像没反应 |
 
 面板高度由前端测量内容后上报（`panel_height`），后端用 `LogicalSize` 改高 + `PhysicalPosition` 把窗口**右下角钉回原位**，并按工作区高度夹取；`show_panel` 先按当前 tab 定尺寸再显示，避免可见跳变。tab 选择持久化到 settings.json 的 `ActiveTab`：切换时前端调 `set_active_tab`，后端只改这一个字段并落盘，不碰两个 poller、调度与 last-good 槽位。两个 pane 只有活动那个参与布局（另一个 `hidden`），所以上报的高度天然是当前 tab 的，后端不需要按 tab 记住两套尺寸。
 

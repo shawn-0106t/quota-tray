@@ -41,9 +41,20 @@ pub fn open(app: &AppHandle) {
         let st = app.state::<AppState>();
         st.login.reset();
     }
+    // The console is a real browser window; the settings sheet is an overlay
+    // that is always-on-top. Leaving it up either covers the page or hides
+    // under it, and either way the user ends up fighting two windows. Hide it
+    // here and bring it back when the sign-in window closes (lib.rs).
+    // A `--test-*` run is left alone: it shows every window on purpose.
+    if crate::app_data_dir_override().is_none() {
+        crate::close_settings(app.clone());
+    }
     if let Some(w) = app.get_webview_window(LABEL) {
+        // Reopening: keep it where it is, but bring it forward again — a stale
+        // hidden window would otherwise stay behind the topmost overlays.
         let _ = w.show();
         let _ = w.set_focus();
+        recovery::log("login: sign-in window refocused");
         return;
     }
     let Ok(url) = CONSOLE_URL.parse::<tauri::Url>() else {
@@ -56,6 +67,14 @@ pub fn open(app: &AppHandle) {
         .inner_size(900.0, 680.0)
         .min_inner_size(640.0, 480.0)
         .center()
+        // Every other window in this app is always-on-top (the panel and the
+        // settings sheet are tray overlays). Without the same flag the console
+        // opens *underneath* the sheet the user just clicked "Sign in…" in,
+        // which reads as "the window is not in front" — and the sheet, being
+        // topmost, keeps covering the page. Created last, so it sits on top of
+        // the rest of the topmost band.
+        .always_on_top(true)
+        .focused(true)
         // Runs before every document in this webview, including the console's
         // own navigations, so a reload never loses the capture.
         .initialization_script(HOOK_JS)

@@ -372,7 +372,14 @@ fn close_settings(app: AppHandle) {
         .store(false, Ordering::SeqCst);
     recovery::set_last_visible(&app, "settings", false);
     if let Some(w) = app.get_webview_window("settings") {
-        let _ = w.hide();
+        let hid = w.hide();
+        recovery::log(&format!(
+            "settings: hide -> {:?} visible={:?}",
+            hid,
+            w.is_visible().unwrap_or(false)
+        ));
+    } else {
+        recovery::log("settings: hide -> window not found");
     }
     recovery::note_ui_event(&app, "settings", "hide");
     // The suppressed blur never arrives: closing settings has to close the
@@ -603,6 +610,12 @@ fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             if window.label() == login::LABEL {
                 window.app_handle().state::<AppState>().login.reset();
                 recovery::log("login: sign-in window closed");
+                // The sheet was hidden when the console opened; put it back so
+                // the user lands where they started, with fresh statuses
+                // (PLAN §4). A `--test-*` run never hid it.
+                if crate::app_data_dir_override().is_none() {
+                    crate::show_settings_window(window.app_handle());
+                }
                 return;
             }
             api.prevent_close();
