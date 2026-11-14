@@ -195,6 +195,7 @@ New in this project:
 - Portable mode is user-bound on purpose: a DPAPI blob copied to another Windows account does not decrypt, and re-entry is the expected fix.
 - Autostart writes HKCU only — never HKLM, never elevation. Keep the non-affiliation notice and `LICENSE` / `NOTICE` intact.
 - Repo hygiene: no absolute local paths, no secrets, no real personal or customer data in tracked files; `*.example` templates only.
+- GitHub-side gates exist too: secret-scanning push protection rejects a push carrying a detected credential (rotate it, do not bypass), and CodeQL default setup runs on PRs and `main` — an alert is a real finding until proven otherwise (`py/bad-tag-filter` in `demo/build_ui_demo.py` was one).
 
 ## Release process
 
@@ -213,7 +214,7 @@ Ported from the parent project's tag-triggered draft pipeline (2026-11-14).
 
 **Packaging** (`scripts/release/make_release_zip.py`): the version comes from `tauri.conf.json` only; the source file set comes from `git ls-files` so it can never drift from `.gitignore`. The zip and the checksum file are staged as `.part` and renamed only when complete (checksums first, zip last), so a failed run leaves the previous pair intact instead of a truncated one. Asset names at the repo root are gitignored (`*.exe`, `QuotaTray-*.zip*`, `SHA256SUMS.txt`).
 
-**State (2026-11-14)**: the repository is public at `shawn-0106t/quota-tray`, `main` is pushed and carries the CI + draft-release workflows, Dependabot and the community files. The first `v*` tag and the draft release are the remaining steps; publishing the draft stays a manual decision.
+**State (2026-11-14)**: the repository is public at `shawn-0106t/quota-tray`. `main` is protected by the `Build & test (windows-latest)` check (admins may still push directly; force-push is off), secret-scanning **push protection** is on, **CodeQL default setup** scans PRs and `main`, Dependabot runs weekly (cargo `/src-tauri`, npm, github-actions) with security updates enabled, and private vulnerability reporting is the route in `SECURITY.md`. The wiki is enabled but unused — docs live in this repository. The first `v*` tag and the draft release are the remaining steps; publishing the draft stays a manual decision.
 
 ## Environment notes (this machine)
 

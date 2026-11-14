@@ -58,8 +58,13 @@ Run the same commands locally before opening a PR:
 | Rust tests | `cargo test --locked` (in `src-tauri`) |
 | TypeScript | `npx tsc --noEmit` |
 | Frontend build | `npm ci && npm run build` |
+| Code scanning | automatic — CodeQL default setup runs on PRs and on `main` |
 
-Never commit secrets, tokens or credentials; CI scans the entire history.
+GitHub's secret-scanning **push protection** is enabled: a push whose diff contains a
+detected credential is rejected before it lands. If it is a genuine false positive, allow
+it from the push dialog; otherwise rotate the credential and rewrite the commit.
+
+Never commit secrets, tokens or credentials; CI scans the entire history as well.
 
 ## UI changes
 
@@ -156,8 +161,12 @@ CI（`.github/workflows/ci.yml`）必须全绿，branch protection 要求构建 
 | Rust 测试 | `cargo test --locked`（在 `src-tauri`） |
 | TypeScript | `npx tsc --noEmit` |
 | 前端构建 | `npm ci && npm run build` |
+| 代码扫描 | 自动——CodeQL default setup 在 PR 与 `main` 上运行 |
 
-绝不提交密钥、token 或凭证；CI 会扫描整个提交历史。
+GitHub 的 secret scanning **push protection** 是开着的：diff 里带被识别出的凭证时，推送
+在落地前就被拒。确认是误报可以从推送对话框里放行；否则请轮换凭证并改写那次提交。
+
+绝不提交密钥、token 或凭证；CI 还会扫描整个提交历史。
 
 ## UI 改动
 
