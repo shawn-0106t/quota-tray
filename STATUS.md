@@ -1,14 +1,32 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-14 20:10（发版前准备轮结束：去安装包 + 全量审查 + 增量复验 + 全量测试 + 设计 case 草稿；20 个文件改动 + 1 个新增，**未提交**，HEAD `d325458`）。
+> 快照：2026-11-14 20:20（**v0.1.0 已发：tag `v0.1.0`、公共仓库 `shawn-0106t/quota-tray`、草稿 Release 已生成并核对；等 publish**）。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
 ## 一句话
 
-**v0.1.0 的代码与产物已就绪，可以发版**：只发便携 exe（NSIS 安装包已移除），整棵树过了一次独立审查（无 Blocker，1 Major + 2 Minor + 8 处文档矛盾全部修掉），静态门 / 六条 `--test-*` / 打包校验全绿。剩下四步只有人能做的：建 remote、push 看 CI、给 CHANGELOG 补日期、打 tag 并核对草稿 Release。
+**v0.1.0 已经发到 `https://github.com/shawn-0106t/quota-tray`**：`main` 与 tag 都推了、CI 全绿、草稿 Release 的三件资产下载回来 `sha256sum -c` 全 OK、发布 exe 跑 `--test-ui` 与 `--test-fetch` 正常。**只剩「publish」这一个动作没做**（按流程留给人），以及发版后合并 Dependabot 的三个 PR。
 
-## 本轮做完的三件事
+## 发版记录（2026-11-14）
+
+| 项 | 结果 |
+|---|---|
+| 仓库 | `https://github.com/shawn-0106t/quota-tray`（public），`main` 受 `Build & test (windows-latest)` required check 保护，禁 force-push |
+| main 上的 CI | 三次全绿：`8136cba`（发版准备）、`947a514`（社区文档）、`39f691d`（CodeQL 修复 + 门禁文档） |
+| tag | `v0.1.0`（annotated）→ `39f691d`；tag 与 `tauri.conf.json` 版本一致（workflow 校验过） |
+| 发版 workflow | 全绿：gitleaks 全历史 → 构建 exe → 打包 → 生成 notes → 开草稿 |
+| 草稿 Release | `v0.1.0` 草稿，三件资产：`QuotaTray.exe` 7.17 MB、`QuotaTray-v0.1.0.zip` 3.96 MB（92 文件，根目录含便携 exe）、`SHA256SUMS.txt` |
+| 资产校验 | 把三件下载到本地跑 `sha256sum -c SHA256SUMS.txt` → 两条 **OK** |
+| 发布产物自检 | 下载回来的 `QuotaTray.exe --test-ui` 四个窗口 OK、`--test-fetch` `error: null` |
+| notes | 取自 CHANGELOG 的 `## [0.1.0] — 2026-11-14` 段（英 + 中）+ 全量 changelog 链接 + 三件资产说明 + SmartScreen 提示 |
+| 仓库设置 | secret scanning + push protection、CodeQL default setup（actions / python / js-ts / rust 四种语言）、Dependabot + security updates、私密漏洞报告，均已开启 |
+| 社区文档 | `CONTRIBUTING` / `CODE_OF_CONDUCT` / `SECURITY` / issue 模板 / PR 模板 / `.github/dependabot.yml` 齐了，`community/profile` health = **100** |
+| CodeQL | 报告 1 条 **high**（`py/bad-tag-filter`，`demo/build_ui_demo.py` 剥离 `<script>` 大小写敏感）→ 已在 `aea5218` 修复并推上 main；告警要等下一次默认扫描落到含修复的提交才会自动变 fixed |
+
+**发版后立刻要做（人）**：① 打开草稿 Release 点 Publish；② 合并 Dependabot 的三个 PR（#1 vite patch、#2 tauri-plugin-opener patch、#3 base64 **major**，各自等 CI 绿）。
+
+## 发版前的三步（已完成，留档）
 
 | 步 | 内容 | 结果 |
 |---|---|---|
@@ -51,16 +69,16 @@
 
 **没验到的**：recovery 的 reload 补救没有用真实的渲染进程崩溃跑过（强制崩溃要 DevTools 或注入故障）。已确认的是类型检查 / 构建通过、`allow-is-visible` 在 ACL 里、启动路径（窗口隐藏时 `isVisible()=false`）行为不变。
 
-## 只剩这四步（都要人来做）
+## 剩下只有一件事（人）
 
-1. 建 remote（建议 `quota-tray`），push 到 main 看 `ci.yml` 绿不绿（action pin / gitleaks / `cargo build --locked` 这三处只有真 runner 能验）。
-2. `CHANGELOG.md` 把 `## [0.1.0] — Unreleased` 改成带日期，否则 `release.yml` 会硬失败。
-3. `git tag v0.1.0 && git push origin v0.1.0`；tag 必须等于 `tauri.conf.json` 的版本（workflow 会校验）。
-4. 草稿 Release 出来后核对三件资产与 `SHA256SUMS.txt`，然后 publish（发布永远是人工动作）。
+1. 打开 [草稿 Release](https://github.com/shawn-0106t/quota-tray/releases) 核对一眼，点 **Publish**（按流程发布永远是人工动作）。
+2. 发布后合并 Dependabot 的三个 PR：#1 vite patch、#2 tauri-plugin-opener patch、#3 base64 **major**（各自等 CI 绿；major 单独评估）。
+
+> 四步发版动作（建 remote / CHANGELOG 定版 / tag / 开草稿）已于 2026-11-14 全部完成，记录见上面「发版记录」。
 
 ## 接手必须知道的
 
-1. **本轮的 20 个改动 + 1 个新增还没提交**：`git status` 一眼可见；工作区就是发版内容，`git add -A` 即可（先看一遍 diff）。新增的是 `docs/case-quota-tray-panel.md`（设计 case 草稿，不是产品文档）。上一轮的三条交接（主线程建窗 / 窗口程序没有控制台 / Clear 的边界）仍然有效。
+1. **工作区干净、已全部推送**：`main` = `39f691d`，tag `v0.1.0` 指向同一提交。`docs/case-quota-tray-panel.md`（设计 case 草稿，不是产品文档）也已入库。上一轮的三条交接（主线程建窗 / 窗口程序没有控制台 / Clear 的边界）仍然有效。
    **UI 的单一真源是产品本身**（`index.html` / `settings.html` / `skills.html` / `menu.html` + `src/*.css|ts` + Rust 行为）：`demo/ui-demo.html`、`demo/icon-demo.html`、`docs/screenshot-*.png` 都是从它生成的，文档是照着它反写的。冻结的 A–E 五版 demo 保留历史像素，其中 E 的 `--shadow` 仍写 40px —— 那是刻意例外，`PLAN.md` §3.2 / `src/theme.css` 才是准。
 2. **同步命令跑在主线程**：任何 `#[tauri::command]` 里都**不要**直接 `WebviewWindowBuilder::build()`——它会跳主线程并等待，结果就是「窗口出现但一片空白、关不掉」。`open_login` / `close_login` 都已交给 `tauri::async_runtime::spawn`。
 3. **reload 与 rebuild 是两条路**：`rebuild` 会等页面加载再调 `show_panel`（所以有 `panel-show`）；`reload` 不会，才需要在 `main.ts` 里按窗口可见性补首帧。以后再动是恢复逻辑，两条路都要想一遍。
@@ -71,19 +89,19 @@
 8. 原有几条仍然有效：图标是生成物、托盘嵌 48px、Kimi 数字是本机口径、扫描节奏、`ui-demo.html` 是生成物、登录窗没有 IPC 面。
 9. **README 截图有护栏**：`make_readme_shots.py` 的 `CROP` 是按 DOM 实测的固定框，脚本会先断言「裁切外圈是单一背景色」再出图。改舞台 padding、改窗宽、改演示页排版后，它要么自己过、要么直接报错要求重测——不要手工裁图。
 
-## 环境现状（2026-11-14 19:30）
+## 环境现状（2026-11-14 20:20）
 
-- **Kimi**：token 已恢复有效，`--test-fetch` 返回 `error: null`；5h 0%、week 1%。
+- **Kimi**：token 有效，`--test-fetch` 返回 `error: null`；5h 0%、week 1%。
 - **DeepSeek**：API key 与 usage token 都已配置（`--test-login` 报 `credentialSource=file`、`apiKeyConfigured=true`、`verify=ok`）；余额 ¥38.58。
 - `%APPDATA%\QuotaTray`：credentials / endpoints / models / cache / kimi-usage / `settings.json`（`Theme=system`、`RefreshMinutes=5`、`AutoStart=false`、`ActiveTab=kimi`）/ `webview.log`。
-- 仓库根留三件产物（gitignored）：`QuotaTray.exe`、`QuotaTray-v0.1.0.zip`、`SHA256SUMS.txt`；旧的 `QuotaTray_0.1.0_x64-setup.exe` 已删。
-- **仓库根那个 `QuotaTray.exe` 进程本轮被关掉了**：它锁着产物文件，`make_release_zip.py` 会 `PermissionError`。要再跑就双击根目录的 exe；再次打包前记得先退出它。
-- 工作区：20 个文件改动 + 1 个新增（`docs/case-quota-tray-panel.md`），HEAD `d325458`。
+- 仓库根留三件本地构建的产物（gitignored）：`QuotaTray.exe`、`QuotaTray-v0.1.0.zip`、`SHA256SUMS.txt`；它们的哈希与草稿 Release 里 runner 构建的那份不同（正常，同一 commit 两次构建）。
+- **仓库根那个 `QuotaTray.exe` 进程被关掉了**（它锁着产物文件，`make_release_zip.py` 会 `PermissionError`）。要再跑就双击根目录的 exe；再次打包前先退出它。
+- git：`main` = `39f691d`，`origin/main` 同步，工作区干净；tag `v0.1.0`。
 
 ## 新对话开场建议
 
-> 接手 Quota Tray（本地 git 仓库，无 remote，HEAD=`d325458`，工作区有 20 个改动 + 1 个新增就是本轮成果）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`；UI 看 `demo/ui-demo.html`（生成物，别手改），README 截图由 `demo/make_readme_shots.py` 生成。
+> 接手 Quota Tray（`https://github.com/shawn-0106t/quota-tray`，本地目录同名仓库，HEAD=`39f691d`，工作区干净）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`；UI 看 `demo/ui-demo.html`（生成物，别手改），README 截图由 `demo/make_readme_shots.py` 生成。
 >
-> 状态：v0.1.0 代码与产物就绪——只发便携 exe、全量审查修完、全量测试全绿。**下一步就是发版本身**，四步都在「只剩这四步」一节，全部需要人：建 remote、push 看 CI、给 CHANGELOG 补日期、打 tag 并核对草稿 Release。
+> 状态：**v0.1.0 已发到 tag 与草稿 Release**，三件资产下载校验过、发布 exe 自检通过；只差人点 Publish。发版后待办：合并 Dependabot 三个 PR；确认 CodeQL 的 `py/bad-tag-filter` 告警在下一次扫描后自动变 fixed。
 >
 > 用户已拍板：只发便携 exe（无安装包）；托盘图标保持纯紫双条；设置窗高度维持「工作区 90% 上限 + 卡片内滚动」。
