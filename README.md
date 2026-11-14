@@ -1,5 +1,12 @@
 # Quota Tray
 
+[![CI](https://github.com/shawn-0106t/quota-tray/actions/workflows/ci.yml/badge.svg)](https://github.com/shawn-0106t/quota-tray/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/shawn-0106t/quota-tray?style=flat-square)](../../releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/shawn-0106t/quota-tray/total?style=flat-square)](../../releases)
+[![License: MIT](https://img.shields.io/github/license/shawn-0106t/quota-tray?style=flat-square)](LICENSE)
+[![Platform: Windows 10/11](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey?style=flat-square)](#requirements)
+[![Built with Tauri 2](https://img.shields.io/badge/built%20with-Tauri%202-24C8D8?style=flat-square)](https://tauri.app)
+
 One tray icon for two quotas: **Kimi Code** plan usage and **DeepSeek** balance,
 in a single 424 px panel with a provider tab. Windows 10/11, no installer, no
 account of its own, no telemetry.
