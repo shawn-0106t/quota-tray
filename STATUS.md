@@ -9,6 +9,15 @@
 >
 > **P4 顺带修了一个 `quota-core` 的真缺陷**：DeepSeek 对无效 token 回 **HTTP 200** + `{"code":40003,…}`，`verify_user_token` 原来只看状态码，等于「验证后保存」从不拒绝任何候选。现在读 body（`token_accepted`，只认非零 `code`）、被拒时继续走下一个候选 base，并有单测。**这条修复也已经单独开了 PR** [#4](https://github.com/shawn-0106t/quota-tray/pull/4)（`fix/verify-before-save`，从 `main` 切出；`main` 上没有 `quota-core/`，所以是移植到 `src-tauri/src/deepseek/client.rs` 的同一份修复 + 单测）。合并后 v1.0.1 的旧行为才会消失；打不打 `v1.0.2` 仍待拍板（见 `spike/HANDOFF.md` §9）。
 
+## 2026-11-15 已定的发布动作（记录）
+
+1. 等 PR [#4](https://github.com/shawn-0106t/quota-tray/pull/4) 的 CodeQL 转绿（`Build & test` 与 gitleaks 已绿）。
+2. **squash 合并**进 `main`（仓库按 squash 合并、合并后删 head branch）。
+3. 合并后把五个版本载体升到 **1.0.2**（`package.json`、`package-lock.json`、`tauri.conf.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`），`CHANGELOG.md` 的 `[Unreleased]` 段定版为 `## [1.0.2] — <日期>`，`python scripts/release/check_versions.py` 必须通过。
+4. 打 `v1.0.2` tag 才会触发 release workflow（草稿 Release，发布仍手动）——**这一步等用户点头**。
+
+注意：本地 `main` 在 `../kimi-deepseek-quota-dashboard`（同一仓库的另一个 worktree），合并后在那里 `git pull --ff-only` 再升版本；不要在 worktree 里 `git switch main`。
+
 ## 一句话
 
 **v1.0.1 已在 `https://github.com/shawn-0106t/quota-tray` 发布**（2026-11-15 07:30 UTC，Latest）：tab 切换按 Windows 原生 motion 重做（§3.6），并新增「五个版本载体必须一致」的发版门禁。上一次是 v1.0.0（2026-11-14 13:02 UTC），行为与 0.1.0 一致——那一版表达的是「发布门禁到位 + 依赖当前」。
