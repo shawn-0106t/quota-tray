@@ -5,7 +5,7 @@
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
 > **本分支（`spike/slint-demo`）是 Slint 调研线，不是下面这份 Tauri 主线的快照。**
-> 新对话先读 `spike/HANDOFF.md`（现状 / 决策 / 坑 / 阶段），实测数字在 `spike/slint-demo/REPORT.md`（静态视觉）、`spike/p0/REPORT.md`（P0 交互）、`spike/p1/REPORT.md`（P1 `quota-core` 抽取）与 `spike/p2/REPORT.md`（P2 真实面板）。P0、P1、P2 已完成：新壳在 `slint/`（crate `quota-tray-slint`），面板已接 `quota-core` 真实数据，高度随数据变（17 个变体与 DOM 逐像素相等），`ActiveTab` 持久化，225% 下贴角漂移 0 px；下一步 P3（设置/skills/menu 三个窗口）→ P4 登录 → P5 对齐门禁。`src-tauri` 依赖仓库根的 `quota-core/`：纯逻辑（凭证链、配额、DeepSeek、本地用量、设置/skills/update、格式化）都在那边，`src-tauri` 只剩窗口/托盘/登录壳；发布产物与 v1.0.1 行为不变。下面的内容描述 Tauri 主线（v1.0.1）。
+> 新对话先读 `spike/HANDOFF.md`（现状 / 决策 / 坑 / 阶段），实测数字在 `spike/slint-demo/REPORT.md`（静态视觉）、`spike/p0/REPORT.md`（P0 交互）、`spike/p1/REPORT.md`（P1 `quota-core` 抽取）、`spike/p2/REPORT.md`（P2 真实面板）与 `spike/p3/REPORT.md`（P3 三个窗口）。P0–P3 已完成：新壳在 `slint/`（crate `quota-tray-slint`），面板接 `quota-core` 真实数据（17 个变体与 DOM 逐像素相等）、`ActiveTab` 持久化、225% 贴角漂移 0 px；**P3 补齐设置 / skills / 托盘菜单三个窗口** —— 设置窗内容尺寸 + 居中 + 90% 上限并在卡片内滚动，保存后**子进程重启读回**确认落盘生效、主题即时切到四个窗口；skills 按需扫描（124 技能 / 134 行）并可滚动；托盘右键在光标处开自定义菜单，动作先关菜单再执行；设置/skills 打开时面板失焦不隐藏，关闭后按前台状态决定是否收起。三个窗口的截图与 DOM 文本带最差 1.00 CSS px。下一步 P4（登录链路）→ P5（对齐门禁）。`src-tauri` 依赖仓库根的 `quota-core/`：纯逻辑（凭证链、配额、DeepSeek、本地用量、设置/skills/update、格式化）都在那边，`src-tauri` 只剩窗口/托盘/登录壳；发布产物与 v1.0.1 行为不变。下面的内容描述 Tauri 主线（v1.0.1）。
 
 ## 一句话
 

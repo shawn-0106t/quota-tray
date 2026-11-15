@@ -19,8 +19,8 @@ slint = { version = "=1.18.1", features = [
     "unstable-winit-030",
 ] }
 # Slint's own SystemTrayIcon has no hover event and always opens its native menu
-# on right-click, so the custom cursor-positioned menu (P3) cannot be built on
-# it (spike/p0/REPORT.md §5).
+# on right-click, so the custom cursor-positioned menu window (`ui/menu.slint`)
+# cannot be built on it (spike/p0/REPORT.md §5).
 tray-icon = "0.26"
 image = { version = "0.25", default-features = false, features = ["png"] }
 windows = { version = "0.62", features = [

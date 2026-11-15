@@ -19,7 +19,8 @@ This branch is a parallel investigation into a non-Tauri shell (Slint 1.18 + Ski
 
 - Read `spike/HANDOFF.md` first: current state, decisions, traps, phases. Measured numbers live in `spike/slint-demo/REPORT.md` (static visual parity) and `spike/p0/REPORT.md` (P0 interaction: tray, tab motion, blur-hide, `--login-host`).
 - P0 is done (2026-11-15; all four acceptance items, including a real captured-and-saved DeepSeek token). P1 is done too (2026-11-15): the data layer lives in `quota-core/` — a sibling package (not a workspace, see `spike/p1/REPORT.md`), `src-tauri` depends on it and re-exports every module so its call sites keep their `crate::quota` & co. paths, the 29 original tests still pass (26 moved, 3 recovery tests stay), and `--test-fetch/--test-deepseek/--test-usage` match the pre-extraction binary byte for byte apart from the four live fields (`fetchedAt`, `scannedAt`, `scanMs`, `ms=`).
-- **P2 is done (2026-11-15)**: the new shell lives in `slint/` (crate `quota-tray-slint`, exe `quota-tray-slint.exe`), wired to `quota-core` for real data — two provider pollers with last-good slots, the local Kimi usage scan, the CLI version check, the DeepSeek last-good cache, `ActiveTab` persistence and a content-sized, work-area-anchored window that scrolls its card when the work area caps it. `spike/p2/REPORT.md` has the numbers: 17 data variants size the card/window to exactly the Chromium DOM height (Δ 0.00), 8 layout variants put every text band within 1.00 CSS px, and at the machine's 225% scale the bottom-right edge drifts 0 px across 10 tab switches (469 samples) and 30 rapid clicks. **Panel layout is absolute stacking from the `Metrics` constants in `ui/primitives.slint`, not a Slint `layout`** — a `VerticalLayout` whose sibling component contains a repeater silently drops every sibling after it (REPORT §5.1), and Slint centres children that have no explicit x/y (REPORT §5.2). Next is P3 (settings / skills / menu windows), then P4 (sign-in) and P5 (parity matrix); do not start a full UI rewrite before that. `spike/p1/` holds the comparison harness (`compare_test_output.py`, `fmt_parity.py`); `spike/p2/` holds the height oracle (`heights_ref.py --compare`) and the band comparison (`compare_bands.py`).
+- **P2 is done (2026-11-15)**: the new shell lives in `slint/` (crate `quota-tray-slint`, exe `quota-tray-slint.exe`), wired to `quota-core` for real data — two provider pollers with last-good slots, the local Kimi usage scan, the CLI version check, the DeepSeek last-good cache, `ActiveTab` persistence and a content-sized, work-area-anchored window that scrolls its card when the work area caps it. `spike/p2/REPORT.md` has the numbers: 17 data variants size the card/window to exactly the Chromium DOM height (Δ 0.00), 8 layout variants put every text band within 1.00 CSS px, and at the machine's 225% scale the bottom-right edge drifts 0 px across 10 tab switches (469 samples) and 30 rapid clicks. **Panel layout is absolute stacking from the `Metrics` constants in `ui/primitives.slint`, not a Slint `layout`** — a `VerticalLayout` whose sibling component contains a repeater silently drops every sibling after it (REPORT §5.1), and Slint centres children that have no explicit x/y (REPORT §5.2).
+- **P3 is done (2026-11-15)**: the other three windows exist — the settings sheet (theme / refresh interval / autostart, read-only Kimi + DeepSeek credential statuses, the manual paste fallback, Save that persists -> applies autostart -> applies the theme -> restarts both poll schedules -> closes), the skills window (lazy scan of the three skill roots, grouped rows, refresh, a 388px scrolling viewport) and the tray menu (five rows, shown at the cursor by a right-click, closed before the action runs). The panel's auto-hide is suspended while settings or skills is open, and closing either one collapses the panel if focus did not come back. `spike/p3/REPORT.md` has the numbers: a child-process restart reads the saved `theme=dark interval=10 autostart=true` back, 8 screenshot-vs-DOM band comparisons pass (worst text band 1.00 CSS px), the menu lands within 0.2 physical px of the shipped `show_menu` formula, and every P2 check still passes. **Each window owns its own `Tokens` instance** (Slint globals are per-component), the window modules live in `src/win/` (`windows` would shadow the `windows` crate), and the setting/skills windows are content-sized in Rust from the Slint layout's `natural-h`. Next is P4 (sign-in: `--login-host` + `--test-login`, wiring the sheet's "Sign in…"), then P5 (parity matrix); do not start a full UI rewrite before that. `spike/p1/` holds the comparison harness (`compare_test_output.py`, `fmt_parity.py`); `spike/p2/` the height oracle (`heights_ref.py --compare`) and band comparison (`compare_bands.py`); `spike/p3/` the window rect oracle (`ref_windows.py`) and band comparison (`compare_windows.py`).
 - Build a spike with the Skia mirror, or the build script retries GitHub and falls back to a source build that needs LLVM: `SKIA_BINARIES_URL='https://ghproxy.net/https://github.com/rust-skia/skia-binaries/releases/download/{tag}/skia-binaries-{key}.tar.gz' cargo build` (in `spike/p0` or `spike/slint-demo`).
 - `spike/p0` is the future shell skeleton; its `--test-tab-anim` / `--test-blur` / `--test-tray-click` / `--test-login` modes are the acceptance harness. `.shots/` is gitignored; committed evidence is in `spike/evidence/` and `spike/p0/evidence/`.
 
@@ -51,9 +52,12 @@ src/                  # vanilla TS frontend (Vite multi-page build)
   vite-env.d.ts
 vite.config.ts        # 4-page rollup input; 100 KB asset inlining budget
 tsconfig.json / package.json / package-lock.json
-slint/                # the Tauri-free shell (P2: panel only) — crate quota-tray-slint
-  ui/{tokens,primitives,kimi,ds,panel,anchor,app}.slint   # Metrics constants live in primitives
+slint/                # the Tauri-free shell (P2 panel + P3 settings/skills/menu) — crate quota-tray-slint
+  ui/{tokens,primitives,kimi,ds,panel,settings,skills,menu,anchor,app}.slint
+                                                           # Metrics constants live in primitives;
+                                                           # CardBg/Btn/Seg3/Seg4/TitleBar are shared
   src/{main,shell,app,view,height,checks}.rs               # data pump, placement math, self-checks
+  src/win/{mod,settings,skills,menu}.rs                    # one module per P3 window
   Cargo.toml / Cargo.lock / build.rs
 quota-core/           # shared data layer, no GUI toolkit (HANDOFF §4)
   src/                # credentials/quota/settings/skills/update/kimi_usage (scan)
@@ -166,6 +170,25 @@ $EXE --test-heights                    # card/window height per data variant (no
 ```
 
 `--no-poll` disables the four background loops so a `--variant` screenshot shows the variant and not the live account. Height and layout regressions are caught by `spike/p2/heights_ref.py --compare` (17 variants against the DOM) and `spike/p2/compare_bands.py` (text bands at the live DPR vs the DOM at DPR 2, both converted to CSS px).
+
+P3 adds five window checks and a screenshot mode. `--config-dir` must be an ABSOLUTE path (quota-core ignores a relative one and falls back to the real profile):
+
+```bash
+EXE=./slint/target/debug/quota-tray-slint.exe
+ABS="$(pwd -W)/.shots/p3"
+$EXE --test-windows  --no-poll --config-dir "$ABS/cfg-windows"   # all four windows + panel Settings action
+$EXE --test-settings --no-poll --config-dir "$ABS/cfg-settings" --max-settings-h 300
+                                                     # statuses, Save -> child-process restart read-back,
+                                                     # theme to all four windows, Clear, 90% cap + scroll
+$EXE --test-skills   --no-poll --config-dir "$ABS/cfg-skills"    # lazy scan, row model, scroll, refresh
+$EXE --test-menu     --no-poll --config-dir "$ABS/cfg-menu"      # cursor placement, row actions, blur-hide
+$EXE --test-dialogs  --no-poll --config-dir "$ABS/cfg-dialogs"   # panel blur suppressed, collapse on close
+$EXE --shots --no-poll --theme light --out .shots/p3/light --config-dir "$ABS/cfg-shots"   # evidence: fixed skills list
+PYTHONUTF8=1 python spike/p3/ref_windows.py                      # reference pages + rect baseline
+PYTHONUTF8=1 python spike/p3/compare_windows.py --shot .shots/p3/light/settings.png --window settings --theme light
+```
+
+The band comparison ignores runs narrower than 5 CSS px (hairlines and lone ">" descriptions): their first antialiased row depends on the DPR, not on the layout. `--print-skills` / `--print-settings` are the JSON / text dumps those tools consume.
 
 Design review is part of the deliverable: after any visual change, regenerate the all-windows demo and the screenshots, and compare in both themes:
 

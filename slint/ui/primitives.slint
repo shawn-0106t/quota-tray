@@ -117,3 +117,156 @@ export component Hair inherits Rectangle {
     height: 1px;
     background: Tokens.hair;
 }
+
+// The card shell every window paints on the transparent window: paper fill,
+// 1px hairline, 12px radius and the CSS shadow (`0 8px 18px`, PLAN §3.2). The
+// caller owns x/y/width/height — the settings sheet is content-sized in Rust,
+// the menu is content-sized from its five rows.
+export component CardBg inherits Rectangle {
+    background: Tokens.paper;
+    border-width: 1px;
+    border-color: Tokens.hair;
+    border-radius: 12px;
+    drop-shadow-offset-x: 0px;
+    drop-shadow-offset-y: 8px;
+    drop-shadow-blur: 18px;
+    drop-shadow-spread: 0px;
+    drop-shadow-color: Tokens.shadow;
+}
+
+// Ghost button (.btn): 34 high, hairline ring, 11.5/500, hover fill.
+export component Btn inherits Rectangle {
+    in property <string> label;
+    in property <bool> enabled: true;
+    callback clicked();
+    height: 34px;
+    border-width: 1px;
+    border-color: Tokens.hair;
+    border-radius: 8px;
+    background: (ta.has-hover && enabled) ? Tokens.seg-track : transparent;
+    ta := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    Text {
+        width: 100%;
+        height: 100%;
+        text: label;
+        font-size: 11.5px;
+        font-weight: 500;
+        color: enabled ? Tokens.ink1 : Tokens.ink2;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// The shared .seg control at the settings sheet's 318px content width. The
+// active cell is ringed with the accent; the fill alone is under WCAG 3:1
+// (theme.css `--seg-ring`). Cell geometry comes from the measured DOM:
+// 3 cells 102.66 wide, 4 cells 76.5, 2px gaps, 3px track padding.
+component SegBase inherits Rectangle {
+    height: 36px;
+    border-radius: 12px;
+    background: Tokens.seg-track;
+}
+
+export component Seg3 inherits SegBase {
+    in property <string> a;
+    in property <string> b;
+    in property <string> c;
+    in property <int> selected: 0;
+    callback pick(int);
+    SegCell { x: 3px; y: 3px; width: 102.66px; height: 30px; label: a; on: selected == 0; }
+    SegCell { x: 107.66px; y: 3px; width: 102.66px; height: 30px; label: b; on: selected == 1; }
+    SegCell { x: 212.33px; y: 3px; width: 102.66px; height: 30px; label: c; on: selected == 2; }
+    TouchArea { x: 3px; y: 3px; width: 102.66px; height: 30px; clicked => { pick(0); } }
+    TouchArea { x: 107.66px; y: 3px; width: 102.66px; height: 30px; clicked => { pick(1); } }
+    TouchArea { x: 212.33px; y: 3px; width: 102.66px; height: 30px; clicked => { pick(2); } }
+}
+
+export component Seg4 inherits SegBase {
+    in property <string> a;
+    in property <string> b;
+    in property <string> c;
+    in property <string> d;
+    in property <int> selected: 0;
+    callback pick(int);
+    SegCell { x: 3px; y: 3px; width: 76.5px; height: 30px; label: a; on: selected == 0; }
+    SegCell { x: 81.5px; y: 3px; width: 76.5px; height: 30px; label: b; on: selected == 1; }
+    SegCell { x: 160px; y: 3px; width: 76.5px; height: 30px; label: c; on: selected == 2; }
+    SegCell { x: 238.5px; y: 3px; width: 76.5px; height: 30px; label: d; on: selected == 3; }
+    TouchArea { x: 3px; y: 3px; width: 76.5px; height: 30px; clicked => { pick(0); } }
+    TouchArea { x: 81.5px; y: 3px; width: 76.5px; height: 30px; clicked => { pick(1); } }
+    TouchArea { x: 160px; y: 3px; width: 76.5px; height: 30px; clicked => { pick(2); } }
+    TouchArea { x: 238.5px; y: 3px; width: 76.5px; height: 30px; clicked => { pick(3); } }
+}
+
+// Title-bar close (.chrome-close): 22x22, radius 6, hover fill.
+export component ChromeClose inherits Rectangle {
+    callback close();
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: ta.has-hover ? Tokens.seg-track : transparent;
+    ta := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: pointer;
+        clicked => { root.close(); }
+    }
+    // The cross is drawn, not typed: U+2715 (what the markup uses) has no
+    // glyph in Segoe UI and Skia renders a tofu box — WebView2 falls back to a
+    // symbol font, Slint does not.
+    Path {
+        x: 7.5px;
+        y: 7.5px;
+        width: 7px;
+        height: 7px;
+        viewbox-width: 7;
+        viewbox-height: 7;
+        commands: "M0 0 L7 7 M7 0 L0 7";
+        fill: transparent;
+        stroke: ta.has-hover ? Tokens.ink1 : Tokens.ink2;
+        stroke-width: 1.1px;
+    }
+}
+
+// Title bar of the settings / skills windows: 34 high, wordmark + close, the
+// whole row drags the window (the close button sits above and eats its own
+// clicks).
+export component TitleBar inherits Rectangle {
+    in property <string> title;
+    callback close();
+    callback drag();
+    height: 34px;
+    background: transparent;
+    TouchArea {
+        x: 0;
+        y: 0;
+        width: parent.width - 32px;
+        height: parent.height;
+        mouse-cursor: default;
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.down) {
+                root.drag();
+            }
+        }
+    }
+    Text {
+        x: 14px;
+        y: 12px;
+        height: 17.5px;
+        text: title;
+        font-size: 13px;
+        font-weight: 500;
+        color: Tokens.ink1;
+        vertical-alignment: center;
+    }
+    ChromeClose {
+        x: parent.width - 32px;
+        y: 12px;
+        close => { root.close(); }
+    }
+}

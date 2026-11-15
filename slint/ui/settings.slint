@@ -1,0 +1,498 @@
+// Settings sheet: 404 logical px wide, content-sized height, centred by Rust.
+//
+// Every constant below is a CSS box measured from the shipped DOM at DPR 2
+// (`spike/p3/ref_windows.py`, rects-windows.json), the same way the panel's
+// `Metrics` were derived: the card height is the sum of the same numbers the
+// blocks are placed with, so the window Rust sizes to cannot disagree with what
+// is painted. `PLAN.md` §4 is the behaviour contract (only the persisted
+// preferences are writable; credentials are statuses + the manual fallback).
+//
+// Notes are reserved at two lines (28px) whenever they are shown: the shipped
+// `.note` wraps to two lines for every text the app produces except
+// "Verified and saved.", and a fixed box keeps the sheet from jumping between
+// one- and two-line results (spike/p3/REPORT.md §5).
+import { Tokens } from "tokens.slint";
+import { Lbl, Note, Txt, Btn, Seg3, Seg4, CardBg, TitleBar } from "primitives.slint";
+
+component RowValue inherits Txt {
+    in property <bool> muted: true;
+    in property <bool> bad: false;
+    font-size: 13px;
+    font-weight: muted ? 500 : 600;
+    color: bad ? Tokens.danger : (muted ? Tokens.ink2 : Tokens.ink1);
+    box: 17.5px;
+    horizontal-alignment: right;
+}
+
+// Open/closed disclosure row: 16px wordmark line + "+"/"-" on the right.
+component MoreSummary inherits Rectangle {
+    in property <string> label;
+    in property <bool> open: false;
+    callback toggle();
+    height: 16px;
+    background: transparent;
+    ta := TouchArea {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        mouse-cursor: pointer;
+        clicked => { root.toggle(); }
+    }
+    Text {
+        x: 0;
+        y: 0;
+        height: 16px;
+        text: label;
+        font-size: 11px;
+        font-weight: 500;
+        color: ta.has-hover ? Tokens.ink1 : Tokens.ink2;
+        vertical-alignment: center;
+    }
+    Text {
+        x: parent.width - 12px;
+        y: 0;
+        width: 12px;
+        height: 16px;
+        text: open ? "\u{2212}" : "+";
+        font-size: 12px;
+        color: ta.has-hover ? Tokens.ink1 : Tokens.ink2;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+}
+
+// One password field: 12px label on top, 30px input below (6px gap).
+component CredField inherits Rectangle {
+    in property <string> label;
+    in property <string> placeholder;
+    in-out property <string> text;
+    height: 52px;
+    background: transparent;
+    Text {
+        x: 0;
+        y: 0;
+        height: 16px;
+        text: label;
+        font-size: 12px;
+        color: Tokens.ink2;
+        vertical-alignment: center;
+    }
+    field := Rectangle {
+        x: 0;
+        y: 22px;
+        width: parent.width;
+        height: 30px;
+        border-radius: 8px;
+        border-width: input.has-focus ? 2px : 1px;
+        border-color: input.has-focus ? Tokens.accent-bar : Tokens.hair;
+        background: transparent;
+        input := TextInput {
+            x: 9px;
+            y: 0;
+            width: parent.width - 18px;
+            height: 100%;
+            text <=> root.text;
+            single-line: true;
+            input-type: password;
+            font-size: 12px;
+            color: Tokens.ink1;
+            vertical-alignment: center;
+        }
+        Text {
+            x: 10px;
+            y: 0;
+            height: 100%;
+            text: root.placeholder;
+            visible: root.text == "";
+            font-size: 12px;
+            color: Tokens.ink2;
+            opacity: 0.75;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component SettingsWindow inherits Window {
+    in property <bool> dark: false;
+
+    // Controls the sheet owns; Rust pushes the persisted values on every open
+    // (SPEC 13.2) and reads them back on Save.
+    in-out property <int> theme-index: 0;      // 0 system, 1 light, 2 dark
+    in-out property <int> interval-index: 1;   // 1 / 5 / 10 / 30 minutes
+    in-out property <bool> autostart: false;
+
+    // Read-only credential statuses (PLAN §4): booleans and labels only, never
+    // a value.
+    in property <string> kimi-version: "--";
+    in property <string> kimi-cred: "--";
+    in property <bool> kimi-cred-bad: false;
+    in property <string> ds-key: "--";
+    in property <bool> ds-key-bad: false;
+    in property <string> ds-token: "--";
+    in property <bool> ds-token-bad: false;
+
+    // Sections that change the sheet's height.
+    in property <string> ds-note: "";
+    in property <bool> ds-note-bad: false;
+    in-out property <bool> manual-open: false;
+    in property <string> cred-note: "";
+    in property <bool> cred-note-bad: false;
+    in-out property <bool> verifying: false;
+    in-out property <string> api-key-input: "";
+    in-out property <string> user-token-input: "";
+
+    // Window sizing. `max-card-h` is the 90%-of-work-area cap minus the shadow
+    // room, pushed by Rust; the card scrolls when the content is taller.
+    in property <length> max-card-h: 10000px;
+    in-out property <length> scroll-y;
+
+    in property <length> ds-note-block: ds-note == "" ? 0px : 35px;      // margin 7 + 28
+    in property <length> cred-note-block: cred-note == "" ? 0px : 35px;
+    in property <length> more-h: manual-open ? 199px + cred-note-block : 27px;
+    // DS section: hairline + label + two rows + actions + note + disclosure.
+    in property <length> sect-ds-h: 1px + 12px + 12px + 32.5px + 36.5px + 12px + 34px + ds-note-block + 12px + more-h;
+    in property <length> pane-h: 14px + 12px + 8px + 36px + 18px + 12px + 8px + 36px + 20px + 33px + 18px + 94px + 18px + sect-ds-h + 16px + 34px + 14px;
+    out property <length> content-h: 34px + pane-h;
+    out property <length> natural-h: content-h + 58px;
+    private property <length> card-h: min(content-h + 2px, max-card-h);
+
+    callback dismiss();
+    callback drag();
+    callback save();
+    callback clear();
+    callback sign-in();
+    callback save-credentials(string, string);
+    callback manual-toggled(bool);
+
+    width: 404px;
+    height: 700px;
+    no-frame: true;
+    background: transparent;
+    default-font-family: "Segoe UI";
+    default-font-size: 12px;
+
+    scroll-y <=> sheet-scroll.content-y;
+
+    CardBg {
+        x: 28px;
+        y: 28px;
+        width: 348px;
+        height: card-h;
+    }
+
+    // The card's own scroll area (settings.css `#root { max-height; overflow-y }`):
+    // the content keeps its natural height and scrolls inside the card when the
+    // work-area cap bit.
+    sheet-scroll := Flickable {
+        x: 29px;
+        y: 29px;
+        width: 346px;
+        height: card-h - 2px;
+        content-width: self.width;
+        content-height: content-h;
+
+        sheet := Rectangle {
+            width: 100%;
+            height: content-h;
+            background: transparent;
+
+            TitleBar {
+                x: 0;
+                y: 0;
+                width: 346px;
+                title: "Quota Tray Settings";
+                close => { root.dismiss(); }
+                drag => { root.drag(); }
+            }
+
+            // ---- General: theme ----
+            Lbl { x: 14px; y: 48px; width: 318px; text: "THEME"; }
+            Seg3 {
+                x: 14px;
+                y: 68px;
+                width: 318px;
+                a: "System";
+                b: "Light";
+                c: "Dark";
+                selected: theme-index;
+                pick(i) => { theme-index = i; }
+            }
+
+            // ---- General: refresh interval ----
+            Lbl { x: 14px; y: 122px; width: 318px; text: "REFRESH INTERVAL"; }
+            Seg4 {
+                x: 14px;
+                y: 142px;
+                width: 318px;
+                a: "1 min";
+                b: "5 min";
+                c: "10 min";
+                d: "30 min";
+                selected: interval-index;
+                pick(i) => { interval-index = i; }
+            }
+
+            // ---- General: autostart switch ----
+            // The whole row is the hit target; monochrome on purpose, the accent
+            // stays reserved for usage and selection (PLAN §3.5).
+            switch-row := Rectangle {
+                x: 14px;
+                y: 198px;
+                width: 318px;
+                height: 33px;
+                background: transparent;
+                hair := Rectangle { x: 0; y: 0; width: 100%; height: 1px; background: Tokens.hair; }
+                Text {
+                    x: 0;
+                    y: 15px;
+                    height: 16px;
+                    text: "Launch at Windows startup";
+                    font-size: 12px;
+                    color: Tokens.ink2;
+                    vertical-alignment: center;
+                }
+                Rectangle {
+                    x: 280px;
+                    y: 13px;
+                    width: 38px;
+                    height: 20px;
+                    border-width: 1px;
+                    border-radius: 9999px;
+                    border-color: autostart ? Tokens.ink1 : Tokens.ink2;
+                    background: autostart ? Tokens.ink1 : transparent;
+                    Rectangle {
+                        x: autostart ? 20px : 2px;
+                        y: 2px;
+                        width: 14px;
+                        height: 14px;
+                        border-radius: 7px;
+                        background: autostart ? Tokens.paper : Tokens.ink2;
+                        animate x { duration: 150ms; easing: ease-in-out; }
+                    }
+                }
+                TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    mouse-cursor: pointer;
+                    clicked => { autostart = !autostart; }
+                }
+            }
+
+            // ---- Kimi: read-only ----
+            kimi-sect := Rectangle {
+                x: 14px;
+                y: 249px;
+                width: 318px;
+                height: 94px;
+                background: transparent;
+                Rectangle { x: 0; y: 0; width: 100%; height: 1px; background: Tokens.hair; }
+                Lbl { x: 0; y: 13px; width: 100%; text: "KIMI"; }
+                // First row sits under the section label, no hairline of its own.
+                Rectangle {
+                    x: 0;
+                    y: 25px;
+                    width: 100%;
+                    height: 32.5px;
+                    background: transparent;
+                    RowValue { x: 0; y: 6px; width: 100%; text: kimi-version; }
+                    Text {
+                        x: 0;
+                        y: 7px;
+                        height: 16px;
+                        text: "CLI version";
+                        font-size: 12px;
+                        color: Tokens.ink2;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    x: 0;
+                    y: 57.5px;
+                    width: 100%;
+                    height: 36.5px;
+                    background: transparent;
+                    Rectangle { x: 0; y: 0; width: 100%; height: 1px; background: Tokens.hair; }
+                    RowValue { x: 0; y: 10px; width: 100%; text: kimi-cred; bad: kimi-cred-bad; }
+                    Text {
+                        x: 0;
+                        y: 11px;
+                        height: 16px;
+                        text: "Credential";
+                        font-size: 12px;
+                        color: Tokens.ink2;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            // ---- DeepSeek: statuses, sign-in, manual fallback ----
+            ds-sect := Rectangle {
+                x: 14px;
+                y: 361px;
+                width: 318px;
+                height: sect-ds-h;
+                background: transparent;
+                Rectangle { x: 0; y: 0; width: 100%; height: 1px; background: Tokens.hair; }
+                Lbl { x: 0; y: 13px; width: 100%; text: "DEEPSEEK"; }
+                Rectangle {
+                    x: 0;
+                    y: 25px;
+                    width: 100%;
+                    height: 32.5px;
+                    background: transparent;
+                    RowValue { x: 0; y: 6px; width: 100%; text: ds-key; bad: ds-key-bad; }
+                    Text {
+                        x: 0;
+                        y: 7px;
+                        height: 16px;
+                        text: "API key";
+                        font-size: 12px;
+                        color: Tokens.ink2;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    x: 0;
+                    y: 57.5px;
+                    width: 100%;
+                    height: 36.5px;
+                    background: transparent;
+                    Rectangle { x: 0; y: 0; width: 100%; height: 1px; background: Tokens.hair; }
+                    RowValue { x: 0; y: 10px; width: 100%; text: ds-token; bad: ds-token-bad; }
+                    Text {
+                        x: 0;
+                        y: 11px;
+                        height: 16px;
+                        text: "Usage token";
+                        font-size: 12px;
+                        color: Tokens.ink2;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Sign in / Clear: two equal columns, 6px gap.
+                Btn {
+                    x: 0;
+                    y: 106px;
+                    width: 156px;
+                    label: "Sign in…";
+                    clicked => { root.sign-in(); }
+                }
+                Btn {
+                    x: 162px;
+                    y: 106px;
+                    width: 156px;
+                    label: "Clear";
+                    clicked => { root.clear(); }
+                }
+
+                // The env / cleared note; two reserved lines (see the file header).
+                Text {
+                    x: 0;
+                    y: 147px;
+                    width: 100%;
+                    height: 28px;
+                    text: ds-note;
+                    visible: ds-note != "";
+                    font-size: 10.5px;
+                    color: ds-note-bad ? Tokens.danger : Tokens.ink2;
+                    wrap: word-wrap;
+                    vertical-alignment: top;
+                    overflow: clip;
+                }
+
+                // Manual fallback: closed by default so the sheet stays short.
+                more := Rectangle {
+                    x: 0;
+                    y: 152px + ds-note-block;
+                    width: 100%;
+                    height: more-h;
+                    background: transparent;
+                    Rectangle { x: 0; y: 0; width: 100%; height: 1px; background: Tokens.hair; }
+                    MoreSummary {
+                        x: 0;
+                        y: 11px;
+                        width: 100%;
+                        label: "Paste a credential instead";
+                        open: manual-open;
+                        toggle => {
+                            manual-open = !manual-open;
+                            root.manual-toggled(manual-open);
+                        }
+                    }
+                    CredField {
+                        x: 0;
+                        y: 39px;
+                        width: 100%;
+                        visible: manual-open;
+                        label: "API key";
+                        placeholder: "Verified before it is saved";
+                        text <=> root.api-key-input;
+                    }
+                    CredField {
+                        x: 0;
+                        y: 103px;
+                        width: 100%;
+                        visible: manual-open;
+                        label: "Usage token";
+                        placeholder: "JSON.parse(localStorage.userToken).value";
+                        text <=> root.user-token-input;
+                    }
+                    // 2-line result note: 7px under the second field.
+                    Text {
+                        x: 0;
+                        y: 162px;
+                        width: 100%;
+                        height: 28px;
+                        text: cred-note;
+                        visible: manual-open && cred-note != "";
+                        font-size: 10.5px;
+                        color: cred-note-bad ? Tokens.danger : Tokens.ink2;
+                        wrap: word-wrap;
+                        vertical-alignment: top;
+                        overflow: clip;
+                    }
+                    Btn {
+                        x: 0;
+                        y: 165px + (cred-note == "" ? 0px : 35px);
+                        width: 100%;
+                        visible: manual-open;
+                        enabled: !verifying;
+                        label: verifying ? "Verifying…" : "Save credentials";
+                        clicked => {
+                            root.save-credentials(root.api-key-input, root.user-token-input);
+                        }
+                    }
+                }
+            }
+
+            Btn {
+                x: 14px;
+                y: 361px + sect-ds-h + 16px;
+                width: 318px;
+                label: "Save settings";
+                clicked => { root.save(); }
+            }
+        }
+    }
+
+    // 4px thumb in an 8px lane at the card's right edge — the CSS
+    // `#root::-webkit-scrollbar` (inset 2px by a transparent border).
+    private property <length> viewport-h: card-h - 2px;
+    private property <float> scroll-ratio: content-h > viewport-h ? viewport-h / content-h : 1;
+    private property <length> scroll-bar-h: max(20px, viewport-h * scroll-ratio);
+    private property <length> scroll-bar-y: content-h > viewport-h ? (-scroll-y) * scroll-ratio : 0px;
+    Rectangle {
+        // Card content box is 29..375 in window coords; the CSS lane is its
+        // right 8px (367..375) and the 4px thumb sits 2px inside it.
+        x: 369px;
+        y: 29px + scroll-bar-y;
+        width: 4px;
+        height: scroll-bar-h;
+        visible: content-h > card-h - 2px;
+        border-radius: 2px;
+        background: scroll-hover.has-hover ? Tokens.ink3 : Tokens.hair;
+        scroll-hover := TouchArea { width: 100%; height: 100%; }
+    }
+}

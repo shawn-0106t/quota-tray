@@ -1,7 +1,8 @@
-// Quota Tray — Slint shell (P2: the real panel).
+// Quota Tray — Slint shell (P2 panel + P3 settings/skills/menu).
 //
-// The data layer is `quota-core`; this crate is only the shell: one transparent
-// window, a `tray-icon` tray, the tab switch controller and the self-checks.
+// The data layer is `quota-core`; this crate is only the shell: four
+// transparent windows, a `tray-icon` tray, the tab switch controller and the
+// self-checks.
 // Every `--test-*` mode runs before the single-instance mutex, mirroring the
 // shipped Tauri app, so a check never fights a live instance.
 
@@ -10,6 +11,7 @@ mod checks;
 mod height;
 mod shell;
 mod view;
+mod win;
 
 slint::include_modules!();
 
@@ -121,12 +123,35 @@ fn main() {
         shell::Mode::Hold
     } else if flag(&args, "--test-clamp") {
         shell::Mode::Clamp
+    } else if flag(&args, "--test-windows") {
+        shell::Mode::Windows
+    } else if flag(&args, "--test-settings") {
+        shell::Mode::Settings
+    } else if flag(&args, "--test-menu") {
+        shell::Mode::Menu
+    } else if flag(&args, "--test-skills") {
+        shell::Mode::Skills
+    } else if flag(&args, "--print-settings") {
+        shell::Mode::PrintSettings
+    } else if flag(&args, "--shots") {
+        shell::Mode::Shots
+    } else if flag(&args, "--print-skills") {
+        shell::Mode::PrintSkills
+    } else if flag(&args, "--test-dialogs") {
+        shell::Mode::Dialogs
     } else {
         shell::Mode::Interactive
     };
 
     if mode == shell::Mode::ActiveTab && std::env::var("QUOTA_TRAY_APP_DATA_DIR").is_err() {
         let dir = std::env::temp_dir().join("quota-tray-slint-active-tab");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::env::set_var("QUOTA_TRAY_APP_DATA_DIR", &dir);
+    }
+    // The settings check writes settings.json and compares a child process's
+    // read-back: never point it at the user's profile unless asked to.
+    if mode == shell::Mode::Settings && std::env::var("QUOTA_TRAY_APP_DATA_DIR").is_err() {
+        let dir = std::env::temp_dir().join("quota-tray-slint-settings");
         let _ = std::fs::remove_dir_all(&dir);
         std::env::set_var("QUOTA_TRAY_APP_DATA_DIR", &dir);
     }
@@ -148,6 +173,7 @@ fn main() {
         out_dir: arg(&args, "--out", ""),
         demo_switch: flag(&args, "--demo-switch"),
         max_window_h: arg(&args, "--max-window-h", "").parse().ok(),
+        max_settings_h: arg(&args, "--max-settings-h", "").parse().ok(),
         no_poll: flag(&args, "--no-poll"),
     };
     if let Err(e) = shell::run(opts) {

@@ -1,5 +1,6 @@
 // Application data: the two provider pollers, the local Kimi usage scan, the
-// CLI version check and the system-theme watch.
+// CLI version check, the system-theme watch and the on-demand jobs the windows
+// ask for (skills scan, credential verification).
 //
 // Semantics are PLAN §5.3, unchanged from the Tauri shell: first fetch 2s after
 // start, then the configured interval; a failure keeps the last-known-good
@@ -7,14 +8,20 @@
 // dead Kimi fetch can never blank the DeepSeek pane. The pollers run on a
 // dedicated tokio runtime and hand finished values to the UI thread through a
 // channel — the Slint event loop stays the only thing touching the UI.
+//
+// The refresh interval and the configured theme live in shared cells rather
+// than being captured at startup: P3's settings sheet changes both while the
+// pollers sleep (PLAN §4: save restarts the schedule and applies the theme
+// immediately).
 
 use quota_core::deepseek::{self, DeepseekResult};
 use quota_core::kimi_usage::{self, KimiUsage};
 use quota_core::quota::{self, QuotaResult};
 use quota_core::settings::{self, SettingsData};
+use quota_core::skills::SkillInfo;
 use quota_core::update::{self, UpdateStatus};
-use std::sync::mpsc::{self, Receiver};
-use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::Notify;
 
@@ -25,6 +32,17 @@ pub enum Msg {
     Usage(KimiUsage),
     Update(UpdateStatus),
     Theme(String),
+    /// The lazy skills scan finished (the skills window renders it if open).
+    Skills(Vec<SkillInfo>),
+    /// A manual credential verification finished: which fields were stored,
+    /// the PLAN §5.2 failures the sheet turns into text, and whether a Clear
+    /// (or a newer candidate) superseded it on the way.
+    CredentialChecked {
+        saved_api: bool,
+        saved_token: bool,
+        problems: Vec<String>,
+        superseded: bool,
+    },
 }
 
 /// Everything the panel renders, plus the settings it started from.
@@ -93,31 +111,105 @@ fn system_theme() -> &'static str {
     }
 }
 
-/// The UI's inbox plus the manual-refresh broadcast.
+/// The UI's inbox plus everything a window needs to ask for background work.
 pub struct Workers {
     pub rx: Receiver<Msg>,
     /// Every "Refresh now" / tray-hover prefetch fires this; both poll loops
     /// wake up and fetch immediately.
     pub refresh: Arc<Notify>,
+    tx: Sender<Msg>,
+    handle: tokio::runtime::Handle,
+    /// Current poll period, re-read after every wait so a Save applies at once.
+    period: Arc<Mutex<Duration>>,
+    /// The configured (not effective) theme: `system` follows Windows.
+    configured_theme: Arc<Mutex<String>>,
     // Held so the runtime stays alive for the process lifetime.
     _rt: tokio::runtime::Runtime,
 }
 
-/// Start the background pollers. `interval_minutes` is the configured refresh
-/// period (already normalised to >= 1 by the settings loader).
-pub fn spawn(interval_minutes: i64) -> Workers {
+impl Workers {
+    /// Run a job on the shared runtime (network verification, scans).
+    pub fn spawn(&self, future: impl std::future::Future<Output = ()> + Send + 'static) {
+        self.handle.spawn(future);
+    }
+
+    /// Apply a new `RefreshMinutes` (already normalised by the caller). The
+    /// pollers re-read it after their current wait, and `refresh` cuts that
+    /// wait short so the new interval starts now (SPEC 13.2: save restarts
+    /// both schedules).
+    pub fn set_period_minutes(&self, minutes: i64) {
+        if let Ok(mut period) = self.period.lock() {
+            *period = Duration::from_secs(minutes.clamp(1, 30) as u64 * 60);
+        }
+        self.refresh.notify_waiters();
+    }
+
+    pub fn set_configured_theme(&self, theme: &str) {
+        if let Ok(mut current) = self.configured_theme.lock() {
+            *current = theme.to_string();
+        }
+    }
+
+    /// Queue a finished value from any thread (the self-check uses it to drive
+    /// the theme branch without waiting for Windows to change).
+    pub fn post(&self, msg: Msg) {
+        let _ = self.tx.send(msg);
+    }
+
+    /// Current poll period in seconds (the settings check asserts Save applied
+    /// the new interval).
+    pub fn period_seconds(&self) -> u64 {
+        self.period.lock().map(|p| p.as_secs()).unwrap_or(0)
+    }
+
+    /// A clone of the message sender, for jobs that outlive this borrow.
+    pub fn sender(&self) -> Sender<Msg> {
+        self.tx.clone()
+    }
+}
+
+/// Start the worker runtime. `poll` starts the four background loops; the
+/// runtime, channel and shared cells exist either way so the settings sheet can
+/// still verify a pasted credential under `--no-poll` (screenshots only need
+/// the loops off, not the window's buttons dead).
+pub fn start(interval_minutes: i64, poll: bool) -> Workers {
     let (tx, rx) = mpsc::channel();
     let refresh = Arc::new(Notify::new());
+    let period = Arc::new(Mutex::new(Duration::from_secs(
+        interval_minutes.clamp(1, 30) as u64 * 60,
+    )));
+    let configured_theme = Arc::new(Mutex::new(settings::load().theme));
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
         .build()
         .expect("tokio runtime");
-    let period = Duration::from_secs(interval_minutes.max(1) as u64 * 60);
+    if poll {
+        spawn_pollers(&rt, &tx, &refresh, &period, &configured_theme);
+    }
 
+    Workers {
+        rx,
+        refresh,
+        tx,
+        handle: rt.handle().clone(),
+        period,
+        configured_theme,
+        _rt: rt,
+    }
+}
+
+fn spawn_pollers(
+    rt: &tokio::runtime::Runtime,
+    tx: &Sender<Msg>,
+    refresh: &Arc<Notify>,
+    period: &Arc<Mutex<Duration>>,
+    configured_theme: &Arc<Mutex<String>>,
+) {
     {
         let tx = tx.clone();
         let refresh = refresh.clone();
+        let period = period.clone();
         rt.spawn(async move {
             let mut last: Option<QuotaResult> = None;
             wait_first().await;
@@ -133,13 +225,14 @@ pub fn spawn(interval_minutes: i64) -> Workers {
                 if tx.send(Msg::Quota(result)).is_err() {
                     return;
                 }
-                wait(&refresh, if failed { RETRY } else { period }).await;
+                wait(&refresh, current_period(&period, failed)).await;
             }
         });
     }
     {
         let tx = tx.clone();
         let refresh = refresh.clone();
+        let period = period.clone();
         rt.spawn(async move {
             let mut last: Option<DeepseekResult> = None;
             wait_first().await;
@@ -158,7 +251,7 @@ pub fn spawn(interval_minutes: i64) -> Workers {
                 if tx.send(Msg::Deepseek(result)).is_err() {
                     return;
                 }
-                wait(&refresh, if failed { RETRY } else { period }).await;
+                wait(&refresh, current_period(&period, failed)).await;
             }
         });
     }
@@ -205,15 +298,15 @@ pub fn spawn(interval_minutes: i64) -> Workers {
         });
     }
     {
-        let tx = tx;
-        // The configured theme is read once at startup: P2 has no settings
-        // window, so it cannot change under us; the system value still can.
-        let configured = settings::load().theme;
+        let tx = tx.clone();
+        let configured = configured_theme.clone();
         rt.spawn(async move {
-            let mut current = effective_theme(&configured);
+            let mut current =
+                effective_theme(&configured.lock().map(|t| t.clone()).unwrap_or_default());
             loop {
                 tokio::time::sleep(Duration::from_secs(3)).await;
-                let next = effective_theme(&configured);
+                let next =
+                    effective_theme(&configured.lock().map(|t| t.clone()).unwrap_or_default());
                 if next != current {
                     current = next.clone();
                     if tx.send(Msg::Theme(next)).is_err() {
@@ -223,15 +316,17 @@ pub fn spawn(interval_minutes: i64) -> Workers {
             }
         });
     }
+}
 
-    Workers {
-        rx,
-        refresh,
-        _rt: rt,
+fn current_period(period: &Arc<Mutex<Duration>>, failed: bool) -> Duration {
+    if failed {
+        RETRY
+    } else {
+        period.lock().map(|p| *p).unwrap_or(RETRY)
     }
 }
 
-/// Both providers wait 2s before their first fetch (SPEC 16.5).
+/// Failed fetches retry after 30s (PLAN §5.3).
 const RETRY: Duration = Duration::from_secs(30);
 
 async fn wait_first() {

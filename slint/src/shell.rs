@@ -1,25 +1,32 @@
-// The shell: one transparent Slint window, a tray-icon crate tray, the tab
-// switch controller, the work-area-anchored sizing and the data pump.
+// The shell: four transparent Slint windows (panel, settings, skills, menu), a
+// tray-icon crate tray, the tab switch controller, the work-area-anchored
+// sizing and the data pump.
 //
-// Window model (PLAN §4 / §3.6): the window is sized to (content + 2x28 shadow
-// room) and pinned so its bottom-right corner is (12px card gap - 28px margin)
-// from the work-area corner. The card is anchored to the window's BOTTOM edge
-// from inside (panel.slint), so the content growing or the tab switching never
-// moves the visible card edge. When the content is taller than the work area the
-// window stops at the cap and the card scrolls instead (the header and the
-// provider tab must stay reachable — PLAN §3.6).
+// Window model (PLAN §4 / §3.6): the panel window is sized to (content + 2x28
+// shadow room) and pinned so its bottom-right corner is (12px card gap - 28px
+// margin) from the work-area corner. The card is anchored to the window's
+// BOTTOM edge from inside (panel.slint), so the content growing or the tab
+// switching never moves the visible card edge. When the content is taller than
+// the work area the window stops at the cap and the card scrolls instead.
+//
+// The other three windows are the Tauri app's, ported: the settings sheet is
+// content-sized and centred (90% work area cap, scrolls inside the card), the
+// skills list is a fixed 404x520 sheet, and the tray menu is content-sized and
+// placed at the cursor. Only the menu and the panel hide on focus loss; the
+// panel's auto-hide is suspended while the settings or skills window is open.
 
 use crate::app::{self, Data, Msg};
 use crate::checks;
 use crate::height::{self, PANEL_W};
 use crate::view;
-use crate::{Anchor, Panel};
-use slint::{ComponentHandle, LogicalSize, PhysicalPosition, Timer, TimerMode};
+use crate::win::{menu, settings, skills};
+use crate::{Anchor, MenuWindow, Panel, SettingsWindow, SkillsWindow};
+use slint::{ComponentHandle, LogicalSize, PhysicalPosition, Timer, TimerMode, Window};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Notify;
 
 /// Tray left-clicks this soon after an auto-hide are ignored (SPEC 14).
 pub const TRAY_GUARD: Duration = Duration::from_millis(300);
@@ -56,6 +63,28 @@ pub enum Mode {
     /// Force a tiny work-area cap and prove the card scrolls instead of
     /// clipping the header and the provider tab.
     Clamp,
+    /// Construct and show all four windows, then exit (`--test-ui` equivalent).
+    Windows,
+    /// Settings sheet: persistence round trip across a real restart, sizing,
+    /// the theme switch and the 90% cap.
+    Settings,
+    /// Menu placement and the show/hide semantics of every row.
+    Menu,
+    /// Lazy skills scan, row model and scrolling.
+    Skills,
+    /// Print the persisted settings and exit (used by `--test-settings` as the
+    /// "restart" half of the round trip).
+    PrintSettings,
+    /// Open each P3 window in turn, save a PNG per state, exit. Design review
+    /// evidence; `--theme` picks the pass.
+    Shots,
+    /// Print the real skills scan as JSON and exit — the reference page for
+    /// `spike/p3/compare_windows.py` paints the same list the window does.
+    PrintSkills,
+    /// Show/hide semantics between the panel and its two dialog windows: the
+    /// panel's blur auto-hide is suspended while a dialog is open, and closing
+    /// the dialog collapses the panel (SPEC 20 / 21).
+    Dialogs,
 }
 
 pub struct Options {
@@ -69,6 +98,8 @@ pub struct Options {
     /// Test-only work-area cap (logical px), so the clamp path can be exercised
     /// on a screen that is tall enough not to need it.
     pub max_window_h: Option<f32>,
+    /// Test-only 90%-cap replacement for the settings sheet.
+    pub max_settings_h: Option<f32>,
     /// Skip the background pollers: a `--variant` screenshot must show the
     /// variant, not whatever the live account returned two seconds later.
     pub no_poll: bool,
@@ -96,6 +127,9 @@ pub struct Sample {
 
 pub struct Shell {
     pub ui: Panel,
+    pub settings_ui: SettingsWindow,
+    pub skills_ui: SkillsWindow,
+    pub menu_ui: MenuWindow,
     pub data: Data,
     pub mode: Mode,
     pub visible: bool,
@@ -112,14 +146,31 @@ pub struct Shell {
     pub tray: Option<tray_icon::TrayIcon>,
     pub tray_timer: Option<Timer>,
     pub poll_timer: Option<Timer>,
-    pub refresh: Arc<Notify>,
     pub hover_at: Option<Instant>,
     pub out_dir: String,
     pub demo_switch: bool,
+    /// `--variant` name, kept so screenshot modes can paint synthetic data
+    /// instead of whatever this machine's account/skills happen to hold.
+    pub variant: Option<String>,
     pub max_override: Option<f32>,
-    /// Pollers + their runtime. `None` under `--no-poll`; the field also keeps
-    /// the runtime alive for the process lifetime.
-    pub workers: Option<app::Workers>,
+    /// Settings sheet: open flag, last applied window height (logical), the
+    /// test-only cap, and whether its drag/blur hooks were installed.
+    pub settings_open: bool,
+    pub settings_h: f32,
+    pub settings_max_override: Option<f32>,
+    /// Skills window: open flag, cached scan and the in-flight marker.
+    pub skills_open: bool,
+    pub skills_cache: Option<Vec<quota_core::skills::SkillInfo>>,
+    pub skills_scanning: bool,
+    /// Tray menu: open flag and its one-time focus hook.
+    pub menu_open: bool,
+    pub menu_hooked: bool,
+    /// Bumped by Clear / every new credential verification so a late result
+    /// cannot write after the user removed the credential (PLAN §4).
+    pub cred_epoch: Arc<AtomicU64>,
+    /// The pollers + the runtime the window jobs run on. Always present; under
+    /// `--no-poll` only the four loops are off.
+    pub workers: app::Workers,
     pub checks: Checks,
 }
 
@@ -157,6 +208,9 @@ pub fn run(opts: Options) -> Result<(), Box<dyn std::error::Error>> {
     select_backend()?;
 
     let ui = Panel::new()?;
+    let settings_ui = SettingsWindow::new()?;
+    let skills_ui = SkillsWindow::new()?;
+    let menu_ui = MenuWindow::new()?;
     let mut data = Data::load();
     if let Some(theme) = &opts.theme {
         data.theme = theme.clone();
@@ -168,26 +222,37 @@ pub fn run(opts: Options) -> Result<(), Box<dyn std::error::Error>> {
         checks::apply_variant(&mut data, variant);
     }
     view::apply(&ui, &data);
+    view::apply_dark(&ui, &settings_ui, &skills_ui, &menu_ui, data.dark());
     let start_ds = data.settings.active_tab == "deepseek";
     ui.set_tab_ds(start_ds);
     ui.set_outgoing(0);
 
-    // Pure read-out mode: no window, no event loop, one line per variant.
+    // Pure read-out modes: no window, no event loop.
     if opts.mode == Mode::Heights {
         return checks::print_heights(&ui);
     }
+    if opts.mode == Mode::PrintSkills {
+        println!(
+            "{}",
+            serde_json::to_string(&quota_core::skills::scan()).unwrap_or_else(|_| "[]".into())
+        );
+        return Ok(());
+    }
+    if opts.mode == Mode::PrintSettings {
+        let s = quota_core::settings::load();
+        println!(
+            "settings: theme={} interval={} autostart={} active-tab={}",
+            s.theme, s.refresh_minutes, s.auto_start, s.active_tab
+        );
+        return Ok(());
+    }
 
-    let workers = if opts.no_poll {
-        None
-    } else {
-        Some(app::spawn(data.settings.refresh_minutes))
-    };
-    let refresh = workers
-        .as_ref()
-        .map(|w| w.refresh.clone())
-        .unwrap_or_else(|| Arc::new(Notify::new()));
+    let workers = app::start(data.settings.refresh_minutes, !opts.no_poll);
     let shell = Rc::new(RefCell::new(Shell {
         ui,
+        settings_ui,
+        skills_ui,
+        menu_ui,
         data,
         mode: opts.mode,
         visible: false,
@@ -204,11 +269,20 @@ pub fn run(opts: Options) -> Result<(), Box<dyn std::error::Error>> {
         tray: None,
         tray_timer: None,
         poll_timer: None,
-        refresh,
         hover_at: None,
         out_dir: opts.out_dir.clone(),
         demo_switch: opts.demo_switch,
+        variant: opts.variant.clone(),
         max_override: opts.max_window_h,
+        settings_open: false,
+        settings_h: 0.0,
+        settings_max_override: opts.max_settings_h,
+        skills_open: false,
+        skills_cache: None,
+        skills_scanning: false,
+        menu_open: false,
+        menu_hooked: false,
+        cred_epoch: Arc::new(AtomicU64::new(0)),
         workers,
         checks: Checks::default(),
     }));
@@ -279,8 +353,8 @@ fn wire_callbacks(shell: &Rc<RefCell<Shell>>) {
                         .args(["/C", "start", "", "https://www.kimi.com/code/console"])
                         .spawn();
                 }
-                "refresh" => shell_action.borrow().refresh.notify_waiters(),
-                "settings" => crate::logf("panel: settings window is P3, not built"),
+                "refresh" => shell_action.borrow().workers.refresh.notify_waiters(),
+                "settings" => settings::open(&shell_action),
                 "exit" => {
                     let _ = slint::quit_event_loop();
                 }
@@ -304,6 +378,56 @@ fn wire_callbacks(shell: &Rc<RefCell<Shell>>) {
                 .spawn();
         });
     }
+
+    // ---- settings sheet ----
+    {
+        let s = shell.borrow();
+        let shell_ = shell.clone();
+        s.settings_ui
+            .on_dismiss(move || settings::close_from_ui(&shell_));
+        let shell_ = shell.clone();
+        s.settings_ui.on_drag(move || {
+            let ui = shell_.borrow().settings_ui.clone_strong();
+            drag_window(ui.window());
+        });
+        let shell_ = shell.clone();
+        s.settings_ui
+            .on_save(move || settings::save_from_ui(&shell_));
+        let shell_ = shell.clone();
+        s.settings_ui.on_clear(move || settings::clear(&shell_));
+        let shell_ = shell.clone();
+        s.settings_ui.on_sign_in(move || settings::sign_in(&shell_));
+        let shell_ = shell.clone();
+        s.settings_ui.on_save_credentials(move |api, token| {
+            settings::save_credentials(&shell_, api.to_string(), token.to_string());
+        });
+        let shell_ = shell.clone();
+        s.settings_ui.on_manual_toggled(move |_open| {
+            settings::manual_toggled(&shell_);
+        });
+    }
+    // ---- skills window ----
+    {
+        let s = shell.borrow();
+        let shell_ = shell.clone();
+        s.skills_ui.on_dismiss(move || skills::close(&shell_));
+        let shell_ = shell.clone();
+        s.skills_ui.on_drag(move || {
+            let ui = shell_.borrow().skills_ui.clone_strong();
+            drag_window(ui.window());
+        });
+        let shell_ = shell.clone();
+        s.skills_ui
+            .on_refresh(move || skills::request_scan(&shell_, true));
+    }
+    // ---- tray menu ----
+    {
+        let s = shell.borrow();
+        let shell_ = shell.clone();
+        s.menu_ui.on_action(move |name| {
+            menu::on_action(&shell_, &name);
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -320,36 +444,72 @@ fn spawn_data_poll(shell: &Rc<RefCell<Shell>>) {
         let mut drained = Vec::new();
         {
             let s = shell.borrow();
-            let Some(workers) = &s.workers else { return };
-            while let Ok(msg) = workers.rx.try_recv() {
+            while let Ok(msg) = s.workers.rx.try_recv() {
                 drained.push(msg);
             }
         }
-        if !drained.is_empty() {
+        if drained.is_empty() {
+            return;
+        }
+        let mut scanned: Option<Vec<quota_core::skills::SkillInfo>> = None;
+        let mut checked: Option<(bool, bool, Vec<String>, bool)> = None;
+        {
             let mut s = shell.borrow_mut();
             for msg in drained {
                 match msg {
-                    Msg::Quota(quota) => s.data.quota = Some(quota),
-                    Msg::Deepseek(deepseek) => s.data.deepseek = Some(deepseek),
-                    Msg::Usage(usage) => s.data.usage = Some(usage),
-                    Msg::Update(update) => s.data.update = update,
-                    Msg::Theme(next) => theme = Some(next),
+                    Msg::Quota(quota) => {
+                        s.data.quota = Some(quota);
+                        changed = true;
+                    }
+                    Msg::Deepseek(deepseek) => {
+                        s.data.deepseek = Some(deepseek);
+                        changed = true;
+                    }
+                    Msg::Usage(usage) => {
+                        s.data.usage = Some(usage);
+                        changed = true;
+                    }
+                    Msg::Update(update) => {
+                        s.data.update = update;
+                        changed = true;
+                    }
+                    Msg::Theme(next) => {
+                        s.data.theme = next;
+                        theme = Some(());
+                        // A batch that only carries a theme change must still
+                        // reach `view::apply_theme` below, or the settings /
+                        // skills / menu windows keep the old tokens until the
+                        // next Save (the panel would repaint on its next poll
+                        // and the app would look half-themed).
+                        changed = true;
+                    }
+                    Msg::Skills(list) => scanned = Some(list),
+                    Msg::CredentialChecked {
+                        saved_api,
+                        saved_token,
+                        problems,
+                        superseded,
+                    } => checked = Some((saved_api, saved_token, problems, superseded)),
                 }
-                changed = true;
-            }
-            if let Some(next) = theme {
-                s.data.theme = next;
             }
         }
-        if !changed {
-            return;
+        if changed {
+            {
+                let s = shell.borrow();
+                view::apply(&s.ui, &s.data);
+                update_tray_tooltip(&s);
+            }
+            if theme.is_some() {
+                view::apply_theme(&shell);
+            }
+            sync_height(&shell);
         }
-        {
-            let s = shell.borrow();
-            view::apply(&s.ui, &s.data);
-            update_tray_tooltip(&s);
+        if let Some(list) = scanned {
+            skills::on_scanned(&shell, list);
         }
-        sync_height(&shell);
+        if let Some((saved_api, saved_token, problems, superseded)) = checked {
+            settings::on_checked(&shell, saved_api, saved_token, problems, superseded);
+        }
     });
     shell.borrow_mut().poll_timer = Some(timer);
 }
@@ -492,7 +652,7 @@ pub fn start_hide(shell: &Rc<RefCell<Shell>>) {
     });
 }
 
-fn toggle(shell: &Rc<RefCell<Shell>>, from_tray: bool) {
+pub fn toggle(shell: &Rc<RefCell<Shell>>, from_tray: bool) {
     if from_tray {
         let last = shell.borrow().last_hide;
         if let Some(t) = last {
@@ -516,6 +676,10 @@ pub fn on_blur(shell: &Rc<RefCell<Shell>>) {
     let act = {
         let s = shell.borrow();
         if !s.visible || s.hiding {
+            false
+        } else if s.settings_open || s.skills_open {
+            // Deactivated auto-hide is suspended while a dialog window is open
+            // (SPEC 20 / 21) — the dialog's own focus is what moved the blur.
             false
         } else if s.shown_at.elapsed() < FOCUS_GRACE {
             crate::logf("focus: blur inside the show grace window, ignored");
@@ -605,8 +769,7 @@ fn schedule_settle(shell: &Rc<RefCell<Shell>>, run: u64, dur_ms: u64) {
 // ---------------------------------------------------------------------------
 
 fn install_window_hooks(shell: &Rc<RefCell<Shell>>) {
-    use slint::winit_030::WinitWindowAccessor;
-    let hwnd = hwnd_of(&shell.borrow().ui);
+    let hwnd = hwnd_of(shell.borrow().ui.window());
     {
         let mut s = shell.borrow_mut();
         if hwnd.is_none() || s.hwnd == hwnd {
@@ -615,20 +778,9 @@ fn install_window_hooks(shell: &Rc<RefCell<Shell>>) {
         s.hwnd = hwnd;
     }
     if let Some(h) = hwnd {
-        unsafe {
-            use windows::Win32::Foundation::HWND;
-            use windows::Win32::Graphics::Dwm::{
-                DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
-            };
-            let pref = DWMWCP_DONOTROUND;
-            let _ = DwmSetWindowAttribute(
-                HWND(h as _),
-                DWMWA_WINDOW_CORNER_PREFERENCE,
-                &pref as *const _ as *const core::ffi::c_void,
-                std::mem::size_of_val(&pref) as u32,
-            );
-        }
+        no_round(h);
     }
+    use slint::winit_030::WinitWindowAccessor;
     let weak = Rc::downgrade(shell);
     shell
         .borrow()
@@ -645,11 +797,12 @@ fn install_window_hooks(shell: &Rc<RefCell<Shell>>) {
     crate::logf(format!("window: hooks installed hwnd={hwnd:?}"));
 }
 
-fn hwnd_of(ui: &Panel) -> Option<isize> {
+/// HWND of a Slint window, once the winit window exists.
+pub fn hwnd_of(window: &Window) -> Option<isize> {
     use slint::winit_030::winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use slint::winit_030::WinitWindowAccessor;
     let mut out = None;
-    ui.window().with_winit_window(|w| {
+    window.with_winit_window(|w| {
         if let Ok(handle) = w.window_handle() {
             if let RawWindowHandle::Win32(win32) = handle.as_raw() {
                 out = Some(win32.hwnd.get());
@@ -657,6 +810,34 @@ fn hwnd_of(ui: &Panel) -> Option<isize> {
         }
     });
     out
+}
+
+/// Opt a window out of Windows 11 DWM auto corner rounding: the Slint card
+/// paints its own 12px radius on a transparent window (PLAN §7).
+pub fn no_round(hwnd: isize) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
+    };
+    let pref = DWMWCP_DONOTROUND;
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            HWND(hwnd as _),
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            &pref as *const _ as *const core::ffi::c_void,
+            std::mem::size_of_val(&pref) as u32,
+        );
+    }
+}
+
+/// Start the native window drag from a title-bar press (SPEC 13.1).
+pub fn drag_window(window: &Window) {
+    use slint::winit_030::WinitWindowAccessor;
+    let mut moved = false;
+    window.with_winit_window(|w| {
+        moved = w.drag_window().is_ok();
+    });
+    crate::logf(format!("window: drag requested -> {moved}"));
 }
 
 pub fn focus(hwnd: isize) {
@@ -688,6 +869,13 @@ pub fn focus(hwnd: isize) {
     }
 }
 
+/// Is `hwnd` the foreground window? (`collapse_after_settings_close`).
+pub fn is_foreground(hwnd: isize) -> bool {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    unsafe { GetForegroundWindow() == HWND(hwnd as _) }
+}
+
 /// Primary-monitor work area in physical px (SPI_GETWORKAREA).
 pub fn work_area_phys() -> (f64, f64, f64, f64) {
     use windows::Win32::Foundation::RECT;
@@ -709,6 +897,33 @@ pub fn work_area_phys() -> (f64, f64, f64, f64) {
         rect.right as f64,
         rect.bottom as f64,
     )
+}
+
+/// Scale factor of the monitor under a PHYSICAL point. The menu's px -> logical
+/// conversion must use the cursor's monitor, not the (hidden, primary-monitor)
+/// window's, or a mixed-DPI setup places it with the wrong scale.
+pub fn monitor_scale_at(px: f64, py: f64) -> f64 {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::Graphics::Gdi::{MonitorFromPoint, MONITOR_DEFAULTTONEAREST};
+    use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+    let mut scale = 1.0f64;
+    unsafe {
+        let monitor = MonitorFromPoint(
+            POINT {
+                x: px as i32,
+                y: py as i32,
+            },
+            MONITOR_DEFAULTTONEAREST,
+        );
+        let (mut dx, mut dy) = (0u32, 0u32);
+        if GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dx, &mut dy).is_ok() {
+            let s = dx as f64 / 96.0;
+            if s > 0.0 {
+                scale = s;
+            }
+        }
+    }
+    scale
 }
 
 pub fn window_rect(hwnd: isize) -> (i32, i32, i32, i32) {
@@ -749,29 +964,19 @@ fn update_tray_tooltip(s: &Shell) {
 }
 
 fn build_tray(shell: &Rc<RefCell<Shell>>) {
-    use tray_icon::menu::{Menu, MenuId, MenuItem};
-
     let Some(icon) = tray_icon_image() else {
         crate::logf("tray: icon decode failed");
         return;
     };
-    let menu = Menu::new();
-    let open = MenuItem::with_id(MenuId::new("p2-open"), "Open Quota Tray", true, None);
-    let refresh = MenuItem::with_id(MenuId::new("p2-refresh"), "Refresh now", true, None);
-    let exit = MenuItem::with_id(MenuId::new("p2-exit"), "Exit", true, None);
-    for item in [&open, &refresh, &exit] {
-        let _ = menu.append(item);
-    }
     let tooltip = tooltip_text(&shell.borrow());
+    // No native menu: right-click opens the Slint menu window at the cursor
+    // (P0 measured that `tray-icon` delivers the right-click event; the Slint
+    // menu is what the Tauri shell shows, and a native menu cannot be styled).
     let built = tray_icon::TrayIconBuilder::new()
         .with_icon(icon)
         .with_tooltip(tooltip)
-        .with_menu(Box::new(menu))
-        // Left click toggles the panel ourselves; right click shows the native
-        // menu (the custom menu window is P3 and needs the right-click event,
-        // which this keeps delivering as well).
         .with_menu_on_left_click(false)
-        .with_menu_on_right_click(true)
+        .with_menu_on_right_click(false)
         .build();
     match built {
         Ok(icon) => {
@@ -786,7 +991,6 @@ fn build_tray(shell: &Rc<RefCell<Shell>>) {
 }
 
 fn spawn_tray_poll(shell: &Rc<RefCell<Shell>>) {
-    use tray_icon::menu::MenuEvent;
     use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent};
 
     let weak = Rc::downgrade(shell);
@@ -798,30 +1002,22 @@ fn spawn_tray_poll(shell: &Rc<RefCell<Shell>>) {
                 TrayIconEvent::Click {
                     button,
                     button_state: MouseButtonState::Up,
+                    position,
                     ..
                 } => match button {
                     MouseButton::Left => {
                         crate::logf("tray: left click");
                         toggle(&shell, true);
                     }
-                    MouseButton::Right => crate::logf("tray: right click (menu)"),
+                    MouseButton::Right => {
+                        crate::logf("tray: right click");
+                        menu::show_at(&shell, position.x, position.y);
+                    }
                     _ => {}
                 },
                 TrayIconEvent::Enter { .. } | TrayIconEvent::Move { .. } => on_hover(&shell),
                 TrayIconEvent::Leave { .. } => {}
                 TrayIconEvent::DoubleClick { .. } => {}
-                _ => {}
-            }
-        }
-        while let Ok(event) = MenuEvent::receiver().try_recv() {
-            let id = event.id().0.as_str();
-            crate::logf(format!("tray: menu {id}"));
-            match id {
-                "p2-open" => toggle(&shell, false),
-                "p2-refresh" => shell.borrow().refresh.notify_waiters(),
-                "p2-exit" => {
-                    let _ = slint::quit_event_loop();
-                }
                 _ => {}
             }
         }
@@ -843,7 +1039,7 @@ fn on_hover(shell: &Rc<RefCell<Shell>>) {
     if fire {
         // Hover prefetch (PLAN §5.3): fire both providers, throttled 10s.
         crate::logf("tray: hover prefetch (throttled 10s)");
-        shell.borrow().refresh.notify_waiters();
+        shell.borrow().workers.refresh.notify_waiters();
     }
 }
 
@@ -856,7 +1052,7 @@ fn startup_mode(shell: &Rc<RefCell<Shell>>, seconds: u64) {
     crate::logf(format!("mode: {mode:?}"));
     match mode {
         Mode::Interactive => crate::logf("ready: left-click the tray icon to open the panel"),
-        Mode::Heights => {}
+        Mode::Heights | Mode::PrintSettings | Mode::PrintSkills => {}
         Mode::ActiveTab => checks::start_active_tab(shell),
         Mode::TabAnim => checks::start_tab_anim(shell),
         Mode::Blur => checks::start_blur(shell),
@@ -870,6 +1066,12 @@ fn startup_mode(shell: &Rc<RefCell<Shell>>, seconds: u64) {
         }
         Mode::Hold => checks::start_hold(shell, seconds),
         Mode::Clamp => checks::start_clamp(shell),
+        Mode::Windows => checks::start_windows(shell),
+        Mode::Settings => checks::start_settings(shell),
+        Mode::Menu => checks::start_menu(shell),
+        Mode::Skills => checks::start_skills(shell),
+        Mode::Shots => checks::start_shots(shell),
+        Mode::Dialogs => checks::start_dialogs(shell),
     }
 }
 

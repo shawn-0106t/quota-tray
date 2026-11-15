@@ -297,6 +297,35 @@ fn apply_update(ui: &Panel, update: &UpdateStatus) {
     ui.set_update_badge(update.update_available);
 }
 
+// ---- theme ----
+
+/// Switch every window's token instance. Slint globals are per-component, so
+/// each window owns a `Tokens` instance even though the file is shared.
+pub fn apply_dark(
+    panel: &Panel,
+    settings: &crate::SettingsWindow,
+    skills: &crate::SkillsWindow,
+    menu: &crate::MenuWindow,
+    dark: bool,
+) {
+    panel.global::<Tokens>().set_dark(dark);
+    settings.global::<Tokens>().set_dark(dark);
+    skills.global::<Tokens>().set_dark(dark);
+    menu.global::<Tokens>().set_dark(dark);
+    panel.set_dark(dark);
+    settings.set_dark(dark);
+    skills.set_dark(dark);
+    menu.set_dark(dark);
+}
+
+/// Re-apply the effective theme to every window (settings Save, system theme
+/// change). Nothing else in the panel depends on the theme, so no re-render.
+pub fn apply_theme(shell: &std::rc::Rc<std::cell::RefCell<crate::shell::Shell>>) {
+    let s = shell.borrow();
+    let dark = s.data.dark();
+    apply_dark(&s.ui, &s.settings_ui, &s.skills_ui, &s.menu_ui, dark);
+}
+
 // ---- Header stamp: it belongs to whichever provider tab is on screen ----
 
 fn apply_stamps(ui: &Panel, data: &Data, now: DateTime<Local>) {

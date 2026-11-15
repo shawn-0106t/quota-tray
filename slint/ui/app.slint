@@ -1,8 +1,12 @@
-// Entry for slint-build: the panel window, the keepalive anchor and the token
-// global. `ModelRow` is re-exported because the panel's `models` property uses it.
+// Entry for slint-build: the four windows, the keepalive anchor and the token
+// global. `ModelRow` / `SkillRow` are re-exported because the panel's and the
+// skills window's model properties use them.
 import { Tokens } from "tokens.slint";
 import { Panel } from "panel.slint";
+import { SettingsWindow } from "settings.slint";
+import { SkillsWindow, SkillRow } from "skills.slint";
+import { MenuWindow } from "menu.slint";
 import { Anchor } from "anchor.slint";
 import { ModelRow } from "ds.slint";
 
-export { Anchor, ModelRow, Panel, Tokens }
+export { Anchor, MenuWindow, ModelRow, Panel, SettingsWindow, SkillRow, SkillsWindow, Tokens }

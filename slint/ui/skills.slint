@@ -1,0 +1,200 @@
+// Kimi Skills window: fixed 404x520 (tauri.conf.json), so unlike the settings
+// sheet nothing here is content-sized — only the list inside the card scrolls.
+//
+// Row geometry is measured from the shipped DOM (`spike/p3/ref_windows.py`):
+// a group title is a 13.5px line with a 2px bottom margin (14px top margin
+// between groups), a skill row is 1px hairline + 9px padding + a 16.5px name
+// line + a 4px gap + the description. The description is capped at two lines
+// (`.skill-desc` is a 2-line clamp), so a row reserves 30.44px for it whether
+// the text needs one line or two — Slint cannot measure wrapped text, and a
+// fixed box keeps the scroll range stable (spike/p3/REPORT.md §5).
+import { Tokens } from "tokens.slint";
+import { Lbl, CardBg, TitleBar } from "primitives.slint";
+
+export struct SkillRow {
+    /// 0 = group title, 1 = skill row.
+    kind: int,
+    name: string,
+    desc: string,
+    /// Top of the row inside the list's content (group: the text line).
+    y: length,
+    h: length,
+}
+
+component GroupTitle inherits Text {
+    height: 13.5px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.8px;
+    color: Tokens.ink2;
+    vertical-alignment: center;
+    wrap: no-wrap;
+    overflow: elide;
+}
+
+component SkillItem inherits Rectangle {
+    in property <string> name;
+    in property <string> desc;
+    height: 69.94px;
+    background: transparent;
+    Rectangle { x: 0; y: 0; width: 100%; height: 1px; background: Tokens.hair; }
+    Text {
+        x: 0;
+        y: 10px;
+        width: 100%;
+        height: 16.5px;
+        text: name;
+        font-size: 12.5px;
+        font-weight: 500;
+        color: Tokens.ink1;
+        vertical-alignment: center;
+        wrap: no-wrap;
+        overflow: elide;
+    }
+    // The tooltip in the product carries the full description; Slint has no
+    // tooltip, so the visible clamp is all there is (P5 can add one).
+    Text {
+        x: 0;
+        y: 30.5px;
+        width: 100%;
+        height: 30.44px;
+        text: desc;
+        font-size: 10.5px;
+        color: Tokens.ink2;
+        wrap: word-wrap;
+        overflow: clip;
+        vertical-alignment: top;
+        // CSS `line-height: 1.45` on a ~14px natural box (measured 15.22/line).
+        line-height-factor: 1.0875;
+    }
+}
+
+export component SkillsWindow inherits Window {
+    in property <bool> dark: false;
+    in property <string> summary: "No skills found";
+    in property <int> count: 0;
+    in property <[SkillRow]> items: [];
+    // Total laid-out height of the list content, pushed by Rust: only it can
+    // run the prefix sum over mixed group/skill rows.
+    in property <length> content-h;
+    in-out property <length> scroll-y;
+
+    callback dismiss();
+    callback drag();
+    callback refresh();
+
+    width: 404px;
+    height: 520px;
+    no-frame: true;
+    background: transparent;
+    default-font-family: "Segoe UI";
+    default-font-size: 12px;
+
+    // Card 348 x 464: window 404x520 minus the 28px shadow room on each side.
+    private property <length> card-h: 464px;
+    private property <length> list-y: 74px;
+    private property <length> list-h: 388px;
+    private property <length> viewport-h: list-h;
+    private property <float> scroll-ratio: content-h > viewport-h ? viewport-h / content-h : 1;
+
+    scroll-y <=> list-scroll.content-y;
+
+    CardBg {
+        x: 28px;
+        y: 28px;
+        width: 348px;
+        height: card-h;
+    }
+
+    TitleBar {
+        x: 29px;
+        y: 29px;
+        width: 346px;
+        title: "Kimi Skills";
+        close => { root.dismiss(); }
+        drag => { root.drag(); }
+    }
+
+    // Summary row: count micro-label left, ghost rescan right (.summary).
+    Lbl {
+        x: 43px;
+        y: 80px;
+        width: 318px;
+        text: summary;
+    }
+    Rectangle {
+        x: 43px + 275.5px;
+        y: 77px;
+        width: 49.5px;
+        height: 18px;
+        border-radius: 6px;
+        background: refresh-hit.has-hover ? Tokens.seg-track : transparent;
+        refresh-hit := TouchArea {
+            width: 100%;
+            height: 100%;
+            mouse-cursor: pointer;
+            clicked => { root.refresh(); }
+        }
+        Text {
+            width: 100%;
+            height: 100%;
+            text: "Refresh";
+            font-size: 10.5px;
+            font-weight: 500;
+            color: refresh-hit.has-hover ? Tokens.ink1 : Tokens.ink2;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // The list viewport: 322 wide (the CSS -4px margin lets it reach into the
+    // card's padding), rows 312, the 6px scrollbar in the remaining lane.
+    list-scroll := Flickable {
+        x: 43px;
+        y: 29px + list-y;
+        width: 322px;
+        height: list-h;
+        content-width: self.width;
+        content-height: content-h;
+
+        list := Rectangle {
+            width: 100%;
+            height: content-h;
+            background: transparent;
+
+            for item in items: Rectangle {
+                x: 0;
+                y: item.y;
+                width: 312px;
+                height: item.h;
+                background: transparent;
+                if item.kind == 0: GroupTitle {
+                    x: 0;
+                    y: 0;
+                    width: 100%;
+                    height: 100%;
+                    text: item.name;
+                }
+                if item.kind == 1: SkillItem {
+                    x: 0;
+                    y: 0;
+                    width: 100%;
+                    height: 100%;
+                    name: item.name;
+                    desc: item.desc;
+                }
+            }
+        }
+    }
+
+    // 6px thumb in the list's lane (skills.css `.list::-webkit-scrollbar`).
+    Rectangle {
+        x: 43px + 316px;
+        y: 29px + list-y + (-scroll-y) * scroll-ratio;
+        width: 6px;
+        height: max(20px, viewport-h * scroll-ratio);
+        visible: content-h > viewport-h;
+        border-radius: 3px;
+        background: Tokens.hair;
+    }
+}

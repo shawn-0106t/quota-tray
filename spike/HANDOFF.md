@@ -1,6 +1,6 @@
 # HANDOFF — 不依赖 Tauri 的 Quota Tray（Slint + Skia）
 
-> 新对话从这里接手。一句话现状：**静态视觉、P0 交互、P1 `quota-core` 抽取与 P2 真实面板都已完成并量化（`spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md`）；新壳代码在 `slint/`，面板已接真实数据、高度随数据变、`ActiveTab` 持久化；下一步 P3 设置/skills/menu 三个窗口。**
+> 新对话从这里接手。一句话现状：**静态视觉、P0 交互、P1 `quota-core` 抽取、P2 真实面板与 P3 三个窗口都已完成并量化（`spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md`、`spike/p3/REPORT.md`）；新壳代码在 `slint/`，四个窗口全部可用、设置落盘重启生效、skills 懒加载、托盘菜单在光标处；下一步 P4 登录链路。**
 
 ## 0. 位置与前提
 
@@ -28,6 +28,12 @@
 | 发布 | 不动 v1.0.1 线；新壳暂不进五载体门禁 | 它还没成为发布产物 |
 | 新壳目录 | **`slint/`**（crate `quota-tray-slint`，exe `quota-tray-slint.exe`） | 2026-11-15 用户拍板；`spike/p0` 保留为冻结证据 |
 | 面板布局 | **绝对堆叠**：`Metrics` 常量给每个块算 y，`panel.slint` 用同一批常量求和定窗口高度；**panes 不用 layout** | Slint 的 layout 在"兄弟组件里有 repeater"时会静默丢掉后面的兄弟（`spike/p2/REPORT.md` §5.1） |
+| P3 多窗口 | **一个事件循环里 4 个 `Window` 组件 + 屏幕外 `Anchor`**；`win/{settings,skills,menu}.rs` 各管一个窗口 | Slint 的 `Component::show()/hide()` 本来就按组件实例建窗；Tauri 版同样是 4 个常驻窗 + 一个临时登录窗 |
+| 主题实例 | 切主题要**逐个窗口**设 `Tokens.dark` | Slint 的 global 是 per-component，不是进程单例（踩过：只设 panel，其余窗口不变） |
+| skills 行模型 | **Rust 算前缀和**，模型里带 `y`/`h`，Slint 只按 `y` 画 | `Flickable` 不会自己量内容，`content-height` 必须外部给；repeater 里也没有累计变量 |
+| skills 描述行高 | **统一预留两行（30.44 px）** | Slint 量不到换行后的文本高度；124 个技能里 11 个单行描述会多 15.22 px（`spike/p3/REPORT.md` §5.7） |
+| 菜单定位 | **逐字移植 `panel.rs::show_menu` 的 legacy 公式** | 两个壳要落在同一个像素；`win/menu.rs` 的单测钉住「贴角翻转 / 光标右下 5×13 / 翻转后底边在光标上方 13」 |
+| 设置窗滚动 | 卡片内 `Flickable` + 右侧 4 px 自适应滚动条 | 与 `settings.css` 的 8px 轨道 / 4px 滑块一致；内容宽度不随滚动条收窄是已知偏差 |
 
 ## 2. 已证明 / 未证明
 
@@ -62,7 +68,16 @@
 - `ActiveTab`：无文件读 kimi、切 ds/kimi 各落盘、旧文件无键读 kimi、`ActiveTab=deepseek` 回读，5 项全过。
 - 夹取：强制 cap 300 时窗口 300、卡片 244、内容 543（可滚 299），滚动 120 px 后帧内容变化 PASS。
 
-**未证明**（后续阶段）：三档 DPI 的**真机**验证（只有 225% 现场；100/150/200% 仅算术证明）、混合 DPI/多屏、键盘与 IME、设置/skills/菜单窗口（P3）、登录链路（P4）。
+**P3 已证明**（`spike/p3/REPORT.md` 有全部数字与复现命令）：
+
+- 三个窗口：设置（404 宽、内容高、居中、90% 上限 + 卡片内滚动）、skills（404×520 固定、按需扫描、124 技能 / 134 行 / 内容 8955.6、滚动位可查）、托盘菜单（188×220，光标处定位与贴边翻转逐 0.2 物理像素对上 `panel.rs` 公式）。
+- 设置：落盘 → **子进程重启**读回 `theme=dark interval=10 autostart=true`；主题立即切到四个窗口的 `Tokens`；`--max-settings-h 300` 下窗口 300 / 卡片 244 / 内容 604 → 卡片滚动；Clear 把两个凭证状态复位并保留说明，凭证文件只剩空壳。
+- 显隐语义：设置/skills 打开时面板失焦**不**隐藏；关设置后面板若不在前台则收起；关 skills 后焦点被 Windows 交还面板，面板保持「可见且前台」。
+- 手工粘贴：无效 key 打真实接口 → `not saved`、文件无值、按钮恢复；验证在途时 Clear 会丢弃晚到结果。只带主题变化的消息也会让四个窗口重绘。
+- 视觉：8 组截图 vs DOM 文本带（设置默认/展开 × 深浅、skills × 深浅、菜单 × 深浅）全部 PASS，文本带最差 1.00 CSS px；唯一 1.56 px 是按钮下边框的抗锯齿起点差。
+- 回归：P2 的 17 个高度变体仍 Δ=0.00，`--test-corner/-tab-anim/-blur/-tray-click/-clamp/-active-tab` 全 PASS。
+
+**未证明**（后续阶段）：三档 DPI 的**真机**验证（只有 225% 现场；100/150/200% 仅算术证明）、混合 DPI/多屏、键盘与 IME、登录链路（P4）、手工粘贴的真实网络往返（P4 的登录自检一并覆盖）。
 
 **P0 期间实测到的环境限制**：本会话的合成鼠标输入（`mouse_event`/`SetInput`）不生效（连开始菜单都点不开），托盘在 CU 里也不可观察；因此托盘的 tooltip 视觉与悬停截图需要人工看一眼，事件链路用投递 `WM_USER_TRAYICON`(6002) 验证。
 
@@ -81,7 +96,7 @@
 quota-core/            # 纯 Rust：credentials / quota / deepseek/* / kimi_usage / settings / skills / update
                        #  + 格式化（fmtYuan / fmtMoney / fmtTokens / formatReset / 阈值）+ 它们的单测
 src-tauri/             # 现版壳，改为依赖 quota-core（pub use 保住 crate::xxx 路径）
-slint/                 # 新壳：ui/*.slint + src/{main,shell,panel,settings,skills,menu,tray,theme,login_host}.rs
+slint/                 # 新壳：ui/*.slint + src/{main,shell,app,view,height,checks}.rs + src/win/{settings,skills,menu}.rs
 spike/slint-demo/      # 静态视觉 demo，保留作证据与坐标基准
 spike/p0/              # P0 交互 spike：壳的骨架（Anchor / tray-icon / 动效控制器 / --login-host）
 ```
@@ -95,8 +110,8 @@ spike/p0/              # P0 交互 spike：壳的骨架（Anchor / tray-icon / �
 | **P0 交互 spike（已完成 2026-11-15）** | 托盘 + 面板显示/隐藏 + tab 切换动效 + 失焦隐藏 + `--login-host` 最小闭环；结果见 `spike/p0/REPORT.md` | 底边 0 px；失焦 172–174 ms；tooltip 3 行；捕获通道 `sender=ok fetch=ok`；真实 token 已闭环（用户登录 → 现版 v1.0.1 读到真实余额） |
 | **P1 `quota-core` 抽取（已完成 2026-11-15）** | 纯逻辑 + 格式化迁到仓库根 `quota-core/`，`src-tauri` 改 path 依赖并 `pub use` 保住 `crate::xxx` 路径；结果见 `spike/p1/REPORT.md` | 43 测试全绿（原 29 全保留）；`--test-fetch/--test-deepseek/--test-usage` 与改前 exe 在掩掉 4 个 live 字段后逐字节一致（4 组）；格式化 45 例 TS==Rust |
 | **P2 面板（已完成 2026-11-15）** | 新壳 `slint/`：`quota-core` 真实数据、1–4 模型行、`ActiveTab` 持久化、夹取滚动；结果见 `spike/p2/REPORT.md` | 17 个变体高度 Δ=0；8 个变体文本带 ≤1.00 css px；225% 下漂移 0 px（10 次切换 469 采样）；连点 30 次 drift 0；`ActiveTab` 5 项断言；夹取滚动 PASS |
-| P3 设置 / skills / menu（3–5 天） | 三窗 + 凭证状态 + 手工粘贴 + 自启动/便携/单实例/主题 | 落盘重启生效；显隐语义正确 |
-| P4 登录完整链路（2–3 天） | `--login-host` + `--test-login` | probe 与 fetch 捕获双通过；Clear 不被回写 |
+| **P3 设置 / skills / menu（已完成 2026-11-15）** | 三窗 + 凭证状态 + 手工粘贴 + 自启动/便携/单实例/主题；结果见 `spike/p3/REPORT.md` | 落盘 → 子进程重启读回 PASS；8 组文本带 ≤1.00 css px；显隐语义 `--test-dialogs` PASS |
+| P4 登录完整链路（2–3 天） | `--login-host` + `--test-login`；接上设置窗的「Sign in…」与 Clear 的 epoch | probe 与 fetch 捕获双通过；Clear 不被回写 |
 | P5 对齐矩阵与门禁（3–4 天） | `PARITY.md`、token 漂移门禁、截图重生成、CI job | 矩阵无 ❌（`quota-core` 的 fmt/clippy/test 已在 P1 接入 CI，且不阻塞现版） |
 
 ## 6. 陷阱清单（都踩过）
@@ -124,6 +139,17 @@ spike/p0/              # P0 交互 spike：壳的骨架（Anchor / tray-icon / �
 21. **`Flickable.content-y` 滚动时是负值**，设正值会被夹回 0；1.18 把 `viewport-width/height` 改名 `content-width/height`。`scroll-y <=> card-scroll.content-y` 两向绑定后 Rust 可直接驱动滚动做测试。
 22. **Chromium 在分数 DPR 下布局会变**：同一份 DOM 在 DPR 2 量到 504、2.25 量到 501（`line-height: normal` 按设备像素取整）。参考图固定 DPR 2，对比时两边各自换算成 CSS px；另外参考页必须 `html, body { height: 100% }`，否则 `overflow: hidden` 的零高 body 会把绝对定位的卡片裁成空白（DOM 仍报 504，只有截图能暴露）。
 23. **Rust 格式化必须对着 TS 跑一遍再交付**：`toFixed` 的舍入、`Math.floor` 对负数的处理、`toLocaleString('en-US')` 的分组都不是 Rust 默认行为。`spike/p1/fmt_parity.py` 用 node 直接 import `src/common.ts`（node 24 原生剥类型，只需删掉开头两行 `@tauri-apps` import），与 `quota-core::format` 对拍 45 个用例。两壳并存期间，改任一侧都要先跑它。
+24. **别把模块叫 `windows`**：`mod windows;` 会让 `use windows::Win32::…`（windows crate）解析成自己的模块，整个 win32 层报 `could not find Win32`。P3 的窗口模块因此叫 `win`。
+25. **Slint 的 global 是 per-component**：同一个 `tokens.slint` 里的 `Tokens`，在四个窗口里是四个实例。只设面板那一个是 P3 的第一个真 bug（其余窗口不换主题）。切主题要逐个 `window.global::<Tokens>().set_dark(...)`。
+26. **`callback close()` 撞 `Window` 内建 `close()`**：构建报 warning 并被遮蔽。窗口级回调改名 `dismiss`。
+27. **`TextInput` 没有 placeholder**：占位符要另叠一个 `visible: text == ""` 的 `Text`。
+28. **U+2715（✕）在 Skia + Segoe UI 下是豆腐块**：WebView2 靠字体回退，Slint 不会。关闭按钮改成两条 `Path` 线（`M0 0 L7 7 M7 0 L0 7`）。
+29. **`Flickable` 不自量内容**：`content-width/height` 默认 0，必须外部给；所以 skills 的行 y 与总高只能在 Rust 里算前缀和，repeater 里没有累计变量。
+30. **`--config-dir` 要给绝对路径**：`quota-core` 只在 `QUOTA_TRAY_APP_DATA_DIR` 是绝对路径时采用它，相对路径会被静默忽略并落回真实 `%APPDATA%`（现在会打一行提示）。自检一律 `$(pwd -W)`。
+31. **首次 `show()` 会阻塞 100–200 ms**（winit 建窗 + Skia surface），同一个 tick 里排好的后续单次定时器整体顺延。自检时间轴要按「每个动作后留 400 ms 以上」排，否则「关窗」会抢在「开窗」前面。
+32. **`AtomicU64::fetch_add` 返回的是加之前的值**：credential epoch 的守卫如果拿返回值当「本次世代」，那么 `load() == epoch` 恒为 false —— 表现是手动粘贴永远「被更新的一次请求取代」、一次都不保存、而且 `verifying` 永远为 true（按钮永久禁用、重启才好）。正确写法是 `fetch_add(1, …) + 1`（审查抓到的 Critical，`--test-settings` 现在覆盖失败路径与 Clear 作废在途）。
+33. **只带一个字段的消息批次也要置 `changed`**：主题 watcher 只在变化那一刻发一条 `Msg::Theme`，泵里若不置 `changed`，`apply_theme` 会被跳过——面板可能在下一次轮询时顺带换色，设置/skills/菜单永远不跟随（审查抓到的 Major）。
+34. **关子窗后的焦点不一定回面板**：Windows 通常把焦点还给上一个前台窗口——面板原本在前台时，关 skills 后面板就是「可见且前台」；否则保持不可见。判定写成「不可见 或 前台」，不是「必须不可见」（`--test-dialogs` 两种分支都覆盖）。
 
 ## 7. 复现命令
 
@@ -181,14 +207,34 @@ $EXE --test-clamp --no-poll --variant ds-4 --tab ds --max-window-h 300     --out
 $EXE --hold --seconds 9 --out .shots/p2/live                    # 真实数据
 ```
 
+P3（三个窗口；同样每次都带 `SKIA_BINARIES_URL`）：
+
+```bash
+cd ../quota-tray-slint
+ABS="$(pwd -W)/.shots/p3"
+EXE=./slint/target/debug/quota-tray-slint.exe
+$EXE --test-windows  --no-poll --config-dir "$ABS/cfg-windows"
+$EXE --test-settings --no-poll --config-dir "$ABS/cfg-settings" --max-settings-h 300
+$EXE --test-skills   --no-poll --config-dir "$ABS/cfg-skills"
+$EXE --test-menu     --no-poll --config-dir "$ABS/cfg-menu"
+$EXE --test-dialogs  --no-poll --config-dir "$ABS/cfg-dialogs"
+$EXE --shots --no-poll --theme light --out .shots/p3/light --config-dir "$ABS/cfg-shots"   # 入库证据（skills 固定列表）
+$EXE --shots --no-poll --theme dark  --out .shots/p3/dark  --config-dir "$ABS/cfg-shots"
+$EXE --shots --no-poll --variant skills-real --theme light --out .shots/p3/real-light --config-dir "$ABS/cfg-shots"   # 对比用（真实列表）
+$EXE --shots --no-poll --variant skills-real --theme dark  --out .shots/p3/real-dark  --config-dir "$ABS/cfg-shots"
+PYTHONUTF8=1 python spike/p3/ref_windows.py          # 参考页 + rect 基准（注入真实 skills 列表）
+PYTHONUTF8=1 python spike/p3/compare_windows.py --shot .shots/p3/real-light/settings.png --window settings --theme light
+```
+
 `--test-*` 输出一致性要两个 exe 才比得出来：先 `git stash -u` 回到改前构建一份 exe 存到 `.shots/p1/quota-tray-before.exe`，`git stash pop` 后再构建改后的，然后在同一分钟里对每种模式前后各跑一次，`spike/p1/compare_test_output.py BEFORE_DIR AFTER_DIR` 掩掉 4 个 live 字段比对（目录里要有 `fetch.* / deepseek.* / deepseek-verbose.* / usage.*` 共 8 个文件）。
 
 ## 8. 给新对话的第一句（可直接粘贴）
 
-> 接手 `..\quota-tray-slint`（分支 `spike/slint-demo`）。先读 `spike/HANDOFF.md`、`spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md` 与 `spike/p2/REPORT.md`。P0/P1/P2 都已完成，新壳代码在 `slint/`（crate `quota-tray-slint`）：面板已接 `quota-core` 真实数据、1–4 行模型、`ActiveTab` 持久化、夹取滚动，225% 下贴角漂移 0 px。下一步按 HANDOFF §5 做 P3：设置 / skills / menu 三个窗口（复用 `panel.slint` 的 `Metrics` 与 token，`settings.rs` 已有 `SettingsData` 落盘），不要在面板上继续加功能。
+> 接手 `..\quota-tray-slint`（分支 `spike/slint-demo`）。先读 `spike/HANDOFF.md`，再读 `spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md` 与 `spike/p3/REPORT.md`。P0–P3 都已完成，新壳代码在 `slint/`（crate `quota-tray-slint`）：面板接 `quota-core` 真实数据、1–4 行模型、`ActiveTab` 持久化、夹取滚动；设置窗（主题/间隔/自启/凭证状态/手工粘贴）落盘重启生效；skills 懒加载 + 刷新；托盘右键在光标处开自定义菜单。下一步按 HANDOFF §5 做 P4：`--login-host` + `--test-login`，把设置窗的「Sign in…」接上真实登录窗，并验证 Clear 的 epoch 在真实链路里不被回写。
 
 ## 9. 待拍板
 
 - ~~新壳目录名~~（**已定 2026-11-15：`slint/`**）。
 - 最终是否用 Slint 版替代 Tauri 版（决定 v2.0.0 的发布线怎么切）。
+- skills 的单行描述：本实现统一预留两行（124 行里 11 行多 15.22 px）。P5 若要严格对齐，要么引入文本测量，要么顺手修 `quota-core::skills` 的折叠 YAML 解析（`description: >` 现在显示成裸 `>`，两个壳都一样）——后者会改现版行为，需要单独决定。
 - 三档 DPI 的真机验证：本机固定 225%，改缩放会动用户的桌面布局；用户已选「算术证明 + 现场 225%，100/150/200% 留人工检查单」。

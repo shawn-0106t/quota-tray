@@ -1,0 +1,63 @@
+// Tray menu window: 188 logical px wide (140px card + the 24px shadow room
+// `menu.css` reserves instead of the other windows' 28px), five 32px rows.
+//
+// The card is content-sized (172 tall for five rows) and Rust positions the
+// window at the cursor with the shipped flip-up rule (`panel::show_menu`).
+// Clicking a row reports the action and the shell closes the menu BEFORE acting
+// (SPEC 14: menu_action hides the menu first), so an action that opens another
+// window never leaves the menu on top.
+import { Tokens } from "tokens.slint";
+import { CardBg } from "primitives.slint";
+
+component MenuItem inherits Rectangle {
+    in property <string> label;
+    callback activate();
+    height: 32px;
+    border-radius: 8px;
+    background: ta.has-hover ? Tokens.seg-track : transparent;
+    ta := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: pointer;
+        clicked => { root.activate(); }
+    }
+    Text {
+        x: 10px;
+        y: 0;
+        height: 100%;
+        text: label;
+        font-size: 12.5px;
+        font-weight: 400;
+        color: Tokens.ink1;
+        vertical-alignment: center;
+    }
+}
+
+export component MenuWindow inherits Window {
+    in property <bool> dark: false;
+
+    callback action(string);
+
+    width: 188px;
+    height: 220px;
+    no-frame: true;
+    background: transparent;
+    default-font-family: "Segoe UI";
+    default-font-size: 12px;
+
+    // menu.css: margin 24 + 5px padding + five 32px rows + 2px border.
+    private property <length> card-h: 172px;
+
+    CardBg {
+        x: 24px;
+        y: 24px;
+        width: 140px;
+        height: card-h;
+    }
+
+    MenuItem { x: 30px; y: 30px; width: 128px; label: "Open"; activate => { root.action("open"); } }
+    MenuItem { x: 30px; y: 62px; width: 128px; label: "Refresh"; activate => { root.action("refresh"); } }
+    MenuItem { x: 30px; y: 94px; width: 128px; label: "Settings"; activate => { root.action("settings"); } }
+    MenuItem { x: 30px; y: 126px; width: 128px; label: "Skills"; activate => { root.action("skills"); } }
+    MenuItem { x: 30px; y: 158px; width: 128px; label: "Exit"; activate => { root.action("quit"); } }
+}
