@@ -1,12 +1,12 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-15（**v1.0.0 已 publish**；工作区里有一处未提交的动效改动，已 bump 到 1.0.1（未 push tag），见下方 2026-11-15 一节）。
+> 快照：2026-11-15 15:30（**v1.0.1 已 publish 并标记 Latest**；三项资产下载后 `sha256sum -c` 通过；工作区干净）。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
 ## 一句话
 
-**v1.0.0 已在 `https://github.com/shawn-0106t/quota-tray` 发布**（2026-11-14 13:02 UTC，Latest），行为与 0.1.0 一致——版本号表达的是「发布门禁到位 + 依赖当前」：全量审查、每次推送跑 CI、branch protection、CodeQL、Dependabot、社区文档齐备，依赖升到 vite 8.3.8 / tauri-plugin-opener 2.7.3 / base64 0.23.1。
+**v1.0.1 已在 `https://github.com/shawn-0106t/quota-tray` 发布**（2026-11-15 07:30 UTC，Latest）：tab 切换按 Windows 原生 motion 重做（§3.6），并新增「五个版本载体必须一致」的发版门禁。上一次是 v1.0.0（2026-11-14 13:02 UTC），行为与 0.1.0 一致——那一版表达的是「发布门禁到位 + 依赖当前」。
 
 ## 2026-11-15 tab 切换动效重做（按 Windows 原生 motion）
 
@@ -18,6 +18,7 @@
 - **三轮（全量复核，逐条按前两轮对照）**：**0 Critical / 0 Major / 7 Minor**，结论「可以发 1.0.1」。已处置 7 条——表头时间戳比内容早 1–4 帧（`renderStamp()` 挪到 pane 翻转处，radio 仍即时反馈）、`switchTab` 的错误兜底缺世代号（`run` 提到调用方再比对）、`chrome` 与 `end` 量的是两个盒模型（`.panes > .pane { display: flow-root }`，今天零布局变化）、`reportHeight` 的 `.clamped` 判定拿旧 `natural`（rAF 里重测）、`package-lock.json` 仍写 1.0.0（已升）、收缩期空白带（`MOTION.fadeOut` 83 → 167，旧内容盖到格子收完）、CI 缺「载体版本一致」校验（新增 `scripts/release/check_versions.py`，CI 每次推送跑、release 带 `--tag` 跑）。
 - **四轮（增量：`fadeOut` 167 + 版本门禁）**：2 Major / 8 Minor，全部处置——AGENTS 的发版步骤仍写「三处」而门禁要五处（改成五载体 + `npm install --package-lock-only`，第 4 步同步改口）、`Cargo.toml` 版本解析取「文件里第一个 `version =`」（改用 `tomllib` 读 `[package]`，`Cargo.lock` 也改成 tomllib 扫描，`version.workspace = true` 会如实报 missing）、`--tag ""` 被当成「不校验」（改成 `is not None` + `vX.Y.Z` 格式校验）、缺文件时抛 traceback（改成一行提示 + exit 1）、stdout 阻塞导致摘要印在表格之前（`flush=True`）、`fadeOut` 与格子时长之间的隐含不变量（`Math.min(fadeOut, 格子时长)` + 注释写明）、「v1.0.1 已发布且锁文件过期」措辞不实（1.0.1 其实未发）、AGENTS 仓库布局漏了新脚本、CHANGELOG 没提新门禁且 release 里门禁跑在 `npm ci` 之后（补 `### Added` / 中文「新增」，门禁提到 `npm ci` 之前）。
 - **验证**：`npx tsc --noEmit` / `npm run build` / `cargo fmt --check` / `cargo test`（29 passed）/ `--test-ui`（四窗口 OK）全绿；用 CDP 逐帧采样真实打包产物：长高 200ms/进场曲线、收缩 167ms/退场曲线、内联固定值、结束时高度回调、连点打断后无残留，以及「resize 期间数据到达 → 窗口与终点一起 retarget」都对；README 截图重生成后与仓库**字节一致**（稳态几何未变）；真机 CU 截图 + 60fps 录屏：Kimi 1222 ↔ DeepSeek 585 切换后窗口高度精确等于卡片 + 56，录到的收缩过程逐帧无裁切（圆角与阴影完整）、footer 与底边不动。
+- **发版（2026-11-15）**：提交 `311f076` push 后 CI 全绿（新门禁 `Version carriers agree` 作为第 3 步通过）；annotated tag `v1.0.1` push → `Release (draft)` 全绿（tag 门禁 → 构建 → 打包 → 取 CHANGELOG → 建草稿）；草稿三件资产 `QuotaTray.exe` 7,171,072 B、`QuotaTray-v1.0.1.zip` 3,981,792 B、`SHA256SUMS.txt` 167 B，下载后 `sha256sum -c` 两条 **OK**，**2026-11-15 07:30:32 UTC 已 publish 并标记 Latest**。
 
 ## 两次发版的记录（2026-11-14）
 
