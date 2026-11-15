@@ -2821,13 +2821,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "quota-tray"
-version = "1.0.1"
+name = "quota-core"
+version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
  "regex",
  "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "windows",
+ "winreg 0.56.0",
+]
+
+[[package]]
+name = "quota-tray"
+version = "1.0.1"
+dependencies = [
+ "chrono",
+ "quota-core",
  "serde",
  "serde_json",
  "tauri",

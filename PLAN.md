@@ -155,7 +155,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 - **Extra Usage 单位**：`boosterWallet.balance.amountLeft` 是 **1e-8 元**，转分用 `(raw + 500000) / 1000000`；`priceInCents` 已是分；所有 JSON 数字按字符串建模（容忍数字型）。
 - `isEnabled=false` 时 `amountLeft` 是估算值，整张卡显示 `Not activated`。
 - CLI 版本：`kimi --version`；新版徽章来自官方 changelog（GitHub API 兜底）。
-- **缓存命中与解码速度来自本机会话日志**（2026-11-14 落地，`src-tauri/src/kimi_usage.rs`）：
+- **缓存命中与解码速度来自本机会话日志**（2026-11-14 落地，`src-tauri/src/kimi_usage.rs`；P1 起扫描逻辑在 `quota-core/src/kimi_usage.rs`，`src-tauri` 那一份只剩驱动循环）：
   - 服务端没有这组数字——`usages` 只有窗口百分比与钱包，官方文档也只有额度与计费口径。CLI 自己的记录里有：`sessions/<workspace>/<session>/agents/<agent>/wire.jsonl` 的 `usage.record`（`usageScope=turn`）带 `inputCacheRead` / `inputCacheCreation` / `inputOther` / `output`。
   - 命中率 = `cacheRead ÷ (cacheRead + cacheCreation + inputOther)`，按**求和后再相除**，不是"每次命中率的平均"。`inputCacheCreation` 目前恒为 0，但公式保留它。
   - 解码速度 = `Σoutput ÷ ΣllmServerDecodeMs`（`event` 记录里的每次调用计时），首 token = 平均 `llmServerFirstTokenMs`。这是**服务端解码阶段的平均速度**，不是墙上时钟吞吐。

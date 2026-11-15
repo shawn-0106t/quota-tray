@@ -3,21 +3,26 @@
 // edition); startup order, window model and WebView2 recovery are unchanged
 // (docs/SPEC.md section 20). Self-check command line args are handled in
 // main.rs BEFORE the single-instance check.
+//
+// The data layer lives in `quota-core` (HANDOFF §4): credential chains, quota
+// and DeepSeek fetches, the local usage scan, settings, skills/update and the
+// formatting helpers. It is re-exported rather than wrapped, so every call site
+// here keeps its `crate::quota` / `crate::deepseek` / `crate::settings` path and
+// the Slint shell consumes the very same modules.
 
-pub mod credentials;
-pub mod deepseek;
+pub use quota_core::app_data_dir_override;
+pub use quota_core::{credentials, deepseek, quota, settings, skills, update};
+
+// Tauri-side modules. `kimi_usage` is a shim over quota-core's scan: the scan is
+// shared, the event loop that drives it belongs to this shell.
 pub mod kimi_usage;
 pub mod login;
 pub mod panel;
 pub mod polling;
-pub mod quota;
 pub mod recovery;
-pub mod settings;
-pub mod skills;
 pub mod state;
 pub mod theme_watch;
 pub mod tray;
-pub mod update;
 
 use deepseek::DeepseekResult;
 use quota::QuotaResult;
@@ -571,29 +576,6 @@ pub async fn check_and_emit(app: &AppHandle) {
 }
 
 // ---- App wiring ----
-
-/// Diagnostic/test override: redirect all app directories (including the
-/// WebView2 user-data folder and `webview.log`) under one root. Used to run a
-/// second instance or a sandboxed test without touching the user profile
-/// (SPEC 22.5). Empty/unset means the normal per-user locations.
-pub(crate) fn app_data_dir_override() -> Option<std::path::PathBuf> {
-    let dir = std::env::var("QUOTA_TRAY_APP_DATA_DIR").ok()?;
-    if dir.is_empty() {
-        return None;
-    }
-    let path = std::path::PathBuf::from(&dir);
-    // Tauri resolves a relative Root against the exe directory, while a bare
-    // PathBuf resolves against the CWD — reject relatives so settings/log/
-    // WebView2 data cannot split across two places.
-    if path.is_absolute() {
-        return Some(path);
-    }
-    static WARNED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
-    if WARNED.set(()).is_ok() {
-        eprintln!("QUOTA_TRAY_APP_DATA_DIR ignored (not an absolute path): {dir}");
-    }
-    None
-}
 
 fn apply_app_data_dir_override(context: &mut tauri::Context<tauri::Wry>) {
     if let Some(dir) = app_data_dir_override() {

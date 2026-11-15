@@ -2,10 +2,8 @@
 // static icon, left-click toggles the panel, right-click opens the menu window
 // at the cursor, hover (Enter/Move) prefetch-throttled at 10s, tooltip text only.
 
-use crate::deepseek::DeepseekResult;
 use crate::panel;
 use crate::polling;
-use crate::quota::{QuotaResult, QuotaSegment};
 use crate::state::AppState;
 use std::time::{Duration, Instant};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -110,9 +108,10 @@ fn on_hover(app: &AppHandle) {
     });
 }
 
-/// Tooltip: two provider lines under the product name (PLAN §5.3). Each line
-/// carries its own failure suffix, so a dead Kimi fetch never hides a healthy
-/// DeepSeek balance.
+/// Tooltip: product name plus one provider line each (PLAN §5.3). The text is
+/// built in `quota_core::format` so the Slint shell's tray shows the identical
+/// string; each line carries its own failure suffix, so a dead Kimi fetch never
+/// hides a healthy DeepSeek balance.
 pub fn update_tooltip(app: &AppHandle) {
     if let Some(tray) = app.tray_by_id("tray") {
         let _ = tray.set_tooltip(Some(tooltip_text(app)));
@@ -123,52 +122,5 @@ fn tooltip_text(app: &AppHandle) -> String {
     let st = app.state::<AppState>();
     let kimi = st.last_quota.read().unwrap().clone();
     let deepseek = st.last_deepseek.read().unwrap().clone();
-    format!(
-        "Quota Tray\n{}\n{}",
-        kimi_line(kimi.as_ref()),
-        deepseek_line(deepseek.as_ref())
-    )
-}
-
-fn kimi_line(last: Option<&QuotaResult>) -> String {
-    match last {
-        None => "Kimi --".to_string(),
-        Some(l) => {
-            let mut text = format!("Kimi 5h {} · week {}", pct(&l.five_hour), pct(&l.week));
-            if l.error.is_some() {
-                text.push_str(" (fetch failed)");
-            }
-            text
-        }
-    }
-}
-
-fn deepseek_line(last: Option<&DeepseekResult>) -> String {
-    match last {
-        None => "DeepSeek --".to_string(),
-        Some(r) => {
-            let mut text = match &r.balance {
-                Some(b) => format!("DeepSeek {}", money(b.total, &b.currency)),
-                None => "DeepSeek --".to_string(),
-            };
-            if r.has_error() {
-                text.push_str(" (fetch failed)");
-            }
-            text
-        }
-    }
-}
-
-/// Same rule as `fmtMoney` in common.ts: DeepSeek money is yuan and always
-/// two decimals (PLAN §5.2).
-fn money(amount: f64, currency: &str) -> String {
-    let symbol = if currency == "USD" { "$" } else { "¥" };
-    format!("{symbol}{amount:.2}")
-}
-
-fn pct(seg: &Option<QuotaSegment>) -> String {
-    match seg {
-        Some(s) => format!("{}%", s.percent.round() as i64),
-        None => "?".to_string(),
-    }
+    quota_core::format::tray_tooltip(kimi.as_ref(), deepseek.as_ref())
 }

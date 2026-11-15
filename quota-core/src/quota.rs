@@ -22,7 +22,7 @@ pub struct QuotaSegment {
     pub reset_at: Option<DateTime<Local>>,
 }
 
-#[derive(Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Serialize, PartialEq, Eq, Debug)]
 pub enum ExtraState {
     NotActivated,
     NoData,
@@ -252,4 +252,82 @@ fn parse_extra(wallet: Option<&Value>) -> ExtraInfo {
         info.monthly_limit_cents = parse_cents(w.get("monthlyChargeLimit"));
     }
     info
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // SPEC 16.3 / AGENTS: amountLeft is 1e-8 yuan, so cents = (raw + 5e5) / 1e6.
+    // A raw leftover under half a cent rounds down; 0.5 cent rounds up.
+    #[test]
+    fn amount_left_is_eighth_yuan_converted_to_cents() {
+        let wallet = json!({"isEnabled": true, "balance": {"amountLeft": "1234567890"}});
+        assert_eq!(parse_extra(Some(&wallet)).balance_cents, Some(1235));
+
+        let half_cent = json!({"isEnabled": true, "balance": {"amountLeft": 500000}});
+        assert_eq!(parse_extra(Some(&half_cent)).balance_cents, Some(1));
+
+        let tiny = json!({"isEnabled": true, "balance": {"amountLeft": 499999}});
+        assert_eq!(parse_extra(Some(&tiny)).balance_cents, Some(0));
+    }
+
+    // The KimiCodeBar v1.1.1 bug: a disabled booster's amountLeft is an
+    // estimate, so the card must read Not activated, not a balance.
+    #[test]
+    fn disabled_wallet_is_not_activated() {
+        let wallet = json!({
+            "isEnabled": false,
+            "balance": {"amountLeft": "9990000000"},
+            "monthlyChargeLimitEnabled": true,
+            "monthlyUsed": {"priceInCents": "100"},
+            "monthlyChargeLimit": {"priceInCents": "5000"}
+        });
+        let extra = parse_extra(Some(&wallet));
+        assert_eq!(extra.state, ExtraState::NotActivated);
+        assert_eq!(extra.balance_cents, None);
+        assert!(!extra.monthly_enabled);
+    }
+
+    // A missing or zero limit must not divide by zero, and string numbers are
+    // the normal shape. The guard substitutes 1 for the limit, so the percent
+    // stays finite instead of becoming NaN/inf.
+    #[test]
+    fn segment_percent_survives_a_zero_limit_and_string_numbers() {
+        let seg = parse_segment(&json!({"used": "12", "limit": "48"}));
+        assert_eq!(seg.percent, 25.0);
+
+        let zero = parse_segment(&json!({"used": 5, "limit": 0}));
+        assert_eq!(zero.percent, 500.0, "limit is replaced by 1, not by used");
+
+        // Hostile values must never serialize as a non-finite double.
+        let hostile = parse_segment(&json!({"used": "1e999", "limit": "1"}));
+        assert!(hostile.percent.is_finite());
+    }
+
+    #[test]
+    fn reset_time_accepts_rfc3339_and_the_looser_shapes() {
+        assert!(parse_reset_time("2026-11-15T10:00:00+08:00").is_some());
+        assert!(parse_reset_time("2026-11-15 10:00:00 +08:00").is_some());
+        assert!(parse_reset_time("2026-11-15 10:00:00").is_some());
+        assert!(parse_reset_time("not a time").is_none());
+    }
+
+    // Monthly figures only count when the switch is on, and priceInCents is
+    // already cents (no 1e-8 conversion).
+    #[test]
+    fn monthly_figures_are_cents_when_enabled() {
+        let wallet = json!({
+            "isEnabled": true,
+            "monthlyChargeLimitEnabled": true,
+            "monthlyUsed": {"priceInCents": 1234},
+            "monthlyChargeLimit": {"priceInCents": "50000"}
+        });
+        let extra = parse_extra(Some(&wallet));
+        assert_eq!(extra.state, ExtraState::NoData, "no balance field");
+        assert!(extra.monthly_enabled);
+        assert_eq!(extra.monthly_used_cents, Some(1234));
+        assert_eq!(extra.monthly_limit_cents, Some(50000));
+    }
 }

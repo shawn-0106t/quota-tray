@@ -138,8 +138,9 @@ PYTHONUTF8=1 python demo/make_readme_shots.py  # the screenshots above
 | Path | Contents |
 | --- | --- |
 | `src/` | vanilla TS/HTML/CSS frontend, one entry per window (`main`, `settings`, `skills`, `menu`) |
-| `src-tauri/src/` | Rust backend: credentials, quota, DeepSeek client/parser, pollers, tray, windows, WebView2 recovery |
-| `src-tauri/tests/fixtures/` | inert DeepSeek payloads the parser tests assert against |
+| `quota-core/` | shared data layer, no GUI toolkit: credential chains, quota/DeepSeek fetches, local usage scan, settings, formatting (both shells) |
+| `src-tauri/src/` | Tauri shell: pollers, tray, windows, sign-in webview, WebView2 recovery (re-exports `quota-core`) |
+| `quota-core/tests/fixtures/` | inert DeepSeek payloads the parser tests assert against |
 | `docs/` | inherited behaviour spec (`SPEC.md` / `SPEC_EN.md`), screenshots |
 | `demo/` | frozen design references and zero-dependency review tooling (all-windows page, height and contrast checks, icon generation) |
 | `PLAN.md` | design and behaviour contract; `STATUS.md` is the progress snapshot |

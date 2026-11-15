@@ -47,3 +47,7 @@ __pycache__/
 
 ## Design-review scratch output (screenshots are regenerated on demand)
 .shots/
+
+# quota-core is a library consumed by path; the shipping lock is
+# src-tauri/Cargo.lock, so this one is generated, not tracked
+quota-core/Cargo.lock

@@ -163,6 +163,10 @@ export async function initTheme(): Promise<AppStateDto> {
 }
 
 // ---- Formatting (PLAN §5.2: money is always two decimals) ----
+//
+// The Slint shell has no TypeScript and uses the Rust port in
+// `quota-core/src/format.rs` instead. The two are pinned together by
+// `spike/p1/fmt_parity.py` (45 cases, string for string): change one and run it.
 
 /** FormatReset: span = at - now, English countdown text. */
 export function formatReset(atIso: string): string {

@@ -1,0 +1,27 @@
+[package]
+name = "quota-core"
+# Not one of the five release carriers (AGENTS release process): the shipped
+# version lives in src-tauri/tauri.conf.json, and this crate is consumed by path
+# only — a workspace would move the Tauri target dir and lockfile.
+version = "0.1.0"
+description = "Quota Tray data layer shared by the Tauri and Slint shells"
+edition = "2021"
+rust-version = "1.77.2"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.13", features = ["json"] }
+regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+# update.rs runs `kimi --version` with a timeout (SPEC 17)
+tokio = { version = "1", features = ["process", "time"] }
+winreg = "0.56"
+# DPAPI blob encoding for the DeepSeek credential file (PLAN §5.2)
+base64 = "0.23"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    # CryptProtectData/CryptUnprotectData for the DeepSeek credential file
+    "Win32_Security_Cryptography",
+] }

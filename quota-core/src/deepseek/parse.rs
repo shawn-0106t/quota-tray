@@ -379,8 +379,8 @@ mod tests {
     use super::*;
 
     // Ported from deepseek-planbar/tray-wpf/FixtureTests.cs. The fixtures are
-    // inert JSON under src-tauri/tests/fixtures/ (cargo only compiles
-    // tests/*.rs), so include_str! keeps them inside the test binary.
+    // inert JSON under tests/fixtures/ (cargo only compiles tests/*.rs), so
+    // include_str! keeps them inside the test binary.
     const BALANCE_OK: &str = include_str!("../../tests/fixtures/balance_ok.json");
     const AMOUNT_OK: &str = include_str!("../../tests/fixtures/amount_ok.json");
     const AMOUNT_SPARSE: &str = include_str!("../../tests/fixtures/amount_sparse.json");

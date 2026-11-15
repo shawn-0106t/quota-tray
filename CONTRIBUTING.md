@@ -54,9 +54,9 @@ Run the same commands locally before opening a PR:
 |---|---|
 | Secrets | gitleaks over the full commit history (CI) |
 | Version carriers | `python scripts/release/check_versions.py` — `package.json`, `package-lock.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock` must agree |
-| Rust format | `cargo fmt --check` (in `src-tauri`) |
-| Rust lints | `cargo clippy --all-targets --locked -- -D warnings` (in `src-tauri`) |
-| Rust tests | `cargo test --locked` (in `src-tauri`) |
+| Rust format | `cargo fmt --check` (in `src-tauri` and `quota-core`) |
+| Rust lints | `cargo clippy --all-targets --locked -- -D warnings` (in `src-tauri`); `cargo clippy --all-targets -- -D warnings` (in `quota-core`, no `--locked`: its lockfile is generated) |
+| Rust tests | `cargo test --locked` (in `src-tauri`) and `cargo test` (in `quota-core`) — the shared data layer holds most of the suite |
 | TypeScript | `npx tsc --noEmit` |
 | Frontend build | `npm ci && npm run build` |
 | Code scanning | automatic — CodeQL default setup runs on PRs and on `main` |
@@ -158,9 +158,9 @@ CI（`.github/workflows/ci.yml`）必须全绿，branch protection 要求构建 
 |---|---|
 | 敏感信息 | gitleaks 扫全历史（CI） |
 | 版本号一致 | `python scripts/release/check_versions.py`——`package.json`、`package-lock.json`、`tauri.conf.json`、`Cargo.toml`、`Cargo.lock` 必须相同 |
-| Rust 格式 | `cargo fmt --check`（在 `src-tauri`） |
-| Rust lint | `cargo clippy --all-targets --locked -- -D warnings`（在 `src-tauri`） |
-| Rust 测试 | `cargo test --locked`（在 `src-tauri`） |
+| Rust 格式 | `cargo fmt --check`（在 `src-tauri` 与 `quota-core`） |
+| Rust lint | `cargo clippy --all-targets --locked -- -D warnings`（在 `src-tauri`）；`cargo clippy --all-targets -- -D warnings`（在 `quota-core`，不带 `--locked`：它的锁文件是生成的） |
+| Rust 测试 | `cargo test --locked`（在 `src-tauri`）与 `cargo test`（在 `quota-core`）——共享数据层承载大部分测试 |
 | TypeScript | `npx tsc --noEmit` |
 | 前端构建 | `npm ci && npm run build` |
 | 代码扫描 | 自动——CodeQL default setup 在 PR 与 `main` 上运行 |

@@ -69,7 +69,9 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          workspaces: src-tauri
+          workspaces: |
+            src-tauri
+            quota-core
 
       - name: Install frontend dependencies
         run: npm ci
@@ -98,3 +100,19 @@ jobs:
       - name: Cargo test
         working-directory: src-tauri
         run: cargo test --locked
+
+      # The shared data layer is its own package (HANDOFF §4): a root workspace
+      # would move the Tauri target dir and lockfile the release scripts read,
+      # so it is a path dependency with its own gates. It holds the bulk of the
+      # suite now — the Tauri shell keeps only the recovery tests.
+      - name: Cargo fmt (quota-core)
+        working-directory: quota-core
+        run: cargo fmt --check
+
+      - name: Cargo clippy (quota-core)
+        working-directory: quota-core
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Cargo test (quota-core)
+        working-directory: quota-core
+        run: cargo test
