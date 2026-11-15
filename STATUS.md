@@ -17,7 +17,8 @@
 4. 只剩一步：打 `v1.0.2` tag 才会触发 release workflow（草稿 Release，发布仍手动）——**这一步等用户点头**。
 5. 发版前又对 `main` 做了一轮只读审查（2 Major / 10 Minor），全部处置为 `c7f0594` + `96c8a3c`，并镜像回本分支；修复后 `--test-login` 在真机打印 `verify=ok` + 两项捕获 OK（明细见 `spike/p4/REPORT.md` §4.4）。
 6. 随后对**增量**再做两轮（第 3 轮 1 Major / 6 Minor → `b016576` + `4ba92ee`；第 4 轮 2 Major / 7 Minor → `e6e30f7`，两次都镜像回本分支的 `quota-core` 与 `src-tauri`）。第 4 轮抓到的是第 3 轮修复自己引入的问题（拒绝优先级吞掉了重试；`reset()` 把 epoch bump 放到了「重新前置已有窗口」的路径上），因此**停止继续审查、准备打 tag**。已知缺口：`verify_and_save` 的决策表没有测试，只测了 `transient()`——留给 P5（见 `spike/p4/REPORT.md` §4.5）。
-7. 主线 `main` 现在是 `e6e30f7`（文档提交 `a63b271` 之后），CI 在 `e6e30f7` 上 success；`STATUS.md`（主线）记录了四轮审查表。本分支 `spike/slint-demo` 与远端同步。
+7. 第 5 轮把**四轮补丁拼起来的整条验证路径**通读了一遍（2 Major / 6 Minor），处置为 `2d06418`：重试循环里 `set_title` 排在 epoch 闸门之前（被取代的 future 会写坏新窗口标题、偷走它的队列）、`open()` 的前置分支 `reset()` 破坏单飞。镜像回本分支 `8d30555`，并把本分支的 `[Unreleased]` 段换成与主线逐字相同的 `[1.0.2] — 2026-11-15`（见 `spike/p4/REPORT.md` §4.6）。
+8. 主线 `main` 现在是 `35308af`（`STATUS.md` 记录了五轮审查表），本分支 `spike/slint-demo` 与远端同步；tag 仍未打。
 
 注意：本地 `main` 在 `../kimi-deepseek-quota-dashboard`（同一仓库的另一个 worktree），合并后在那里 `git pull --ff-only` 再升版本；不要在 worktree 里 `git switch main`。
 
