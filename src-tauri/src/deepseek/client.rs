@@ -181,23 +181,32 @@ pub async fn verify_user_token(token: &str) -> Result<(), String> {
     };
     let now = Local::now();
     let mut last_error = "server-error".to_string();
+    // A token the platform itself refused is the more useful answer than some
+    // other base's 404, and the loop's last write would otherwise win: with a
+    // remembered dead base first, a bad token used to be reported as `http-404`.
+    let mut refused = false;
     for base in candidate_bases() {
         let url = format!("{base}/amount?month={}&year={}", now.month(), now.year());
         let resp = match console_get(client, &url, token).send().await {
             Ok(r) => r,
+            // The base could not be reached at all. Same rule as the fetch path:
+            // a transport failure is the caller's answer, not a reason to walk.
             Err(_) => return Err("network-error".to_string()),
         };
         let status = resp.status().as_u16();
         if (200..300).contains(&status) {
-            // A body that cannot be read is a network problem, not a pass: the
-            // candidate stays unverified rather than being saved on a guess.
+            // A body that cannot be *read* is a network problem, not a pass: the
+            // candidate stays unverified rather than being saved on a guess. A
+            // body that is merely empty is not evidence either way and passes —
+            // a token the pane then cannot use shows up as `Fetch failed`, and
+            // the next sign-in overwrites it.
             let body = resp.text().await.map_err(|_| "network-error".to_string())?;
             if !token_accepted(&body) {
                 // This base answers 200 with an error envelope, but the token
                 // may still be fine on the next candidate (a dead base can be
                 // remembered and answered with a soft 404). Keep walking —
                 // stopping here would lock a valid token out for good.
-                last_error = "token-expired".to_string();
+                refused = true;
                 continue;
             }
             // A base the console itself answers on is the best one to remember.
@@ -213,6 +222,9 @@ pub async fn verify_user_token(token: &str) -> Result<(), String> {
         }
         return Err(error);
     }
+    if refused {
+        return Err("token-expired".to_string());
+    }
     Err(last_error)
 }
 
@@ -227,13 +239,29 @@ pub async fn verify_user_token(token: &str) -> Result<(), String> {
 fn token_accepted(body: &str) -> bool {
     let value = match serde_json::from_str::<Value>(body) {
         Ok(value) => value,
-        // Not the platform's JSON at all (a proxy page, a truncated body).
+        // Not the platform's JSON at all (a proxy page, a truncated body): no
+        // evidence either way, so the candidate is not refused.
         Err(_) => return true,
     };
-    !value
-        .get("code")
-        .and_then(Value::as_u64)
-        .is_some_and(|code| code != 0)
+    match value.get("code") {
+        Some(code) => !code_is_error(code),
+        None => true,
+    }
+}
+
+/// Is one `code` value an error? The envelope is third-party data, so both the
+/// numeric shape the platform sends today (`40003`) and a numeric string have to
+/// be read; anything else is not a signal and must not reject a candidate.
+fn code_is_error(code: &Value) -> bool {
+    match code {
+        Value::Number(number) => number.as_i64().is_some_and(|value| value != 0),
+        Value::String(text) => text
+            .trim()
+            .parse::<i64>()
+            .map(|value| value != 0)
+            .unwrap_or(false),
+        _ => false,
+    }
 }
 
 fn log_top_level_keys(body: &str, kind: &str, diag: &mut Diag) {
@@ -577,8 +605,13 @@ mod tests {
         assert!(token_accepted(
             r#"{"data":{"biz_data":{"total":[{"model":"m"}]}}}"#
         ));
+        // A numeric string is the same signal as a number.
+        assert!(!token_accepted(r#"{"code":"40003","data":null}"#));
+        assert!(token_accepted(r#"{"code":"0","data":{}}"#));
         // An explicit zero status is a success too.
         assert!(token_accepted(r#"{"code":0,"data":{"biz_data":{}}}"#));
+        // A negative code is still an error, not a pass.
+        assert!(!token_accepted(r#"{"code":-1,"data":null}"#));
         // `data: null` WITHOUT an error code is not a rejection: a valid account
         // with no usage this month may look like that, and a false rejection
         // locks the user out of signing in entirely.

@@ -17,9 +17,12 @@ the English notes first, then the Chinese mirror.
   `--test-login` printed `verify=ok` for any string longer than 20 characters.
   Verification reads the envelope now, and a base that rejects the candidate is
   skipped instead of ending the walk: a remembered dead endpoint could otherwise
-  lock a valid token out. (Reproduced against the live endpoint 2026-11-15; the
-  balance endpoint is not affected — `api.deepseek.com` answers 401 for a bad
-  key.)
+  lock a valid token out. A candidate that fails *transiently* (`network-error`,
+  `rate-limited`, `server-error`, a 5xx) is re-tried once before the window gives
+  up — the page never resends a token it already reported, so a blip on the
+  finished one used to cost a whole sign-in. (Reproduced against the live
+  endpoint 2026-11-15; the balance endpoint is not affected — `api.deepseek.com`
+  answers 401 for a bad key.)
 
 ### 中文
 
@@ -28,8 +31,10 @@ the English notes first, then the Chinese mirror.
   任何候选都算通过——登录窗与手工粘贴兜底都可能把错的或没完成的 token 顶掉原本
   正常的那个，`--test-login` 也会对任何超过 20 个字符的串打印 `verify=ok`。
   现在会读信封里非零的 `code`，并且某个候选 base 被判拒时继续试下一个：记住的坏
-  base 否则会让有效 token 永远登不进去。（2026-11-15 对真实接口复现；余额接口不受
-  影响，`api.deepseek.com` 对坏 key 回 401。）
+  base 否则会让有效 token 永远登不进去。候选 token 遇到**临时性**失败
+  （`network-error` / `rate-limited` / `server-error` / 5xx）会在窗口放弃前重试一次；
+  页面对已经上报过的 token 不再重发，所以完成态 token 上的一次抖动以前等于白登一次。
+  （2026-11-15 对真实接口复现；余额接口不受影响，`api.deepseek.com` 对坏 key 回 401。）
 
 ## [1.0.1] — 2026-11-15
 
