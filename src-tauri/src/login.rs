@@ -181,8 +181,9 @@ fn submit_token(app: &AppHandle, token: &str) {
 /// A failure that says nothing about the token itself: the same candidate is
 /// worth one more try, where `token-expired` is not.
 fn transient(error: &str) -> bool {
+    // A 5xx arrives as `server-error` (usage_error maps it), so a raw `http-5…`
+    // code cannot come out of verify_user_token; listing it would be dead code.
     matches!(error, "network-error" | "rate-limited" | "server-error")
-        || error.starts_with("http-5")
 }
 
 async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
