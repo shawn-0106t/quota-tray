@@ -220,10 +220,12 @@ pub async fn verify_user_token(token: &str) -> Result<(), String> {
             last_error = error;
             continue;
         }
-        // A refusal already seen outranks this base's failure: the token IS the
-        // answer, and reporting `server-error` here would also talk the caller
-        // into re-trying a token the platform has already refused.
-        if refused {
+        // A refusal already seen outranks this base's failure — but NOT when
+        // the failure is transport-level: a valid token whose remembered base
+        // answered with an auth envelope and whose live base then blipped would
+        // otherwise be dropped without the one re-try that exists for exactly
+        // that case (a false rejection is the direction this must never take).
+        if refused && !is_transient(&error) {
             return Err("token-expired".to_string());
         }
         return Err(error);
@@ -253,6 +255,14 @@ fn token_accepted(body: &str) -> bool {
         Some(code) => !code_is_error(code),
         None => true,
     }
+}
+
+/// A failure that says nothing about the token itself, so the caller may try
+/// the same candidate again. A refusal (`token-expired`) is not one of these.
+pub fn is_transient(error: &str) -> bool {
+    // Every 5xx maps to `server-error` (usage_error), so a raw `http-5…` never
+    // reaches here; listing it would be dead code.
+    matches!(error, "network-error" | "rate-limited" | "server-error")
 }
 
 /// Is one `code` value an error? The envelope is third-party data, so both the

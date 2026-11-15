@@ -37,17 +37,24 @@ const STATUS_SAVED: &str = "DeepSeek sign-in — verified, saved";
 
 /// What the settings window calls (PLAN §4).
 pub fn open(app: &AppHandle) {
-    {
-        let st = app.state::<AppState>();
-        st.login.reset();
-    }
     if let Some(w) = app.get_webview_window(LABEL) {
         // Reopening: keep it where it is, but bring it forward again — a stale
-        // hidden window would otherwise stay behind the topmost overlays.
+        // hidden window would otherwise stay behind the topmost overlays. This
+        // is NOT a new session: a verification in flight belongs to the window
+        // the user is looking at, so the epoch must not move (the page never
+        // resends a token it already reported).
+        {
+            let st = app.state::<AppState>();
+            st.login.reset();
+        }
         let _ = w.show();
         let _ = w.set_focus();
         recovery::log("login: sign-in window refocused");
         return;
+    }
+    {
+        let st = app.state::<AppState>();
+        st.login.new_session();
     }
     let Ok(url) = CONSOLE_URL.parse::<tauri::Url>() else {
         recovery::log("login: console URL is not parseable");
@@ -181,9 +188,7 @@ fn submit_token(app: &AppHandle, token: &str) {
 /// A failure that says nothing about the token itself: the same candidate is
 /// worth one more try, where `token-expired` is not.
 fn transient(error: &str) -> bool {
-    // A 5xx arrives as `server-error` (usage_error maps it), so a raw `http-5…`
-    // code cannot come out of verify_user_token; listing it would be dead code.
-    matches!(error, "network-error" | "rate-limited" | "server-error")
+    client::is_transient(error)
 }
 
 async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
@@ -195,6 +200,13 @@ async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
         set_title(app, STATUS_VERIFYING);
         let result = client::verify_user_token(&token).await;
         let st = app.state::<AppState>();
+        // Checked before anything else is touched: after a close or a Clear the
+        // flags, the queue and the title belong to the live session, not to this
+        // future.
+        if st.login.epoch.load(Ordering::SeqCst) != epoch {
+            recovery::log("login: window replaced while verifying, result dropped");
+            return;
+        }
         match result {
             Ok(()) => {
                 // Clear ran while this verification was in flight: the user
@@ -214,7 +226,11 @@ async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
                 st.login.verifying.store(false, Ordering::SeqCst);
                 polling::safe_refresh_deepseek(app).await;
                 tokio::time::sleep(Duration::from_millis(900)).await;
-                close(app);
+                // The window may have been closed and reopened during the pause;
+                // closing its replacement would be this future overreaching.
+                if st.login.epoch.load(Ordering::SeqCst) == epoch {
+                    close(app);
+                }
                 return;
             }
             Err(error) => {
@@ -401,14 +417,20 @@ mod tests {
     use super::transient;
 
     // The list is the whole retry budget: a real refusal must never be retried,
-    // and a transport blip always is. `usage_error` maps every 5xx to
-    // `server-error`, so a raw `http-5…` never reaches this predicate.
+    // and a transport blip always is. Every 5xx arrives as `server-error`
+    // (`usage_error` maps it), so a raw `http-500` is not a shape this sees.
     #[test]
     fn only_transport_failures_are_retried() {
         for retry in ["network-error", "rate-limited", "server-error"] {
             assert!(transient(retry), "{retry}");
         }
-        for final_answer in ["token-expired", "http-404", "http-400", "http-410"] {
+        for final_answer in [
+            "token-expired",
+            "http-404",
+            "http-400",
+            "http-410",
+            "http-500",
+        ] {
             assert!(!transient(final_answer), "{final_answer}");
         }
     }

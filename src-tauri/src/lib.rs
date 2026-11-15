@@ -631,7 +631,9 @@ fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             // The DeepSeek sign-in window is the one temporary window: closing
             // it destroys it, and the next sign-in builds a fresh one (PLAN §4).
             if window.label() == login::LABEL {
-                window.app_handle().state::<AppState>().login.reset();
+                // A destroyed window is a real boundary: anything still in
+                // flight must not save, retitle or (re)close a later window.
+                window.app_handle().state::<AppState>().login.new_session();
                 recovery::log("login: sign-in window closed");
                 // The sheet was hidden when the console opened; put it back so
                 // the user lands where they started, with fresh statuses
