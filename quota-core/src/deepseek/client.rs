@@ -255,12 +255,13 @@ fn token_accepted(body: &str) -> bool {
 /// numeric shape the platform sends today (`40003`) and a numeric string have to
 /// be read; anything else is not a signal and must not reject a candidate.
 fn code_is_error(code: &Value) -> bool {
+    // Any numeric value that is not zero: integer or float, number or string.
     match code {
-        Value::Number(number) => number.as_i64().is_some_and(|value| value != 0),
+        Value::Number(number) => number.as_f64().is_some_and(|value| value != 0.0),
         Value::String(text) => text
             .trim()
-            .parse::<i64>()
-            .map(|value| value != 0)
+            .parse::<f64>()
+            .map(|value| value != 0.0)
             .unwrap_or(false),
         _ => false,
     }
@@ -614,6 +615,10 @@ mod tests {
         assert!(token_accepted(r#"{"code":0,"data":{"biz_data":{}}}"#));
         // A negative code is still an error, not a pass.
         assert!(!token_accepted(r#"{"code":-1,"data":null}"#));
+        // So is one that arrives as a float (JS integral numbers are integers,
+        // but the envelope is third-party data and this costs two assertions).
+        assert!(!token_accepted(r#"{"code":40003.0,"data":null}"#));
+        assert!(!token_accepted(r#"{"code":"40003.0","data":null}"#));
         // `data: null` WITHOUT an error code is not a rejection: a valid account
         // with no usage this month may look like that, and a false rejection
         // locks the user out of signing in entirely.
