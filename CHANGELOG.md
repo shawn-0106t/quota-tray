@@ -5,6 +5,30 @@ All notable changes to Quota Tray are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each section carries
 the English notes first, then the Chinese mirror.
 
+## [Unreleased]
+
+### Fixed
+
+- "Verify before save" now actually verifies. The DeepSeek platform answers
+  **HTTP 200** for a bad usage token and puts the failure in the body
+  (`{"code":40003,"msg":"Authorization Failed (invalid token)","data":null}`), so
+  a status-only check accepted every candidate the sign-in window or the manual
+  paste field handed it, and a rejected token still replaced a working one.
+  Verification reads the envelope now, and a base that rejects the candidate is
+  skipped instead of ending the walk — a remembered dead endpoint could
+  otherwise lock a valid token out. (Found by the P4 sign-in probe; details in
+  `spike/p4/REPORT.md` §4.1. P4 itself is the Slint shell's sign-in window and
+  does not ship with the Tauri build yet.)
+
+### 中文
+
+- **修复**：「验证后保存」现在真的会验证。DeepSeek 平台对无效的 usage token 回
+  **HTTP 200**，失败写在 body 里（`{"code":40003,…,"data":null}`），只判状态码等于
+  任何候选都算通过——登录窗与手工粘贴兜底都可能把坏 token 顶掉原本正常的那个。
+  现在会读信封里非零的 `code`，并且某个候选 base 被判拒时继续试下一个：记住的坏
+  base 否则会让有效 token 永远登不进去。（P4 的登录探针发现，明细见
+  `spike/p4/REPORT.md` §4.1；P4 本身是新 Slint 壳的登录窗，暂不随 Tauri 版发布。）
+
 ## [1.0.1] — 2026-11-15
 
 ### Added

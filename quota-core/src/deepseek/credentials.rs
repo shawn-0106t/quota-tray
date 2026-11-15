@@ -169,8 +169,11 @@ fn write(file: &CredFile) {
     let Ok(json) = serde_json::to_string_pretty(file) else {
         return;
     };
-    // Temp + rename so a crash cannot leave a truncated credential file.
-    let tmp = dir.join(format!("{CRED_FILE}.tmp"));
+    // Temp + rename so a crash cannot leave a truncated credential file. The
+    // temp name carries the pid because there are two writers now: the shell
+    // (Clear / a pasted credential) and the sign-in child process. A shared
+    // temp name lets one rename the other's half-written file into place.
+    let tmp = dir.join(format!("{CRED_FILE}.{}.tmp", std::process::id()));
     if fs::write(&tmp, json).is_ok() {
         let _ = fs::rename(&tmp, dir.join(CRED_FILE));
     }

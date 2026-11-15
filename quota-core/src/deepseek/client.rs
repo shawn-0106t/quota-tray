@@ -166,7 +166,14 @@ fn console_get(client: &Client, url: &str, user_token: &str) -> reqwest::Request
 
 /// Verify a candidate browser token with one real `amount` request before it is
 /// saved (PLAN §5.2). The console hands out several intermediate tokens while
-/// signing in; only one of them is finished, so 2xx is the only pass.
+/// signing in; only one of them is finished, so a 2xx answer that the body
+/// agrees with is the only pass.
+///
+/// A 2xx is NOT enough on its own: the platform answers 200 with its own error
+/// envelope for a bad token (`{"code":40003,"msg":"Authorization Failed
+/// (invalid token)","data":null}`), so the body has to be read too. Status-only
+/// verification accepted every candidate — found by P4's sign-in probe
+/// (`spike/p4/REPORT.md` §4.1).
 pub async fn verify_user_token(token: &str) -> Result<(), String> {
     if token.len() < 20 {
         return Err("token-expired".to_string());
@@ -184,6 +191,17 @@ pub async fn verify_user_token(token: &str) -> Result<(), String> {
         };
         let status = resp.status().as_u16();
         if (200..300).contains(&status) {
+            // A body that cannot be read is a network problem, not a pass: the
+            // candidate stays unverified rather than being saved on a guess.
+            let body = resp.text().await.map_err(|_| "network-error".to_string())?;
+            if !token_accepted(&body) {
+                // This base answers 200 with an error envelope, but the token
+                // may still be fine on the next candidate (a dead base can be
+                // remembered and answered with a soft 404). Keep walking —
+                // stopping here would lock a valid token out for good.
+                last_error = "token-expired".to_string();
+                continue;
+            }
             // A base the console itself answers on is the best one to remember.
             if load_usage_base().as_deref() != Some(base.as_str()) {
                 save_usage_base(&base);
@@ -198,6 +216,26 @@ pub async fn verify_user_token(token: &str) -> Result<(), String> {
         return Err(error);
     }
     Err(last_error)
+}
+
+/// Is a 2xx `amount` body a success? The platform marks a failure with a
+/// non-zero `code` in its envelope; a success is `{"data":{"biz_data":…}}`.
+///
+/// Only the explicit error code rejects. "Unrecognised" counts as success on
+/// purpose: a false rejection locks the user out of signing in entirely, while
+/// a false acceptance stores a token the pane then reports as `Fetch failed` and
+/// the next sign-in overwrites. `data: null` alone is deliberately NOT a
+/// rejection — a valid account with no usage this month may look like that.
+fn token_accepted(body: &str) -> bool {
+    let value = match serde_json::from_str::<Value>(body) {
+        Ok(value) => value,
+        // Not the platform's JSON at all (a proxy page, a truncated body).
+        Err(_) => return true,
+    };
+    !value
+        .get("code")
+        .and_then(Value::as_u64)
+        .is_some_and(|code| code != 0)
 }
 
 fn log_top_level_keys(body: &str, kind: &str, diag: &mut Diag) {
@@ -524,5 +562,32 @@ mod tests {
         assert_eq!(sanitize_version(""), None);
         assert_eq!(sanitize_version("1.0.0\r\nX-Evil: 1"), None);
         assert_eq!(sanitize_version(&"9".repeat(25)), None);
+    }
+
+    // PLAN §5.2: the platform answers 200 for a bad token and says so in the
+    // body, so "verified" has to mean "the envelope says so too".
+    #[test]
+    fn a_2xx_body_is_only_a_pass_when_the_envelope_is_clean() {
+        // Reproduced against the live endpoint 2026-11-15 (spike/p4/REPORT.md).
+        assert!(!token_accepted(
+            r#"{"code":40003,"msg":"Authorization Failed (invalid token)","data":null}"#
+        ));
+        assert!(!token_accepted(
+            r#"{"code":40002,"msg":"Missing Token","data":null}"#
+        ));
+        // The success shape the fetch path parses.
+        assert!(token_accepted(
+            r#"{"data":{"biz_data":{"total":[{"model":"m"}]}}}"#
+        ));
+        // An explicit zero status is a success too.
+        assert!(token_accepted(r#"{"code":0,"data":{"biz_data":{}}}"#));
+        // `data: null` WITHOUT an error code is not a rejection: a valid account
+        // with no usage this month may look like that, and a false rejection
+        // locks the user out of signing in entirely.
+        assert!(token_accepted(r#"{"data":null}"#));
+        // Unrecognised shapes must not lock the user out either.
+        assert!(token_accepted("<html><body>proxy</body></html>"));
+        assert!(token_accepted(""));
+        assert!(token_accepted("{}"));
     }
 }
