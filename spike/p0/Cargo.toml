@@ -1,0 +1,54 @@
+[package]
+name = "quota-tray-p0"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "P0 interaction spike: tray, show/hide, tab motion, blur-hide, --login-host"
+
+[[bin]]
+name = "quota-tray-p0"
+path = "src/main.rs"
+
+[dependencies]
+# Skia is the renderer the spike report settled on: drop-shadow-blur 18 is the
+# 1:1 match for CSS `0 8px 18px`.
+slint = { version = "=1.18.1", features = [
+    "renderer-skia",
+    "renderer-femtovg-wgpu",
+    "unstable-winit-030",
+    "system-tray",
+] }
+# The tray the product will need: Slint's SystemTrayIcon has no hover event and
+# always opens its attached native menu on right-click, so the custom menu
+# window (P3) cannot be built on it. This crate supplies left/right/hover.
+tray-icon = "0.26"
+image = { version = "0.25", default-features = false, features = ["png"] }
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_Security_Cryptography",
+    "Win32_System_Threading",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.23"
+chrono = "0.4"
+# Blocking HTTP for the one-shot token verification in the child process.
+ureq = "3.5"
+# --login-host: its own event loop and WebView2 window in a child process.
+tao = "0.37"
+wry = "0.57"
+url = "2"
+
+[build-dependencies]
+slint-build = "=1.18.1"
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1

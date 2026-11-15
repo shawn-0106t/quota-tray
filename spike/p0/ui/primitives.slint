@@ -1,0 +1,71 @@
+// Shared primitives, copied from spike/slint-demo/ui/primitives.slint so this
+// crate can start without pulling the frozen demo into its import graph.
+// Keep the values in step with src/theme.css.
+import { Tokens } from "tokens.slint";
+
+// A Text with a fixed CSS line box. Chrome lays `line-height: normal` out as an
+// integer box (13px -> 17px, 12.5px -> 16px, ...) and centres the font's content
+// box inside it (half-leading, negative for the 30px/1.05 number). Centring the
+// glyphs in the same box reproduces that, including the negative case.
+export component Txt inherits Text {
+    in property <length> box: 17px;
+    height: box;
+    vertical-alignment: center;
+    wrap: no-wrap;
+    overflow: elide;
+}
+
+// 10/500, uppercase, .08em tracking — .label in theme.css
+export component Lbl inherits Txt {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.8px;
+    color: Tokens.ink2;
+    box: 12px;
+}
+
+// 10.5/400 ink-2 — .note
+export component Note inherits Txt {
+    font-size: 10.5px;
+    color: Tokens.ink2;
+    box: 14px;
+}
+
+// 4px capsule track + fill — .bar
+export component Bar inherits Rectangle {
+    in property <float> pct: 0;
+    in property <length> bar-height: 4px;
+    height: bar-height;
+    border-radius: 2px;
+    background: Tokens.hair-soft;
+    Rectangle {
+        // Slint centres an un-positioned child in its parent; CSS anchors the
+        // fill at the track's left edge.
+        x: 0;
+        y: 0;
+        width: parent.width * min(1, pct / 100);
+        height: 100%;
+        border-radius: parent.border-radius;
+        background: Tokens.accent-bar;
+    }
+}
+
+// One cell of the shared .seg control: 30 high, radius 8, accent ring when on.
+export component SegCell inherits Rectangle {
+    in property <string> label;
+    in property <bool> on: false;
+    border-radius: 8px;
+    background: on ? Tokens.seg-on : transparent;
+    border-width: on ? 1px : 0px;
+    border-color: Tokens.seg-ring;
+    Text {
+        width: 100%;
+        height: 100%;
+        text: label;
+        font-size: 12.5px;
+        font-weight: on ? 500 : 400;
+        color: on ? Tokens.ink1 : Tokens.ink2;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}

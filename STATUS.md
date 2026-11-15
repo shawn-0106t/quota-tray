@@ -4,6 +4,9 @@
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
+> **本分支（`spike/slint-demo`）是 Slint 调研线，不是下面这份 Tauri 主线的快照。**
+> 新对话先读 `spike/HANDOFF.md`（现状 / 决策 / 坑 / 阶段），实测数字在 `spike/slint-demo/REPORT.md`（静态视觉）与 `spike/p0/REPORT.md`（P0 交互）。P0 已完成，下一步 P1 抽 `quota-core`。下面的内容描述 Tauri 主线（v1.0.1），本线未改动。
+
 ## 一句话
 
 **v1.0.1 已在 `https://github.com/shawn-0106t/quota-tray` 发布**（2026-11-15 07:30 UTC，Latest）：tab 切换按 Windows 原生 motion 重做（§3.6），并新增「五个版本载体必须一致」的发版门禁。上一次是 v1.0.0（2026-11-14 13:02 UTC），行为与 0.1.0 一致——那一版表达的是「发布门禁到位 + 依赖当前」。

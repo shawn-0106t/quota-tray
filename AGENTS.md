@@ -13,6 +13,15 @@ This repository is the merge of two earlier first-party projects: `kimi-planbar-
 
 **Current state: P5 is complete (2026-11-14).** P1 (baseline import), P2 (all four windows on the E tokens/layout, content-sized heights, the Kimi/DeepSeek segmented tab and the DeepSeek pane), P3 (DeepSeek credentials, balance, usage, display names, dual pollers, `--test-deepseek`, fixture tests), P4 (settings sections, the DeepSeek sign-in window, the merged tray tooltip, `--test-login`) and P5 (the release packaging — a portable exe only, no installer —, the CI/draft-release workflows, the bilingual README, `scripts/release/make_release_zip.py`) are done. The panel renders both providers for real: Kimi from `get_state`/`quota-updated`, DeepSeek from `get_deepseek`/`deepseek-updated`, with the provider tab persisted as `ActiveTab`. Three releases are out: `v0.1.0` (2026-11-14 12:35 UTC), `v1.0.0` (13:02 UTC) and `v1.0.1` (2026-11-15 07:30 UTC, marked Latest — the tab switch rebuilt on Windows' own motion values plus the five-carrier version gate `scripts/release/check_versions.py`), each produced by the tag-triggered workflow and published by hand. After P5 the maintainer tested the build and three real defects were fixed — the sign-in window built on the main thread (blank, unclosable), `Clear` being undone by the sign-in window's own capture, and the settings sheet clipping its bottom — see `CHANGELOG.md` and the traps below. Follow `PLAN.md` §8.
 
+## Slint spike branch (`spike/slint-demo`)
+
+This branch is a parallel investigation into a non-Tauri shell (Slint 1.18 + Skia). The product code described below is untouched here.
+
+- Read `spike/HANDOFF.md` first: current state, decisions, traps, phases. Measured numbers live in `spike/slint-demo/REPORT.md` (static visual parity) and `spike/p0/REPORT.md` (P0 interaction: tray, tab motion, blur-hide, `--login-host`).
+- P0 is done (2026-11-15; all four acceptance items, including a real captured-and-saved DeepSeek token). Next is P1: extract `quota-core`, make `src-tauri` depend on it, keep the 29 tests green and the `--test-*` output byte-identical. Do not start a full UI rewrite.
+- Build a spike with the Skia mirror, or the build script retries GitHub and falls back to a source build that needs LLVM: `SKIA_BINARIES_URL='https://ghproxy.net/https://github.com/rust-skia/skia-binaries/releases/download/{tag}/skia-binaries-{key}.tar.gz' cargo build` (in `spike/p0` or `spike/slint-demo`).
+- `spike/p0` is the future shell skeleton; its `--test-tab-anim` / `--test-blur` / `--test-tray-click` / `--test-login` modes are the acceptance harness. `.shots/` is gitignored; committed evidence is in `spike/evidence/` and `spike/p0/evidence/`.
+
 ## Source of truth
 
 | Question | Answer |

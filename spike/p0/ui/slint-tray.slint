@@ -1,0 +1,25 @@
+// Evaluation subject for HANDOFF §5's tray question: Slint 1.18's own
+// SystemTrayIcon. Windows gets Shell_NotifyIcon with `szTip` as-is, left-click
+// fires `clicked`, right-click always opens this attached native Menu, and
+// there is no hover event at all. `--tray-probe` runs it so the three-line
+// tooltip can be checked by eye against the tray-icon crate's.
+export component SlintTray inherits SystemTrayIcon {
+    in property <string> tip: "Quota Tray";
+    icon: @image-url("../../../src-tauri/icons/tray.png");
+    tooltip: tip;
+
+    callback open-requested();
+
+    clicked => {
+        open-requested();
+    }
+
+    Menu {
+        MenuItem {
+            title: "Open Quota Tray";
+            activated => {
+                open-requested();
+            }
+        }
+    }
+}
