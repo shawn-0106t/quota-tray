@@ -16,6 +16,7 @@
 3. ~~五个版本载体升到 1.0.2 + CHANGELOG 定版~~ —— **已完成**，`f92748f`（`chore(release): v1.0.2`，已 push）；`check_versions.py` 六项全 ok，`tsc` / `vite build` / `cargo fmt+clippy+test --locked`（30 passed）全绿。
 4. 只剩一步：打 `v1.0.2` tag 才会触发 release workflow（草稿 Release，发布仍手动）——**这一步等用户点头**。
 5. 发版前又对 `main` 做了一轮只读审查（2 Major / 10 Minor），全部处置为 `c7f0594` + `96c8a3c`，并镜像回本分支；修复后 `--test-login` 在真机打印 `verify=ok` + 两项捕获 OK（明细见 `spike/p4/REPORT.md` §4.4）。
+6. 随后对**增量**再做一轮审查（1 Major / 6 Minor），处置为 `b016576` + `4ba92ee`，同样镜像回本分支（`quota-core` + `src-tauri` 的 `login.rs` / `state.rs`）。已知缺口：`verify_and_save` 的决策表没有测试，只测了 `transient()`——留给 P5（见 `spike/p4/REPORT.md` §4.5）。
 
 注意：本地 `main` 在 `../kimi-deepseek-quota-dashboard`（同一仓库的另一个 worktree），合并后在那里 `git pull --ff-only` 再升版本；不要在 worktree 里 `git switch main`。
 

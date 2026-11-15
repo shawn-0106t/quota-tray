@@ -147,6 +147,24 @@ v1.0.2 定版后又对 `main` 上的两个提交（`5d95f1f` 修复 + `f92748f` 
 
 审查同时确认：移植保真（与 `quota-core` 版逐行只差三处 doc comment）、记忆的 base 只在真正接受后才写、`data:null`/`code:0`/非 JSON/空 body 不会误杀、粘贴路径把 `token-expired` 映射成「invalid or expired — not saved」且不清空输入框。**缺的运行时证据也补上了**：修复后 `--test-login` 在真机打印 `verify=ok`，四个窗口 OK、`LoginWindow capture channel OK` 与 `fetch capture OK`。
 
+## 4.5 第二轮（delta）：只审 `c7f0594` + `b016576` 之后的增量
+
+第一轮修完又对**增量**做了一次只读审查，报 **1 Major / 6 Minor**，无 Critical，全部处置（`b016576` + `4ba92ee`，并镜像回本分支）：
+
+| 级 | 发现 | 处置 |
+|---|---|---|
+| Major | `refused` 只在 walk 走完时生效：记住的 base 拒了 token、下一个 base 回 502 → 报 `server-error` → 又被 `transient()` 重试一次。而「中间态 token 被拒」正是登录的常态路径 | 拒绝优先提到**每个出口**：已见过拒绝时，非 404/410 的失败也返回 `token-expired` |
+| Minor | 800 ms 重试睡眠期间到达的新候选被吞掉（醒来直接重验旧的） | 醒来先看 `pending`，有更新的候选就改用它（页面不会重发，新的更接近完成态） |
+| Minor | `LoginState::reset()` 清 `verifying` 却不 bump `epoch`：关窗/重开后，旧窗口派生的验证仍可能保存、改标题、甚至关掉新窗口 | `reset()` 加 `epoch.fetch_add(1)`（与 Clear 同一机制），放弃分支写标题前再校验一次 epoch |
+| Minor | `code_is_error` 用 f64 解析会接受 `"NaN"` / `"inf"`（非零→判错）——**假拒绝是更坏的方向** | 只认有限且非零的数值 |
+| Minor | `AGENTS.md` 的 transient 列表还写着 `http-5xx`（`usage_error` 把所有 5xx 映射成 `server-error`，这个形状不可达） | 按代码实况改写，并补「睡眠期间的新候选优先」 |
+| Minor | `CHANGELOG` 没写「坏 token 统一报 `token-expired`」这条用户可见变化 | 英文与中文各补一句（手工粘贴文案从 `verification failed (http-404)` 变成 `invalid or expired`） |
+| Minor | 重试/优先级逻辑零测试 | `transient()` 加了断言（它就是全部重试预算）；循环的决策表**没有**测试，如实记录在下方而不是临发版做一次结构重写 |
+
+审查同时确认：四条出口都会 `verifying=false` 且有标题、最坏耗时有界、epoch 睡眠绕不过、双飞只可能来自 `reset()`（已修）、`transient()` 收紧正确、`code: null` / `{}` / `"0000"` 都不会误判、有效样本 fixture 仍走 `None => true`、新增日志不含 token、`tokio::time::sleep` 不阻塞 runtime。
+
+**已知缺口（不打算在发版前修）**：`verify_and_save` 的决策（保存哪个 token、要不要再发一次请求、什么时候放弃）只有 `transient()` 被测试；要真正钉住它需要把决策抽成纯函数并做表驱动断言——那是一处结构改动，放在 P5 做比在 v1.0.2 打 tag 前做更稳。
+
 ## 5. 陷阱（给后面接手的人）
 
 1. **设置窗在登录期间是「隐藏但记住」**：`login::open` 只翻 `settings_open` 并 `hide()`，不动 `skills`/`menu`；`reopen_sheet` 决定退出时是否 `settings::open`。不要在 `login::open` 里调 `settings::close`——那会顺带触发「关闭后收起面板」的判定。
