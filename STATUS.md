@@ -1,8 +1,8 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-15 22:05（**v1.0.2 已定版并推送，tag 未打**；主线 `main` = 定版提交；v1.0.1 仍是 Latest）。
-> v1.0.2 的内容只有一条：`verify_user_token` 对 DeepSeek 的 200 + `{"code":40003}` 错误信封不再误判（PR #4，squash 合并 `5d95f1f`）。定版时五个载体已升到 1.0.2，`check_versions.py` 六项全 ok，`tsc` / `vite build` / `cargo fmt+clippy+test --locked`（30 passed）全绿。
-> 下一步只剩两件：打 `v1.0.2` tag（触发草稿 Release）→ 核对三件资产与 `SHA256SUMS.txt` → 手动 publish。
+> 快照：2026-11-15 22:10（**v1.0.2 已定版并推送，tag 未打**；主线 `main` = 定版提交；v1.0.1 仍是 Latest）。
+> v1.0.2 的内容：`verify_user_token` 对 DeepSeek 的 200 + `{"code":40003}` 错误信封不再误判（PR #4，squash 合并 `5d95f1f`），外加一条同源加固——临时性失败（`network-error` / `rate-limited` / `server-error` / 5xx）对**同一个**候选重试一次（`fix:` 提交，见下）。定版时五个载体已升到 1.0.2，`check_versions.py` 六项全 ok，`tsc` / `vite build` / `cargo fmt+clippy+test --locked`（30 passed）全绿，`--test-login` 在真机跑过：`verify=ok` + 四个窗口 OK + `LoginWindow capture channel OK` / `fetch capture OK`。
+> 下一步只剩发布链：打 `v1.0.2` tag（触发草稿 Release）→ 核对三件资产与 `SHA256SUMS.txt` → 手动 publish。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
