@@ -1,0 +1,50 @@
+[package]
+name = "quota-tray-slint"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Quota Tray shell without Tauri: Slint 1.18 + Skia, data layer from quota-core"
+
+[[bin]]
+name = "quota-tray-slint"
+path = "src/main.rs"
+
+[dependencies]
+quota-core = { path = "../quota-core" }
+# Skia is the renderer P0/spike settled on: drop-shadow-blur 18 is the 1:1
+# match for CSS `0 8px 18px`. `unstable-winit-030` exposes the winit window
+# (skip_taskbar, focus events, HWND) that the tray shell needs.
+slint = { version = "=1.18.1", features = [
+    "renderer-skia",
+    "unstable-winit-030",
+] }
+# Slint's own SystemTrayIcon has no hover event and always opens its native menu
+# on right-click, so the custom cursor-positioned menu (P3) cannot be built on
+# it (spike/p0/REPORT.md §5).
+tray-icon = "0.26"
+image = { version = "0.25", default-features = false, features = ["png"] }
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_UI_HiDpi",
+    "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+chrono = "0.4"
+# --test-active-tab reads settings.json back to prove the tab was persisted
+serde_json = "1"
+# The pollers (provider fetch, local usage scan, CLI version check) live on a
+# dedicated runtime thread; the UI thread owns the Slint event loop.
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "sync", "macros"] }
+# System theme (HKCU AppsUseLightTheme), same key as the Tauri shell.
+winreg = "0.56"
+
+[build-dependencies]
+slint-build = "=1.18.1"
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1

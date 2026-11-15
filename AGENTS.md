@@ -18,7 +18,8 @@ This repository is the merge of two earlier first-party projects: `kimi-planbar-
 This branch is a parallel investigation into a non-Tauri shell (Slint 1.18 + Skia). The product code described below is untouched here.
 
 - Read `spike/HANDOFF.md` first: current state, decisions, traps, phases. Measured numbers live in `spike/slint-demo/REPORT.md` (static visual parity) and `spike/p0/REPORT.md` (P0 interaction: tray, tab motion, blur-hide, `--login-host`).
-- P0 is done (2026-11-15; all four acceptance items, including a real captured-and-saved DeepSeek token). P1 is done too (2026-11-15): the data layer lives in `quota-core/` — a sibling package (not a workspace, see `spike/p1/REPORT.md`), `src-tauri` depends on it and re-exports every module so its call sites keep their `crate::quota` & co. paths, the 29 original tests still pass (26 moved, 3 recovery tests stay), and `--test-fetch/--test-deepseek/--test-usage` match the pre-extraction binary byte for byte apart from the four live fields (`fetchedAt`, `scannedAt`, `scanMs`, `ms=`). Next is P2 (the real panel: data binding, 1–4 model rows, `ActiveTab`), then P3–P5; do not start a full UI rewrite before that. `spike/p1/` holds the comparison harness (`compare_test_output.py` for the `--test-*` captures, `fmt_parity.py` for the TypeScript↔Rust formatting table).
+- P0 is done (2026-11-15; all four acceptance items, including a real captured-and-saved DeepSeek token). P1 is done too (2026-11-15): the data layer lives in `quota-core/` — a sibling package (not a workspace, see `spike/p1/REPORT.md`), `src-tauri` depends on it and re-exports every module so its call sites keep their `crate::quota` & co. paths, the 29 original tests still pass (26 moved, 3 recovery tests stay), and `--test-fetch/--test-deepseek/--test-usage` match the pre-extraction binary byte for byte apart from the four live fields (`fetchedAt`, `scannedAt`, `scanMs`, `ms=`).
+- **P2 is done (2026-11-15)**: the new shell lives in `slint/` (crate `quota-tray-slint`, exe `quota-tray-slint.exe`), wired to `quota-core` for real data — two provider pollers with last-good slots, the local Kimi usage scan, the CLI version check, the DeepSeek last-good cache, `ActiveTab` persistence and a content-sized, work-area-anchored window that scrolls its card when the work area caps it. `spike/p2/REPORT.md` has the numbers: 17 data variants size the card/window to exactly the Chromium DOM height (Δ 0.00), 8 layout variants put every text band within 1.00 CSS px, and at the machine's 225% scale the bottom-right edge drifts 0 px across 10 tab switches (469 samples) and 30 rapid clicks. **Panel layout is absolute stacking from the `Metrics` constants in `ui/primitives.slint`, not a Slint `layout`** — a `VerticalLayout` whose sibling component contains a repeater silently drops every sibling after it (REPORT §5.1), and Slint centres children that have no explicit x/y (REPORT §5.2). Next is P3 (settings / skills / menu windows), then P4 (sign-in) and P5 (parity matrix); do not start a full UI rewrite before that. `spike/p1/` holds the comparison harness (`compare_test_output.py`, `fmt_parity.py`); `spike/p2/` holds the height oracle (`heights_ref.py --compare`) and the band comparison (`compare_bands.py`).
 - Build a spike with the Skia mirror, or the build script retries GitHub and falls back to a source build that needs LLVM: `SKIA_BINARIES_URL='https://ghproxy.net/https://github.com/rust-skia/skia-binaries/releases/download/{tag}/skia-binaries-{key}.tar.gz' cargo build` (in `spike/p0` or `spike/slint-demo`).
 - `spike/p0` is the future shell skeleton; its `--test-tab-anim` / `--test-blur` / `--test-tray-click` / `--test-login` modes are the acceptance harness. `.shots/` is gitignored; committed evidence is in `spike/evidence/` and `spike/p0/evidence/`.
 
@@ -50,6 +51,10 @@ src/                  # vanilla TS frontend (Vite multi-page build)
   vite-env.d.ts
 vite.config.ts        # 4-page rollup input; 100 KB asset inlining budget
 tsconfig.json / package.json / package-lock.json
+slint/                # the Tauri-free shell (P2: panel only) — crate quota-tray-slint
+  ui/{tokens,primitives,kimi,ds,panel,anchor,app}.slint   # Metrics constants live in primitives
+  src/{main,shell,app,view,height,checks}.rs               # data pump, placement math, self-checks
+  Cargo.toml / Cargo.lock / build.rs
 quota-core/           # shared data layer, no GUI toolkit (HANDOFF §4)
   src/                # credentials/quota/settings/skills/update/kimi_usage (scan)
     deepseek/         # mod (types, fetch, cache) + credentials (DPAPI) + client (HTTP) + parse (pure, tested)
@@ -108,6 +113,10 @@ npx tauri dev           # full app
 npx tauri build         # release exe in src-tauri/target/release/quota-tray.exe
                         #   (no bundles: tauri.conf.json sets bundle.targets = [])
 npx tauri build --no-bundle   # same thing; kept for the explicit form
+
+# the Tauri-free shell (P2: panel only). Every cargo call needs the Skia mirror,
+# see Testing / self-checks.
+(cd slint && cargo build)     # slint/target/debug/quota-tray-slint.exe
 ```
 
 Caveats inherited from the parent project:
@@ -134,6 +143,29 @@ quota-tray.exe --test-ui           # construct every window, print "… OK" line
 `--test-usage` scans the local Kimi session logs twice and prints the aggregated JSON: `scan1` walks the tree, `scan2` only re-stats known files, and the two request counts must be identical (that pair is the incremental-scan proof). Its numbers are checked against an independent calculation over the same logs.
 
 `cargo test` covers pure logic only: 43 tests, split across the two packages because the data layer moved (HANDOFF §4). `src-tauri` keeps 3 — the recovery classifier/backoff/log-tail triple, which needs Tauri types. `quota-core` holds 40: the DeepSeek `parse` suite (9) and `credentials` suite (4, including the DPAPI round trip), the login-window URL/version sanitisers `usage_base_from`/`sanitize_version` (2), six `kimi_usage` tests (turn-scope filtering, speed/hit-rate as ratios of sums, per-day buckets, index round-trip, the no-usage fast path, local day keys), three `settings` tests pinning the `ActiveTab` contract (a legacy file without the key loads as `kimi`, a saved tab round-trips, unknown names normalise), the skills frontmatter parser (2), five `quota` tests pinning the units traps (`amountLeft` 1e-8 yuan → cents, `isEnabled=false` → Not activated, zero limit guard, reset-time shapes, monthly cents), and nine `format` tests pinning every string `src/common.ts` used to own. The DeepSeek numbers are asserted against the four fixtures in `quota-core/tests/fixtures/` (ported from `deepseek-planbar/tests/fixtures/`, pulled in with `include_str!`, so `tests/` holds data only). `FixtureTests.cs` in the parent repo asserts the same values; running the old exe with `--test-fixtures <abs path>` and the Rust suite together is how parse equivalence is proven — the live account moves every minute, so a numeric diff between two live fetches proves nothing. The two suites are separate commands (`cd src-tauri && cargo test`, `cd quota-core && cargo test`): a root workspace would move the Tauri target dir and lockfile the release scripts read.
+
+The Slint shell has its own harness (`slint/`, P2). Build it with the Skia mirror, or the build script retries GitHub and falls back to a source build that needs LLVM — **on every cargo invocation**, not just the first:
+
+```bash
+export SKIA_BINARIES_URL='https://ghproxy.net/https://github.com/rust-skia/skia-binaries/releases/download/{tag}/skia-binaries-{key}.tar.gz'
+(cd slint && cargo build && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test)
+```
+
+Its `--test-*` modes run before the single-instance mutex too, and take `--config-dir` so they never touch the user's settings or credentials (`QUOTA_TRAY_APP_DATA_DIR` under the hood):
+
+```bash
+EXE=./slint/target/debug/quota-tray-slint.exe
+$EXE --test-active-tab                 # ActiveTab round trip in an isolated dir
+$EXE --test-corner  --variant ds-4 --tab ds --config-dir .shots/p2/cfg   # live corner anchor + drift
+$EXE --test-tab-anim --variant ds-4 --tab ds --config-dir .shots/p2/cfg  # 30 clicks, bottom-edge drift
+$EXE --test-blur --variant kimi-full --config-dir .shots/p2/cfg          # focus loss -> hidden latency
+$EXE --test-tray-click --variant kimi-full --config-dir .shots/p2/cfg    # posted tray messages
+$EXE --test-clamp --no-poll --variant ds-4 --tab ds --max-window-h 300 --out .shots/p2/clamp
+$EXE --hold --no-poll --variant ds-4 --tab ds --theme light --out .shots/p2/ds-4   # snapshot
+$EXE --test-heights                    # card/window height per data variant (no window)
+```
+
+`--no-poll` disables the four background loops so a `--variant` screenshot shows the variant and not the live account. Height and layout regressions are caught by `spike/p2/heights_ref.py --compare` (17 variants against the DOM) and `spike/p2/compare_bands.py` (text bands at the live DPR vs the DOM at DPR 2, both converted to CSS px).
 
 Design review is part of the deliverable: after any visual change, regenerate the all-windows demo and the screenshots, and compare in both themes:
 

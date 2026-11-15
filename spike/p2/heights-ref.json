@@ -1,0 +1,87 @@
+{
+  "kimi-full": {
+    "card": 504,
+    "hint": null,
+    "hintLines": null
+  },
+  "kimi-nocache": {
+    "card": 331.5,
+    "hint": null,
+    "hintLines": null
+  },
+  "kimi-cache-only": {
+    "card": 447.5,
+    "hint": null,
+    "hintLines": null
+  },
+  "kimi-extra-monthly": {
+    "card": 537,
+    "hint": null,
+    "hintLines": null
+  },
+  "kimi-not-activated": {
+    "card": 504,
+    "hint": null,
+    "hintLines": null
+  },
+  "kimi-no-badge": {
+    "card": 504,
+    "hint": null,
+    "hintLines": null
+  },
+  "ds-4": {
+    "card": 545,
+    "hint": null,
+    "hintLines": null
+  },
+  "ds-3": {
+    "card": 474,
+    "hint": null,
+    "hintLines": null
+  },
+  "ds-2": {
+    "card": 403,
+    "hint": null,
+    "hintLines": null
+  },
+  "ds-1": {
+    "card": 332,
+    "hint": null,
+    "hintLines": null
+  },
+  "ds-hint": {
+    "card": 265.5,
+    "hint": 37.5,
+    "hintLines": 2
+  },
+  "ds-hint-short": {
+    "card": 265.5,
+    "hint": 37.5,
+    "hintLines": 2
+  },
+  "ds-hint-rate": {
+    "card": 265.5,
+    "hint": 37.5,
+    "hintLines": 2
+  },
+  "ds-hint-empty": {
+    "card": 265.5,
+    "hint": 37.5,
+    "hintLines": 2
+  },
+  "ds-balance-only": {
+    "card": 228,
+    "hint": null,
+    "hintLines": null
+  },
+  "ds-nokey": {
+    "card": 265.5,
+    "hint": 37.5,
+    "hintLines": 2
+  },
+  "ds-failed": {
+    "card": 244.5,
+    "hint": 37.5,
+    "hintLines": 2
+  }
+}

@@ -1,0 +1,13 @@
+// Keepalive window.
+//
+// Slint's core keeps a "keepalive" counter: every visible window or visible
+// SystemTrayIcon adds one, and hiding the last one calls quit_event_loop().
+// A tray app that hides its panel would exit with it (observed: process gone
+// 170ms after the first auto-hide). A 1x1 transparent window parked off-screen
+// holds the counter open without being seen or focusable.
+export component Anchor inherits Window {
+    width: 1px;
+    height: 1px;
+    no-frame: true;
+    background: transparent;
+}

@@ -1,6 +1,6 @@
 # HANDOFF — 不依赖 Tauri 的 Quota Tray（Slint + Skia）
 
-> 新对话从这里接手。一句话现状：**静态视觉、P0 交互与 P1 `quota-core` 抽取都已完成并量化（`spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`）；三档 DPI、混合 DPI/多屏、键盘与 IME、菜单/设置窗口尚未验证，下一步 P2 真实面板。**
+> 新对话从这里接手。一句话现状：**静态视觉、P0 交互、P1 `quota-core` 抽取与 P2 真实面板都已完成并量化（`spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md`）；新壳代码在 `slint/`，面板已接真实数据、高度随数据变、`ActiveTab` 持久化；下一步 P3 设置/skills/menu 三个窗口。**
 
 ## 0. 位置与前提
 
@@ -26,6 +26,8 @@
 | tab 动效实现 | 4 个组合 state（tab × 显隐）+ 先放大窗口、16 ms 后翻 state | Slint states 是互斥的，第一个条件为真的 state 生效；两组独立 state 时显隐那组永远不生效 |
 | DPI 测试 | 只能用真实显示缩放，**不要用 `SLINT_SCALE_FACTOR`** | 它改 Slint 逻辑缩放但 winit 仍按系统 DPI 建窗口：225% 下贴角漂 51 px |
 | 发布 | 不动 v1.0.1 线；新壳暂不进五载体门禁 | 它还没成为发布产物 |
+| 新壳目录 | **`slint/`**（crate `quota-tray-slint`，exe `quota-tray-slint.exe`） | 2026-11-15 用户拍板；`spike/p0` 保留为冻结证据 |
+| 面板布局 | **绝对堆叠**：`Metrics` 常量给每个块算 y，`panel.slint` 用同一批常量求和定窗口高度；**panes 不用 layout** | Slint 的 layout 在"兄弟组件里有 repeater"时会静默丢掉后面的兄弟（`spike/p2/REPORT.md` §5.1） |
 
 ## 2. 已证明 / 未证明
 
@@ -51,7 +53,16 @@
 - 透明窗：`--stage none` 快照里 13.8% 像素 alpha=0、8.2% 半透明（阴影衰减），逐像素 alpha 是真的。
 - 阴影：Skia blur 18 → 采样带平均差 0.52 灰阶（最大 1）；暗色下末带 Δy 从 3 降到 0。
 
-**未证明**（后续阶段）：三档 DPI（需真改显示缩放）、混合 DPI/多屏、键盘与 IME、1–4 个模型行的动态高度（P2）、设置/skills/菜单窗口（P3）。
+**P2 已证明**（`spike/p2/REPORT.md` 有全部数字与复现命令）：
+
+- 高度：17 个数据变体（Kimi full/no-cache/cache-only/extra-monthly/not-activated/no-badge、DS 4/3/2/1 行、4 种 hint、无详情、无 key、失败）的卡片与窗口高度与 Chromium DOM **Δ = 0.00**（45–545 逻辑 px 全覆盖）。
+- 文本带：8 个布局变体（含深色 ds-4）带数一致、位置差 **≤ 1.00 CSS px**；残差是 2.25×/2× 两套字形栅格化的取整差，不是布局漂移。
+- 贴角（真实 225%）：窗口 954 = 424 × 2.25、卡片 gap 27.0 = 12 × 2.25、10 次切换 469 采样 **drift 0 px**；`height.rs` 的 4 个单测覆盖 8 档 scale × 3 工作区 × 4 高度。
+- 连点 30 次：底边/右边 drift **0 px**、窗口高度恒 1352；失焦隐藏 **180 ms**；托盘左键开合 PASS。
+- `ActiveTab`：无文件读 kimi、切 ds/kimi 各落盘、旧文件无键读 kimi、`ActiveTab=deepseek` 回读，5 项全过。
+- 夹取：强制 cap 300 时窗口 300、卡片 244、内容 543（可滚 299），滚动 120 px 后帧内容变化 PASS。
+
+**未证明**（后续阶段）：三档 DPI 的**真机**验证（只有 225% 现场；100/150/200% 仅算术证明）、混合 DPI/多屏、键盘与 IME、设置/skills/菜单窗口（P3）、登录链路（P4）。
 
 **P0 期间实测到的环境限制**：本会话的合成鼠标输入（`mouse_event`/`SetInput`）不生效（连开始菜单都点不开），托盘在 CU 里也不可观察；因此托盘的 tooltip 视觉与悬停截图需要人工看一眼，事件链路用投递 `WM_USER_TRAYICON`(6002) 验证。
 
@@ -83,7 +94,7 @@ spike/p0/              # P0 交互 spike：壳的骨架（Anchor / tray-icon / �
 |---|---|---|
 | **P0 交互 spike（已完成 2026-11-15）** | 托盘 + 面板显示/隐藏 + tab 切换动效 + 失焦隐藏 + `--login-host` 最小闭环；结果见 `spike/p0/REPORT.md` | 底边 0 px；失焦 172–174 ms；tooltip 3 行；捕获通道 `sender=ok fetch=ok`；真实 token 已闭环（用户登录 → 现版 v1.0.1 读到真实余额） |
 | **P1 `quota-core` 抽取（已完成 2026-11-15）** | 纯逻辑 + 格式化迁到仓库根 `quota-core/`，`src-tauri` 改 path 依赖并 `pub use` 保住 `crate::xxx` 路径；结果见 `spike/p1/REPORT.md` | 43 测试全绿（原 29 全保留）；`--test-fetch/--test-deepseek/--test-usage` 与改前 exe 在掩掉 4 个 live 字段后逐字节一致（4 组）；格式化 45 例 TS==Rust |
-| P2 面板（1–1.5 周） | 真实数据、1–4 模型行、`ActiveTab` 持久化 | 三档 DPI 贴角不跳位；数据变化时高度正确 |
+| **P2 面板（已完成 2026-11-15）** | 新壳 `slint/`：`quota-core` 真实数据、1–4 模型行、`ActiveTab` 持久化、夹取滚动；结果见 `spike/p2/REPORT.md` | 17 个变体高度 Δ=0；8 个变体文本带 ≤1.00 css px；225% 下漂移 0 px（10 次切换 469 采样）；连点 30 次 drift 0；`ActiveTab` 5 项断言；夹取滚动 PASS |
 | P3 设置 / skills / menu（3–5 天） | 三窗 + 凭证状态 + 手工粘贴 + 自启动/便携/单实例/主题 | 落盘重启生效；显隐语义正确 |
 | P4 登录完整链路（2–3 天） | `--login-host` + `--test-login` | probe 与 fetch 捕获双通过；Clear 不被回写 |
 | P5 对齐矩阵与门禁（3–4 天） | `PARITY.md`、token 漂移门禁、截图重生成、CI job | 矩阵无 ❌（`quota-core` 的 fmt/clippy/test 已在 P1 接入 CI，且不阻塞现版） |
@@ -107,7 +118,12 @@ spike/p0/              # P0 交互 spike：壳的骨架（Anchor / tray-icon / �
 15. **Skia 预编译包必须走镜像**：`SKIA_BINARIES_URL='https://ghproxy.net/https://github.com/rust-skia/skia-binaries/releases/download/{tag}/skia-binaries-{key}.tar.gz'`。不设时每次 build 都会重试 GitHub（curl 35）并回落源码构建，本机无 LLVM 直接失败。
 16. **cargo workspace 的成员必须在根目录之下**：`members = ["../quota-core"]` 直接被拒（`is not hierarchically below the workspace root`）。把 workspace 根放到仓库根则会把 `target/` 与 `Cargo.lock` 从 `src-tauri/` 挪走，而 `scripts/release/check_versions.py`、release 工作流、CI 的 rust-cache 全都读 `src-tauri/` 那一份。所以 `quota-core` 是**独立 package + path 依赖**：`quota-core/Cargo.lock` 不提交（library 约定，已进 `.gitignore`），CI 对它只跑 `cargo test`（不带 `--locked`），测试因此是两条命令。
 17. **「输出逐字节一致」只能对 live 字段取掩码**：`--test-fetch` / `--test-deepseek` / `--test-usage` 打的是实时数据（`fetchedAt`、`scannedAt`、`scanMs`、`ms=`，以及 DeepSeek 账户与 Kimi 会话的计数），跨进程、跨分钟不可能相同。验法是保留改前 exe，在同一分钟里前后各跑一次两个 exe，再用 `spike/p1/compare_test_output.py` 掩掉这 4 处比对；直接 diff 两次隔几分钟的输出会得出假阴性（真实见过 4958→4972 requests、¥16.98→¥16.91，全是账户在动，不是代码）。
-18. **Rust 格式化必须对着 TS 跑一遍再交付**：`toFixed` 的舍入、`Math.floor` 对负数的处理、`toLocaleString('en-US')` 的分组都不是 Rust 默认行为。`spike/p1/fmt_parity.py` 用 node 直接 import `src/common.ts`（node 24 原生剥类型，只需删掉开头两行 `@tauri-apps` import），与 `quota-core::format` 对拍 45 个用例。两壳并存期间，改任一侧都要先跑它。
+18. **Slint 的 layout 会被 repeater 打断**：`VerticalLayout` 的某个兄弟组件内部有 `for … in model` 时，**它后面的所有兄弟都不渲染**——而高度表达式照旧把它们算进去（症状：窗口比内容高、末尾一行永远不出现）。定位手法：给可疑块加 `background: #ff000060`、在布局首尾各放一个绿色探针，逐次挪位置；只有 repeater 之后的兄弟消失。修法：panes 改成按 `Metrics` 常量算 y 的绝对堆叠（Kimi 5 块 / DS 4 块），不依赖 layout。`spike/p2/REPORT.md` §5.1。
+19. **Slint 会居中"没有显式位置"的子元素**：`Field` 只写了 `x`，整列内容低了 5 px = `(115 − 105) / 2`。位置由父级决定的元素，x/y 都要显式写。
+20. **`Window::size()` 是物理像素**（`PhysicalSize`）：225% 下 300 逻辑的窗口报 675。凡"逻辑高度"一律除以 `scale_factor()`；`take_snapshot()` 的 buffer 同理（按逻辑宽度存图会切成斜条）。
+21. **`Flickable.content-y` 滚动时是负值**，设正值会被夹回 0；1.18 把 `viewport-width/height` 改名 `content-width/height`。`scroll-y <=> card-scroll.content-y` 两向绑定后 Rust 可直接驱动滚动做测试。
+22. **Chromium 在分数 DPR 下布局会变**：同一份 DOM 在 DPR 2 量到 504、2.25 量到 501（`line-height: normal` 按设备像素取整）。参考图固定 DPR 2，对比时两边各自换算成 CSS px；另外参考页必须 `html, body { height: 100% }`，否则 `overflow: hidden` 的零高 body 会把绝对定位的卡片裁成空白（DOM 仍报 504，只有截图能暴露）。
+23. **Rust 格式化必须对着 TS 跑一遍再交付**：`toFixed` 的舍入、`Math.floor` 对负数的处理、`toLocaleString('en-US')` 的分组都不是 Rust 默认行为。`spike/p1/fmt_parity.py` 用 node 直接 import `src/common.ts`（node 24 原生剥类型，只需删掉开头两行 `@tauri-apps` import），与 `quota-core::format` 对拍 45 个用例。两壳并存期间，改任一侧都要先跑它。
 
 ## 7. 复现命令
 
@@ -146,13 +162,33 @@ cd ../quota-tray-slint
 PYTHONUTF8=1 python spike/p1/fmt_parity.py      # 45 个格式化用例，TS == Rust
 ```
 
+P2（新壳；**每次 cargo 调用都要带 `SKIA_BINARIES_URL`**）：
+
+```bash
+cd ../quota-tray-slint
+export SKIA_BINARIES_URL='https://ghproxy.net/https://github.com/rust-skia/skia-binaries/releases/download/{tag}/skia-binaries-{key}.tar.gz'
+(cd slint && cargo build && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test)
+PYTHONUTF8=1 python spike/p2/heights_ref.py --compare          # 17 个变体的高度 vs DOM
+./slint/target/debug/quota-tray-slint.exe --hold --no-poll --variant ds-4 --tab ds     --theme light --out .shots/p2/ds-4
+PYTHONUTF8=1 python spike/p2/compare_bands.py --shot .shots/p2/ds-4/panel.png --variant ds-4
+EXE=./slint/target/debug/quota-tray-slint.exe
+$EXE --test-active-tab
+$EXE --test-corner    --variant ds-4 --tab ds --config-dir .shots/p2/cfg-corner
+$EXE --test-tab-anim  --variant ds-4 --tab ds --config-dir .shots/p2/cfg-anim
+$EXE --test-blur      --variant kimi-full --config-dir .shots/p2/cfg-blur
+$EXE --test-tray-click --variant kimi-full --config-dir .shots/p2/cfg-tray
+$EXE --test-clamp --no-poll --variant ds-4 --tab ds --max-window-h 300     --out .shots/p2/clamp --config-dir .shots/p2/cfg-clamp
+$EXE --hold --seconds 9 --out .shots/p2/live                    # 真实数据
+```
+
 `--test-*` 输出一致性要两个 exe 才比得出来：先 `git stash -u` 回到改前构建一份 exe 存到 `.shots/p1/quota-tray-before.exe`，`git stash pop` 后再构建改后的，然后在同一分钟里对每种模式前后各跑一次，`spike/p1/compare_test_output.py BEFORE_DIR AFTER_DIR` 掩掉 4 个 live 字段比对（目录里要有 `fetch.* / deepseek.* / deepseek-verbose.* / usage.*` 共 8 个文件）。
 
 ## 8. 给新对话的第一句（可直接粘贴）
 
-> 接手 `..\quota-tray-slint`（分支 `spike/slint-demo`）。先读 `spike/HANDOFF.md`、`spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md` 与 `spike/p1/REPORT.md`。P0 交互 spike 与 P1 `quota-core` 抽取都已完成；下一步按 HANDOFF §5 做 P2：把面板接到 `quota-core` 的真实数据（1–4 行模型、`ActiveTab` 持久化），三档 DPI 贴角不跳位、数据变化时高度正确；不要先做全量 UI 重写。
+> 接手 `..\quota-tray-slint`（分支 `spike/slint-demo`）。先读 `spike/HANDOFF.md`、`spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md` 与 `spike/p2/REPORT.md`。P0/P1/P2 都已完成，新壳代码在 `slint/`（crate `quota-tray-slint`）：面板已接 `quota-core` 真实数据、1–4 行模型、`ActiveTab` 持久化、夹取滚动，225% 下贴角漂移 0 px。下一步按 HANDOFF §5 做 P3：设置 / skills / menu 三个窗口（复用 `panel.slint` 的 `Metrics` 与 token，`settings.rs` 已有 `SettingsData` 落盘），不要在面板上继续加功能。
 
 ## 9. 待拍板
 
-- 新壳目录名：`slint/` 还是 `native/`。
+- ~~新壳目录名~~（**已定 2026-11-15：`slint/`**）。
 - 最终是否用 Slint 版替代 Tauri 版（决定 v2.0.0 的发布线怎么切）。
+- 三档 DPI 的真机验证：本机固定 225%，改缩放会动用户的桌面布局；用户已选「算术证明 + 现场 225%，100/150/200% 留人工检查单」。

@@ -1,0 +1,350 @@
+// Kimi pane — E layout (PLAN §3.1 / §5.1), rebuilt as stacked blocks.
+//
+// Block heights come from `Metrics` (measured off the shipped DOM): the same
+// constants feed `panel.slint`'s card-height expression, so what the layout
+// draws and what the window is sized to cannot disagree. Intra-block y values
+// keep the pixel-verified coordinates of spike/p0/ui/panel.slint.
+import { Tokens } from "tokens.slint";
+import { Txt, Lbl, Note, Bar, Hair, Metrics } from "primitives.slint";
+
+// One bare readout column (.field): label, 30/600 number + unit, 4px bar, note.
+component Field inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <float> pct;
+    in property <string> caption;
+    in property <bool> bad: false;
+
+    height: 105px;
+    background: transparent;
+
+    Lbl { x: 0; y: 10px; text: label; }
+    val := Txt {
+        x: 0;
+        y: 28px;
+        text: value;
+        font-size: 30px;
+        font-weight: 600;
+        letter-spacing: -0.3px;
+        color: bad ? Tokens.danger : Tokens.ink1;
+        box: 31.5px;
+    }
+    Txt {
+        x: val.x + val.width + 2px;
+        y: 39px;
+        text: "%";
+        font-size: 15px;
+        font-weight: 500;
+        color: bad ? Tokens.danger : Tokens.ink2;
+        box: 20px;
+    }
+    Bar { x: 0; y: 69px; width: parent.width; pct: pct; }
+    Note { x: 0; y: 80px; text: caption; }
+}
+
+// .quota: two columns 24px apart, then the block's 10px bottom margin.
+component QuotaBlock inherits Rectangle {
+    in property <string> week;
+    in property <float> week-pct;
+    in property <string> week-reset;
+    in property <string> five;
+    in property <float> five-pct;
+    in property <string> five-reset;
+
+    height: Metrics.quota-block;
+    background: transparent;
+
+    Field {
+        x: 0;
+        y: 0;
+        width: 157px;
+        label: "WEEKLY";
+        value: week;
+        pct: week-pct;
+        caption: week-reset;
+    }
+    Field {
+        x: 181px;
+        y: 0;
+        width: 157px;
+        label: "5-HOUR";
+        value: five;
+        pct: five-pct;
+        caption: five-reset;
+    }
+}
+
+// .quota.rule: the same two columns under a hairline; header padding + margin.
+component CacheBlock inherits Rectangle {
+    in property <string> week;
+    in property <float> week-pct;
+    in property <string> week-note;
+    in property <bool> week-bad;
+    in property <string> today;
+    in property <float> today-pct;
+    in property <string> today-note;
+    in property <bool> today-bad;
+
+    height: Metrics.cache-block;
+    background: transparent;
+
+    Hair { x: 0; y: 0; width: parent.width; }
+    Field {
+        x: 0;
+        y: 1px;
+        width: 157px;
+        label: "CACHE 7D · LOCAL";
+        value: week;
+        pct: week-pct;
+        caption: week-note;
+        bad: week-bad;
+    }
+    Field {
+        x: 181px;
+        y: 1px;
+        width: 157px;
+        label: "CACHE TODAY";
+        value: today;
+        pct: today-pct;
+        caption: today-note;
+        bad: today-bad;
+    }
+}
+
+// .row#kimi-speed: Decode + speed value, with the first-token note below.
+component DecodeRow inherits Rectangle {
+    in property <string> value;
+    in property <string> caption;
+
+    height: Metrics.decode-row;
+    background: transparent;
+
+    Hair { x: 0; y: 0; width: parent.width; }
+    Txt {
+        x: 0;
+        y: 11px;
+        text: "Decode";
+        font-size: 12px;
+        color: Tokens.ink2;
+        box: 16px;
+    }
+    Txt {
+        x: 0;
+        y: 10px;
+        width: parent.width;
+        text: value;
+        font-size: 13px;
+        font-weight: 500;
+        color: Tokens.ink2;
+        box: 17.5px;
+        horizontal-alignment: right;
+    }
+    Note { x: 0; y: 33.5px; text: caption; }
+}
+
+// .row#extra: Extra usage + the optional monthly bar block (.extra-meta).
+component ExtraRow inherits Rectangle {
+    in property <string> balance;
+    in property <bool> monthly: false;
+    in property <float> pct;
+    in property <string> caption;
+
+    height: Metrics.extra-row + (monthly ? Metrics.extra-monthly : 0px);
+    background: transparent;
+
+    Hair { x: 0; y: 0; width: parent.width; }
+    Txt {
+        x: 0;
+        y: 11px;
+        text: "Extra usage";
+        font-size: 12px;
+        color: Tokens.ink2;
+        box: 16px;
+    }
+    Txt {
+        x: 0;
+        y: 10px;
+        width: parent.width;
+        text: root.balance;
+        font-size: 13px;
+        font-weight: 500;
+        color: Tokens.ink2;
+        box: 17.5px;
+        horizontal-alignment: right;
+    }
+    Bar {
+        x: 0;
+        y: 36.5px;
+        width: parent.width;
+        pct: root.pct;
+        visible: root.monthly;
+    }
+    Note {
+        x: 0;
+        y: 46.5px;
+        text: root.caption;
+        visible: root.monthly;
+    }
+}
+
+// .row#version-row: CLI version, the Update chip, and a click target that
+// opens the releases page.
+component VersionRow inherits Rectangle {
+    in property <string> version;
+    in property <bool> badge;
+    callback activate();
+
+    height: Metrics.version-row;
+    background: transparent;
+
+    Hair { x: 0; y: 0; width: parent.width; }
+    Txt {
+        x: 0;
+        y: 11px;
+        text: "Kimi Code CLI";
+        font-size: 12px;
+        color: Tokens.ink2;
+        box: 16px;
+    }
+    Txt {
+        x: 0;
+        y: 10.14px;
+        width: parent.width - (badge ? 53.52px : 0px);
+        text: version;
+        font-size: 13px;
+        font-weight: 500;
+        color: Tokens.ink2;
+        box: 17px;
+        horizontal-alignment: right;
+    }
+    Rectangle {
+        x: parent.width - 47.52px;
+        y: 10.1px;
+        width: 47.52px;
+        height: 17.3px;
+        background: Tokens.tint;
+        border-radius: 4px;
+        visible: badge;
+        Text {
+            x: 8px;
+            y: 0;
+            width: 31.52px;
+            height: 17.3px;
+            text: "Update";
+            font-size: 9.5px;
+            font-weight: 500;
+            color: Tokens.accent-ink;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    TouchArea {
+        // Explicit geometry: a child without a position is centred by Slint,
+        // and a default-sized TouchArea must still cover the whole row.
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        clicked => { activate(); }
+    }
+}
+
+export component KimiPane inherits Rectangle {
+    in property <string> week: "--";
+    in property <float> week-pct: 0;
+    in property <string> week-reset: "";
+    in property <string> five: "--";
+    in property <float> five-pct: 0;
+    in property <string> five-reset: "";
+
+    in property <bool> has-cache: false;
+    in property <string> cache-week: "--";
+    in property <float> cache-week-pct: 0;
+    in property <string> cache-week-note: "";
+    in property <bool> cache-week-bad: false;
+    in property <string> cache-today: "--";
+    in property <float> cache-today-pct: 0;
+    in property <string> cache-today-note: "";
+    in property <bool> cache-today-bad: false;
+
+    in property <bool> has-speed: false;
+    in property <string> speed-value: "--";
+    in property <string> speed-note: "";
+
+    in property <string> extra-balance: "--";
+    in property <bool> extra-monthly: false;
+    in property <float> extra-pct: 0;
+    in property <string> extra-note: "";
+
+    in property <string> cli-version: "--";
+    in property <bool> update-badge: false;
+    callback open-releases();
+
+    background: transparent;
+
+    // Absolute stacking, not a layout: blocks are placed from the same
+    // `Metrics` constants `panel.slint` sums to size the window, so the layout
+    // and the reported height cannot drift. (A VerticalLayout with a repeater
+    // further up silently dropped the siblings after it — see
+    // spike/p2/REPORT.md.)
+    private property <length> inset: 14px;
+    private property <length> inner-w: self.width - 28px;
+    private property <length> cache-y: Metrics.quota-block;
+    private property <length> cache-h: has-cache ? Metrics.cache-block : 0px;
+    private property <length> decode-y: cache-y + cache-h;
+    private property <length> decode-h: has-speed ? Metrics.decode-row : 0px;
+    private property <length> extra-y: decode-y + decode-h;
+    private property <length> extra-h: Metrics.extra-row + (extra-monthly ? Metrics.extra-monthly : 0px);
+    private property <length> version-y: extra-y + extra-h;
+
+    QuotaBlock {
+        x: root.inset;
+        y: 0;
+        width: root.inner-w;
+        week: root.week;
+        week-pct: root.week-pct;
+        week-reset: root.week-reset;
+        five: root.five;
+        five-pct: root.five-pct;
+        five-reset: root.five-reset;
+    }
+    CacheBlock {
+        x: root.inset;
+        y: root.cache-y;
+        width: root.inner-w;
+        visible: root.has-cache;
+        week: root.cache-week;
+        week-pct: root.cache-week-pct;
+        week-note: root.cache-week-note;
+        week-bad: root.cache-week-bad;
+        today: root.cache-today;
+        today-pct: root.cache-today-pct;
+        today-note: root.cache-today-note;
+        today-bad: root.cache-today-bad;
+    }
+    DecodeRow {
+        x: root.inset;
+        y: root.decode-y;
+        width: root.inner-w;
+        visible: root.has-speed;
+        value: root.speed-value;
+        caption: root.speed-note;
+    }
+    ExtraRow {
+        x: root.inset;
+        y: root.extra-y;
+        width: root.inner-w;
+        balance: root.extra-balance;
+        monthly: root.extra-monthly;
+        pct: root.extra-pct;
+        caption: root.extra-note;
+    }
+    VersionRow {
+        x: root.inset;
+        y: root.version-y;
+        width: root.inner-w;
+        version: root.cli-version;
+        badge: root.update-badge;
+        activate => { root.open-releases(); }
+    }
+}

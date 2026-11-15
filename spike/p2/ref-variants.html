@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Quota Tray — height reference</title>
+<style>
+/* Quota Tray — shared tokens and window chrome.
+   Single source of colour/type primitives; the layout files (main.css,
+   settings.css, skills.css, menu.css) only place them.
+   Token table: PLAN.md section 3.2. Visual reference: demo/panel-demo-e.html. */
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --paper: #fbfaf9;
+  --ink-1: #000000e6;
+  --ink-2: #00000099;
+  --ink-3: #0000004d;
+  --hair: #00000021;
+  --hair-soft: #00000012;
+  --accent: #8c74b1;
+  --accent-bar: #7d61a6;
+  --accent-ink: #6c5293;
+  /* 18%: matches the dark badge's lift off the paper (~1.22:1); 10% read as
+     washed out next to it. Ink on this fill is 5.04:1. */
+  --tint: #8c74b12e;
+  --seg-track: #f1f0ec;
+  --seg-on: #ffffff;
+  /* the selected cell is ringed with the accent: fill alone was 1.14:1
+     against the track, under WCAG 1.4.11's 3:1 for a state cue */
+  --seg-ring: #7d61a6;
+  --danger: #b42318;
+  --shadow: 0 8px 18px #0000001f;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --paper: #181817;
+  --ink-1: #ffffffd6;
+  --ink-2: #ffffff8f;
+  --ink-3: #ffffff42;
+  --hair: #ffffff1f;
+  --hair-soft: #ffffff12;
+  --accent: #9d88bc;
+  --accent-bar: #9d88bc;
+  --accent-ink: #b5abc4;
+  --tint: #9d88bc26;
+  --seg-track: #262624;
+  --seg-on: #3a3a37;
+  --seg-ring: #9d88bc;
+  --danger: #ff6b6b;
+  --shadow: 0 8px 18px #00000059;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    'PingFang SC',
+    'Microsoft YaHei UI',
+    'Microsoft YaHei',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-1);
+}
+
+/* Window shell: the CSS paints the card (radius, hairline, shadow) on a
+   transparent window; Rust opts every window out of DWM auto-rounding.
+   The 28px margin is shadow fade room, not layout. */
+#root {
+  margin: 28px;
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* ---------- header: wordmark + right-aligned meta/close ---------- */
+.hdr {
+  padding: 12px 14px 0;
+}
+.hdr-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.brand {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-1);
+  white-space: nowrap;
+}
+.stamp {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.stamp.bad {
+  color: var(--danger);
+}
+
+.pane {
+  padding: 0 14px;
+}
+
+/* ---------- type primitives ---------- */
+.label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  line-height: 1.2;
+}
+
+.note {
+  margin-top: 7px;
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+/* ---------- readout field ---------- */
+.quota {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 10px;
+}
+.field {
+  padding: 10px 0 11px;
+}
+.num {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  margin-top: 6px;
+}
+.num b {
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+.num .unit {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.num.is-danger b,
+.num.is-danger .unit {
+  color: var(--danger);
+}
+
+/* ---------- progress bar: 4px capsule ---------- */
+.bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hair-soft);
+  margin-top: 9px;
+  overflow: hidden;
+}
+.bar > i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent-bar);
+  transition: width 200ms ease;
+}
+
+/* ---------- hairline rows ---------- */
+.row {
+  border-top: 1px solid var(--hair);
+  padding: 9px 0;
+}
+.pane > .row:last-child {
+  padding-bottom: 10px;
+}
+.row-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.row-label {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.row-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.row-value.muted {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.row-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- chip (tag) ---------- */
+.badge {
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--accent-ink);
+  background: var(--tint);
+  border-radius: 4px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* ---------- segmented control (equal cells, hairline ring on the active one) ---------- */
+.seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--seg-track);
+  border-radius: 12px;
+}
+.seg label {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+.seg input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.seg .seg-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.seg .seg-item:hover {
+  color: var(--ink-1);
+}
+.seg input:checked + .seg-item {
+  background: var(--seg-on);
+  color: var(--ink-1);
+  font-weight: 500;
+  box-shadow: inset 0 0 0 1px var(--seg-ring);
+}
+.seg input:focus-visible + .seg-item {
+  outline: 2px solid var(--accent-bar);
+  outline-offset: 1px;
+}
+
+/* ---------- ghost button (footer actions, form actions) ---------- */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 34px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-1);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.btn:hover {
+  background: var(--seg-track);
+}
+
+/* ---------- window close (settings / skills title bar) ---------- */
+.chrome-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin-right: -4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.chrome-close:hover {
+  background: var(--seg-track);
+  color: var(--ink-1);
+}
+
+/* ---------- focus ---------- */
+:focus-visible {
+  outline: 2px solid var(--accent-bar);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Main panel — E layout (PLAN.md §3.1 / demo/panel-demo-e.html).
+   Shared tokens and primitives live in theme.css; this file only adds the
+   panel-only pieces: the show/hide animation, the provider tab placement, the
+   DeepSeek pane, the Extra-usage sub-block and the ghost footer grid. */
+
+/* Show/hide animation (PLAN §3.6): initial state is faded out, 16px down. */
+#root {
+  opacity: 0;
+  transform: translateY(16px);
+}
+body.enter #root {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 160ms linear,
+    transform 220ms cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+body.leave #root {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 130ms linear,
+    transform 160ms cubic-bezier(0.55, 0.055, 0.675, 0.19);
+}
+
+/* Provider tab: the shared .seg component (theme.css), panel margins only
+   (PLAN §3.4: 10 0 12). The accent ring on the active cell comes with it. */
+.seg.provider {
+  margin: 10px 0 12px;
+}
+
+/* Tab switch (PLAN §3.6): both panes share one clipped, relatively positioned
+   cell, and only that cell's height is animated (main.ts, WinUI page-refresh
+   timings). The leaving pane is lifted out of flow so the incoming pane alone
+   decides the measured height — stacking two in-flow panes would measure the
+   taller one and mis-size the bottom-anchored window. */
+.panes {
+  position: relative;
+  overflow: hidden;
+}
+.pane.pane-leaving {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+}
+
+/* `.panes` is a BFC (overflow:hidden), so its height includes the LAST child's
+   bottom margin, while `.pane` — a plain block — would let that margin collapse
+   out of its own offsetHeight. `flow-root` makes the pane a BFC too, so the
+   pinned height, `cardHeight()` and the animated end keyframe all measure the
+   same box. No pane's last child has a margin today (the last row carries its
+   bottom padding instead, PLAN §3.4); this keeps a future one from silently
+   clipping the last row by its margin. */
+.panes > .pane {
+  display: flow-root;
+}
+
+/* The card is anchored to the WINDOW's bottom edge, not its top (PLAN §3.6):
+   a tab switch pre-sizes the window to the taller pane while the card itself
+   grows from the bottom, so a window that is briefly taller than the content
+   can never leave the card floating above the tray corner. Steady state is
+   unchanged — the window is always card + 2 x 28px, which both anchors place
+   identically. `margin: 0` is required: the 28px inset replaces the 28px
+   margin, otherwise the card would lose another 56px of width. */
+body.panel > #root {
+  position: absolute;
+  inset: auto 28px 28px;
+  margin: 0;
+}
+
+/* Bottom anchoring moves the clamp clip to the card's TOP (panel.rs caps the
+   window at the work area), so without a cap the header and the provider tab
+   would be the first things lost — and losing the tab locks the user on the tab
+   they cannot leave. `main.ts` marks the card `.clamped` when the reported
+   content is taller than the live viewport, and it scrolls itself then, like the
+   settings sheet. Deliberately not a CSS-only `100vh` cap: at e.g. 125% the
+   rounded window can come out 0.4px shorter than its content, which would park
+   a scrollbar in a card that fits. */
+body.panel > #root.clamped {
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+}
+body.panel > #root::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+body.panel > #root::-webkit-scrollbar-track {
+  background: transparent;
+}
+body.panel > #root::-webkit-scrollbar-thumb {
+  background: var(--hair);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+body.panel > #root:hover::-webkit-scrollbar-thumb {
+  background: var(--ink-3);
+  background-clip: padding-box;
+}
+
+/* Cache block (PLAN §5.1): a second readout row, separated from the quota one by
+   the same hairline the rows use. Both columns are percentages, so both bars
+   mean the same thing. */
+.quota.rule {
+  border-top: 1px solid var(--hair);
+}
+.note.tight {
+  margin-top: 6px;
+}
+
+/* Extra usage sub-block (monthly bar + caption) */
+.extra-meta {
+  margin-top: 8px;
+}
+.extra-note {
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+/* CLI row opens the releases page */
+#version-row {
+  cursor: pointer;
+}
+#version-row:hover .row-label {
+  color: var(--ink-1);
+}
+
+/* ---------- DeepSeek pane (PLAN §3.1 / §3.5) ---------- */
+.balance {
+  padding: 2px 0 10px;
+}
+.status {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.status.bad {
+  color: var(--danger);
+}
+
+.mrows {
+  border-top: 1px solid var(--hair);
+}
+.mrow {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.mrow:last-child {
+  border-bottom: 0;
+}
+.mrow-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+/* The official name can be longer than anything hand-written, so it ellipses
+   inside the row; the amount stays whole (PLAN §3.4). */
+.mname {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-1);
+}
+.mcost {
+  flex: none;
+  font-size: 15px;
+  font-weight: 600;
+}
+.meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+.meta > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar.share {
+  height: 3px;
+  margin-top: 8px;
+}
+.hit.is-bad {
+  color: var(--danger);
+}
+
+.total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--hair);
+  padding: 8px 0 10px;
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+/* Replaces the model rows when usage is missing or empty; carries its own
+   bottom padding so it can close the pane on its own (PLAN §3.4). */
+.hint {
+  border-top: 1px solid var(--hair);
+  padding: 10px 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.hint.bad {
+  color: var(--danger);
+}
+
+/* Footer: grid of four equal ghost actions */
+.actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  border-top: 1px solid var(--hair);
+  padding: 5px;
+}
+.act {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 42px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.act:hover {
+  background: var(--seg-track);
+  color: var(--ink-1);
+}
+.act svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  fill: currentColor;
+}
+
+/* reference only: a neutral stage and a top-pinned card. `height: 100%` keeps
+   the absolutely positioned card inside the body's box — with a zero-height
+   body, `overflow: hidden` clips the card and the screenshot comes out blank
+   (the DOM still reports its rect, so only the pixels expose it). */
+html, body { background: #e7e7e4; height: 100%; }
+body.panel { width: 424px; position: relative; }
+body.panel > #root { top: 28px; bottom: auto; }
+</style>
+</head>
+<body class="panel">
+
+    <div id="root">
+      <!-- Header (PLAN §3.1): wordmark + last-updated stamp, then the provider
+           tab. The control is the shared .seg component from theme.css — the
+           same one the settings window uses, so the accent ring appears here
+           for free (PLAN §3.4). -->
+      <div class="hdr">
+        <div class="hdr-top">
+          <span class="brand">Quota Tray</span>
+          <span class="stamp" id="last-updated"></span>
+        </div>
+        <div class="seg provider" role="radiogroup" aria-label="Provider">
+          <label>
+            <input type="radio" name="provider" value="kimi" checked />
+            <span class="seg-item">Kimi</span>
+          </label>
+          <label>
+            <input type="radio" name="provider" value="deepseek" />
+            <span class="seg-item">DeepSeek</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Both provider panes share one relatively positioned cell, so only the
+           tab on screen decides the card's height; main.ts animates that cell
+           while the outgoing pane is lifted out of flow (PLAN §3.6). -->
+      <div class="panes">
+        <section class="pane" id="pane-kimi">
+          <!-- Two bare readout columns -->
+          <div class="quota">
+            <div class="field">
+              <div class="label">Weekly</div>
+              <div class="num"><b id="week-pct">--</b><span class="unit">%</span></div>
+              <div class="bar"><i id="week-fill"></i></div>
+              <div class="note" id="week-reset"></div>
+            </div>
+            <div class="field">
+              <div class="label">5-hour</div>
+              <div class="num"><b id="five-pct">--</b><span class="unit">%</span></div>
+              <div class="bar"><i id="five-fill"></i></div>
+              <div class="note" id="five-reset"></div>
+            </div>
+          </div>
+
+          <!-- Cache / decode block (PLAN §5.1, demo/ui-demo.html): read from the
+               local CLI session logs, so it is labelled `local` and appears only
+               once the first scan has numbers. -->
+          <div class="quota rule" id="kimi-cache" hidden>
+            <div class="field">
+              <div class="label">Cache 7d · local</div>
+              <div class="num" id="cache-week-num"><b id="cache-week">--</b><span class="unit">%</span></div>
+              <div class="bar"><i id="cache-week-fill"></i></div>
+              <div class="note" id="cache-week-note"></div>
+            </div>
+            <div class="field">
+              <div class="label">Cache today</div>
+              <div class="num" id="cache-today-num"><b id="cache-today">--</b><span class="unit">%</span></div>
+              <div class="bar"><i id="cache-today-fill"></i></div>
+              <div class="note" id="cache-today-note"></div>
+            </div>
+          </div>
+
+          <div class="row" id="kimi-speed" hidden>
+            <div class="row-main">
+              <span class="row-label">Decode</span>
+              <span class="row-value muted" id="speed-value">--</span>
+            </div>
+            <div class="note tight" id="speed-note"></div>
+          </div>
+
+          <!-- Extra usage row -->
+          <div class="row">
+            <div class="row-main">
+              <span class="row-label">Extra usage</span>
+              <span class="row-value muted" id="extra-balance">--</span>
+            </div>
+            <div class="extra-meta" id="extra-monthly" hidden>
+              <div class="bar"><i id="extra-fill"></i></div>
+              <div class="extra-note" id="extra-monthly-text"></div>
+            </div>
+          </div>
+
+          <!-- CLI version row -->
+          <div class="row" id="version-row" title="View Kimi Code releases">
+            <div class="row-main">
+              <span class="row-label">Kimi Code CLI</span>
+              <span class="row-side">
+                <span class="row-value muted" id="cli-version">--</span>
+                <span class="badge" id="badge" hidden>Update</span>
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <!-- DeepSeek tab (PLAN §3.1): balance block, one row per model, total row.
+             The model list arrives already filtered and capped at four, so this
+             pane draws `byModel` as-is. A usage failure replaces the rows with a
+             hint line; the balance block keeps its own status either way. -->
+        <section class="pane" id="pane-deepseek" hidden>
+          <div class="balance">
+            <div class="row-main">
+              <span class="label">Balance</span>
+              <span class="status" id="ds-status"></span>
+            </div>
+            <div class="num" id="ds-total-num"><b id="ds-total">--</b></div>
+            <div class="note" id="ds-detail" hidden></div>
+          </div>
+          <div class="mrows" id="ds-models"></div>
+          <div class="total" id="ds-summary" hidden>
+            <span id="ds-sum"></span>
+            <span id="ds-sum-today"></span>
+          </div>
+        </section>
+      </div>
+
+      <!-- Footer: four ghost actions -->
+      <footer class="actions">
+        <button class="act" id="btn-console" title="Open Kimi Code Console">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.3994 12.4863C12.396 10.8789 14.2659 9.99419 15.5068 11.0156L21.3887 15.8594C22.6251 16.8787 22.1145 18.8522 20.5918 19.1816L20.4404 19.207L17.6953 19.5889C17.6853 19.5903 17.675 19.5934 17.666 19.5977L17.6416 19.6143L15.6055 21.4961L15.4902 21.5957C14.3092 22.5333 12.5401 21.7604 12.4238 20.2568L12.417 20.1045L12.3994 12.4863ZM14.2568 12.3916C14.2298 12.4044 14.2145 12.4205 14.209 12.4287C14.2068 12.4321 14.2055 12.4358 14.2041 12.4404C14.2028 12.4447 14.1992 12.4578 14.1992 12.4824L14.2168 20.0996L14.2227 20.1445C14.2241 20.149 14.2254 20.1522 14.2275 20.1553C14.2329 20.1629 14.2486 20.1788 14.2773 20.1914C14.3063 20.204 14.329 20.2044 14.3379 20.2031C14.3414 20.2026 14.3446 20.2011 14.3486 20.1992C14.3527 20.1972 14.3649 20.1912 14.3838 20.1738L16.4199 18.292L16.5156 18.2041L16.623 18.1299L16.6475 18.1133L16.7646 18.0342L16.8916 17.9727C17.104 17.8715 17.3 17.827 17.4443 17.8066H17.4473L20.1475 17.4307L20.2217 17.417C20.231 17.4143 20.2373 17.4141 20.2393 17.4131C20.2419 17.4115 20.2448 17.4086 20.248 17.4053C20.2562 17.3968 20.27 17.378 20.2773 17.3486C20.2846 17.3193 20.2817 17.298 20.2793 17.29C20.2783 17.2869 20.2761 17.2833 20.2734 17.2793C20.2707 17.2752 20.2631 17.2637 20.2441 17.248V17.249L14.3623 12.4053C14.3434 12.3898 14.3313 12.3836 14.3271 12.3818C14.323 12.3802 14.3192 12.3793 14.3154 12.3789C14.3054 12.378 14.2834 12.3791 14.2568 12.3916ZM18.6797 2.00488C20.5292 2.09842 22 3.62727 22 5.5L21.9951 13H20.2002V9H3.7998V16C3.7998 16.9389 4.56112 17.7002 5.5 17.7002H11V19.5H5.5L5.32031 19.4951C3.53035 19.4046 2.09541 17.9697 2.00488 16.1797L2 16V5.5C2 3.62727 3.47083 2.09842 5.32031 2.00488L5.5 2H18.5L18.6797 2.00488ZM5.5 3.7998C4.61979 3.7998 3.89565 4.46893 3.80859 5.32617L3.7998 5.5V7.2002H20.2002V5.5C20.2002 4.61979 19.5311 3.89565 18.6738 3.80859L18.5 3.7998H5.5ZM7.3916 4.60449C7.84564 4.65038 8.2002 5.03386 8.2002 5.5C8.2002 5.96614 7.84564 6.34962 7.3916 6.39551L7.2998 6.40039H5.5C5.00294 6.40039 4.59961 5.99706 4.59961 5.5C4.59961 5.00294 5.00294 4.59961 5.5 4.59961H7.2998L7.3916 4.60449Z" fill="currentColor"/></svg>
+          <span>Console</span>
+        </button>
+        <button class="act" id="btn-refresh">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.88048 6.89231C9.69226 4.08054 14.251 4.08054 17.0628 6.89231L16.2364 7.71871C15.7324 8.22268 16.0894 9.0844 16.8021 9.0844H19.7276C20.1694 9.0844 20.5276 8.72623 20.5276 8.2844V5.35891C20.5276 4.64619 19.6659 4.28926 19.1619 4.79323L18.3356 5.61952C14.8209 2.1048 9.12241 2.1048 5.60769 5.61952C2.09297 9.13424 2.09297 14.8327 5.60769 18.3474C9.12241 21.8622 14.8209 21.8622 18.3356 18.3474C19.4929 17.1902 20.2703 15.7937 20.6655 14.3163C20.7939 13.8361 20.5087 13.3428 20.0285 13.2143C19.5483 13.0859 19.055 13.3711 18.9266 13.8513C18.611 15.0314 17.9906 16.1469 17.0628 17.0746C14.251 19.8864 9.69226 19.8864 6.88048 17.0746C4.06871 14.2629 4.06871 9.70409 6.88048 6.89231Z" fill="currentColor"/></svg>
+          <span>Refresh</span>
+        </button>
+        <button class="act" id="btn-settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.0404 12C16.0404 9.76874 14.2313 7.9596 12.0001 7.9596C9.76883 7.9596 7.95972 9.76874 7.95972 12C7.95972 14.2313 9.76883 16.0404 12.0001 16.0404C14.2313 16.0404 16.0404 14.2313 16.0404 12ZM14.2222 12C14.2222 13.2271 13.2271 14.2222 12 14.2222C10.7729 14.2222 9.77783 13.2271 9.77783 12C9.77783 10.7729 10.7729 9.77778 12 9.77778C13.2271 9.77778 14.2222 10.7729 14.2222 12Z" fill="currentColor"/><path d="M9.91145 21.8009C9.29001 21.6797 8.76914 21.2612 8.50632 20.6922L8.07372 19.7556C7.88838 19.3544 7.43553 19.1048 6.95371 19.1549L5.89572 19.2647C5.2733 19.3293 4.64823 19.114 4.22298 18.6611C3.74343 18.1504 3.32454 17.6037 2.97033 17.0181C2.61571 16.4318 2.32839 15.8106 2.10407 15.1566C1.89769 14.5549 2.02148 13.8954 2.4089 13.3902L3.0376 12.5704C3.30043 12.2277 3.30042 11.7722 3.03758 11.4295L2.40413 10.6035C2.01474 10.0958 1.891 9.43198 2.10208 8.82826C2.55037 7.54612 3.27017 6.35997 4.22 5.34259C4.64518 4.8872 5.27275 4.67067 5.89701 4.73544L6.95383 4.84514C7.43561 4.89515 7.88844 4.6456 8.07377 4.24441L8.50266 3.31593C8.76494 2.74818 9.28448 2.33019 9.90423 2.20761C11.2916 1.9332 12.7148 1.93127 14.0885 2.19913C14.7099 2.32029 15.2308 2.73881 15.4937 3.3078L15.9263 4.24441C16.1116 4.6456 16.5644 4.89514 17.0462 4.84514L18.1043 4.73532C18.7267 4.67072 19.3518 4.88603 19.777 5.33886C20.2566 5.84953 20.6755 6.3963 21.0297 6.98193C21.3843 7.56823 21.6716 8.18942 21.8959 8.84339C22.1023 9.44509 21.9785 10.1046 21.5911 10.6098L20.9624 11.4295C20.6996 11.7722 20.6996 12.2278 20.9624 12.5705L21.5959 13.3964C21.9853 13.9042 22.109 14.568 21.8979 15.1717C21.4497 16.4538 20.7299 17.6399 19.7801 18.6573C19.3549 19.1128 18.7273 19.3294 18.103 19.2646L17.0462 19.1549C16.5645 19.1049 16.1116 19.3544 15.9263 19.7556L15.4974 20.6841C15.2351 21.2518 14.7156 21.6698 14.0958 21.7924C12.7083 22.0668 11.2852 22.0687 9.91145 21.8009ZM13.7432 20.0088C13.7844 20.0006 13.8259 19.9673 13.847 19.9216L14.2758 18.9931C14.7915 17.8768 15.9886 17.2171 17.2341 17.3464L18.2909 17.4561C18.3649 17.4638 18.4272 17.4423 18.4512 17.4166C19.2296 16.5828 19.8171 15.6146 20.1817 14.5716C20.1845 14.5636 20.1796 14.5373 20.1532 14.5029L19.5198 13.677C18.7564 12.6815 18.7564 11.3185 19.5198 10.323L20.1485 9.5033C20.1746 9.46927 20.1795 9.4429 20.1762 9.43327C19.9932 8.89965 19.7603 8.39623 19.4741 7.92293C19.1873 7.4489 18.846 7.00333 18.4517 6.58351C18.4272 6.55739 18.3656 6.53616 18.2921 6.54378L17.234 6.65361C15.9886 6.78287 14.7915 6.12317 14.2758 5.00689L13.8432 4.07027C13.822 4.02448 13.7811 3.9916 13.7406 3.98371C12.5983 3.76097 11.4132 3.76258 10.2571 3.99124C10.2158 3.99941 10.1744 4.03271 10.1533 4.07842L9.72441 5.00689C9.20875 6.12317 8.01164 6.7829 6.76619 6.6536L5.70942 6.54391C5.63535 6.53623 5.573 6.55774 5.54905 6.5834C4.77067 7.41713 4.18312 8.38534 3.81845 9.42835C3.81564 9.43637 3.82054 9.46265 3.84693 9.49706L4.48038 10.323C5.24381 11.3185 5.24383 12.6815 4.48041 13.6769L3.85171 14.4967C3.82561 14.5307 3.82066 14.5571 3.82396 14.5667C4.00701 15.1004 4.23986 15.6038 4.52613 16.0771C4.81284 16.5511 5.15421 16.9967 5.54845 17.4165C5.57298 17.4426 5.63461 17.4638 5.70811 17.4562L6.76608 17.3464C8.01157 17.2171 9.20871 17.8768 9.72438 18.9932L10.157 19.9297C10.1781 19.9755 10.2191 20.0084 10.2595 20.0163C11.4018 20.239 12.587 20.2374 13.7432 20.0088Z" fill="currentColor"/></svg>
+          <span>Settings</span>
+        </button>
+        <button class="act" id="btn-exit">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2.5h2a1 1 0 0 1 1 1V10a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1ZM8.02 6.07A8 8 0 1 0 15.98 6.07l-1.5 1.73A6 6 0 1 1 9.52 7.8Z" fill="currentColor"/></svg>
+          <span>Exit</span>
+        </button>
+      </footer>
+    </div>
+    
+  
+
+<script>
+(function () {
+  const params = new URLSearchParams(location.search);
+  const variant = params.get('variant') || 'kimi-full';
+  document.documentElement.dataset.theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+  document.body.classList.add('enter');
+
+  const $ = (id) => document.getElementById(id);
+  const money = (yuan) => '\u00a5' + yuan.toFixed(2);
+  const count = (n) => n.toLocaleString('en-US');
+  const tokens = (n) => (n >= 1e6 ? (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M'
+    : n >= 1e3 ? (n / 1e3).toFixed(1).replace(/\.?0+$/, '') + 'K' : String(n));
+
+  const showTab = (tab) => {
+    const ds = tab === 'ds';
+    $('pane-kimi').hidden = ds;
+    $('pane-deepseek').hidden = !ds;
+    document.querySelector('input[name="provider"][value="' + (ds ? 'deepseek' : 'kimi') + '"]').checked = true;
+    $('last-updated').textContent = ds ? 'Updated 16:31' : 'Updated 16:42';
+  };
+
+  const paintKimi = (o) => {
+    $('week-pct').textContent = o.week;
+    $('week-fill').style.width = o.week + '%';
+    $('week-reset').textContent = o.weekReset;
+    $('five-pct').textContent = o.five;
+    $('five-fill').style.width = o.five + '%';
+    $('five-reset').textContent = o.fiveReset;
+    $('kimi-cache').hidden = !o.cache;
+    $('kimi-speed').hidden = !o.speed;
+    if (o.cache) {
+      $('cache-week').textContent = '99.5';
+      $('cache-week-fill').style.width = '99.5%';
+      $('cache-week-note').textContent = count(3169) + ' requests';
+      $('cache-today').textContent = '99.7';
+      $('cache-today-fill').style.width = '99.7%';
+      $('cache-today-note').textContent = count(807) + ' requests';
+    }
+    if (o.speed) {
+      $('speed-value').textContent = '135.8 tok/s';
+      $('speed-note').textContent = 'First token 1.04 s \u00b7 ' + count(3166) + ' calls';
+    }
+    $('extra-balance').textContent = o.extra;
+    $('extra-monthly').hidden = !o.monthly;
+    if (o.monthly) {
+      $('extra-fill').style.width = '45%';
+      $('extra-monthly-text').textContent = 'Used ' + money(0.45) + ' this month / ' + money(1) + ' limit';
+    }
+    $('cli-version').textContent = o.cli;
+    $('badge').hidden = !o.badge;
+  };
+
+  const paintDs = (o) => {
+    $('ds-status').textContent = o.status;
+    $('ds-status').classList.toggle('bad', !!o.statusBad);
+    $('ds-total').textContent = o.total;
+    $('ds-total-num').classList.toggle('is-danger', !!o.totalBad);
+    $('ds-detail').hidden = !o.detail;
+    $('ds-detail').textContent = o.detail || '';
+    const list = $('ds-models');
+    const summary = $('ds-summary');
+    list.replaceChildren();
+    if (o.models && o.models.length) {
+      const maxTokens = o.models[0][1];
+      for (const [name, monthTokens, monthCost, hitRate, todayCost] of o.models) {
+        const row = document.createElement('div');
+        row.className = 'mrow';
+        const main = document.createElement('div');
+        main.className = 'mrow-main';
+        const label = document.createElement('span');
+        label.className = 'mname';
+        label.textContent = name;
+        const cost = document.createElement('span');
+        cost.className = 'mcost';
+        cost.textContent = money(monthCost);
+        main.append(label, cost);
+        const bar = document.createElement('div');
+        bar.className = 'bar share';
+        const fill = document.createElement('i');
+        fill.style.width = Math.min(100, (monthTokens / maxTokens) * 100) + '%';
+        bar.append(fill);
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const used = document.createElement('span');
+        used.textContent = tokens(monthTokens) + ' tok \u00b7 ';
+        const hit = document.createElement('span');
+        hit.className = hitRate != null && hitRate < 60 ? 'hit is-bad' : 'hit';
+        hit.textContent = hitRate == null ? 'cache --' : 'cache ' + String(hitRate).replace(/\.0$/, '') + '%';
+        used.append(hit);
+        const today = document.createElement('span');
+        today.textContent = 'today ' + money(todayCost);
+        meta.append(used, today);
+        row.append(main, bar, meta);
+        list.append(row);
+      }
+      list.className = 'mrows';
+      list.hidden = false;
+      $('ds-sum').textContent = 'This month ' + money(o.monthCost) + ' \u00b7 ' + tokens(o.monthTokens) + ' tok';
+      $('ds-sum-today').textContent = 'today ' + money(o.todayCost);
+      summary.hidden = false;
+    } else if (o.hint) {
+      list.className = 'hint' + (o.hintBad ? ' bad' : '');
+      list.textContent = o.hint;
+      list.hidden = false;
+      summary.hidden = true;
+    } else {
+      list.hidden = true;
+      summary.hidden = true;
+    }
+  };
+
+  const KIMI_FULL = {
+    week: '12', weekReset: 'Resets in 2d 18h', five: '31', fiveReset: 'Resets in 3h 33m',
+    cache: true, speed: true, extra: 'No data', monthly: false, cli: '0.39.1', badge: true,
+  };
+  const MODELS = {
+    4: [
+      ['DeepSeek-V4.1-Flash', 665797039, 28.50316864, 99.6, 4.531104],
+      ['DeepSeek-V4.1-Pro', 184200311, 12.88204117, 71.3, 1.902244],
+      ['DeepSeek-V3.2', 41203311, 2.13409922, 58.4, 0.301188],
+      ['DeepSeek-V4.1-Reasoner-Pro-Max-Extended', 9033112, 0.88201133, null, 0.112004],
+    ],
+    3: [
+      ['DeepSeek-V4.1-Flash', 665797039, 28.50316864, 99.6, 4.531104],
+      ['DeepSeek-V4.1-Pro', 184200311, 12.88204117, 71.3, 1.902244],
+      ['DeepSeek-V3.2', 41203311, 2.13409922, 58.4, 0.301188],
+    ],
+    2: [
+      ['DeepSeek-V4.1-Flash', 665797039, 28.50316864, 99.6, 4.531104],
+      ['DeepSeek-V4.1-Pro', 184200311, 12.88204117, 71.3, 1.902244],
+    ],
+    1: [
+      ['DeepSeek-V4.1-Flash', 665797039, 28.50316864, 99.6, 4.531104],
+    ],
+  };
+  const dsRows = (n) => ({
+    status: 'Available', total: money(45.44), detail: 'Granted ' + money(0) + ' \u00b7 Topped up ' + money(45.44),
+    models: MODELS[n], monthCost: 44.4, monthTokens: 897000000, todayCost: 6.85,
+  });
+
+  const VARIANTS = {
+    'kimi-full': ['kimi', KIMI_FULL],
+    'kimi-nocache': ['kimi', Object.assign({}, KIMI_FULL, { cache: false, speed: false })],
+    'kimi-cache-only': ['kimi', Object.assign({}, KIMI_FULL, { speed: false })],
+    'kimi-extra-monthly': ['kimi', Object.assign({}, KIMI_FULL, { extra: money(45.44), monthly: true })],
+    'kimi-not-activated': ['kimi', Object.assign({}, KIMI_FULL, { extra: 'Not activated' })],
+    'kimi-no-badge': ['kimi', Object.assign({}, KIMI_FULL, { badge: false })],
+    'ds-4': ['ds', dsRows(4)],
+    'ds-3': ['ds', dsRows(3)],
+    'ds-2': ['ds', dsRows(2)],
+    'ds-1': ['ds', dsRows(1)],
+    'ds-hint': ['ds', {
+      status: 'Available', total: money(45.44), detail: 'Granted ' + money(0) + ' \u00b7 Topped up ' + money(45.44),
+      hint: 'Usage token expired \u2014 sign in again to sync', hintBad: true,
+    }],
+    'ds-hint-short': ['ds', {
+      status: 'Available', total: money(45.44), detail: 'Granted ' + money(0) + ' \u00b7 Topped up ' + money(45.44),
+      hint: 'Usage token not configured',
+    }],
+    'ds-hint-rate': ['ds', {
+      status: 'Available', total: money(45.44), detail: 'Granted ' + money(0) + ' \u00b7 Topped up ' + money(45.44),
+      hint: 'Usage was rate limited \u2014 retrying in 30s',
+    }],
+    'ds-hint-empty': ['ds', {
+      status: 'Available', total: money(45.44), detail: 'Granted ' + money(0) + ' \u00b7 Topped up ' + money(45.44),
+      hint: 'No usage data this month',
+    }],
+    'ds-balance-only': ['ds', { status: 'Available', total: money(45.44),
+      detail: 'Granted ' + money(0) + ' \u00b7 Topped up ' + money(45.44) }],
+    'ds-nokey': ['ds', { status: 'Not configured', statusBad: true, total: '--', totalBad: true,
+      detail: 'API key not set', hint: 'Usage token not configured' }],
+    'ds-failed': ['ds', { status: 'Fetch failed', statusBad: true, total: '--', totalBad: true,
+      hint: 'Usage fetch failed \u2014 retrying in 30s', hintBad: true }],
+  };
+
+  const [tab, data] = VARIANTS[variant] || VARIANTS['kimi-full'];
+  showTab(tab);
+  if (tab === 'ds') paintDs(data); else paintKimi(data);
+
+  // Card pinned to the top (not bottom): the height is font dependent, and a
+  // bottom-anchored card would move every child by whatever the two engine
+  // runs disagree on. Heights are unaffected; only the offsets are stable.
+  const card = document.getElementById('root');
+  const hint = document.getElementById('ds-models');
+  const reading = {
+    card: Math.round(card.getBoundingClientRect().height * 100) / 100,
+    hint: hint.classList.contains('hint') ? Math.round(hint.getBoundingClientRect().height * 100) / 100 : null,
+    hintLines: hint.classList.contains('hint')
+      ? Math.round(hint.getBoundingClientRect().height / 16.5) : null,
+  };
+  const pre = document.createElement('pre');
+  pre.id = 'heights';
+  pre.style.display = 'none';
+  pre.textContent = JSON.stringify(reading);
+  document.body.append(pre);
+})();
+</script>
+
+</body>
+</html>

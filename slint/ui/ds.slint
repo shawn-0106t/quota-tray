@@ -1,0 +1,245 @@
+// DeepSeek pane — balance block, 0-4 model rows, total row or one hint line
+// (PLAN §3.1 / §5.2). The model list arrives already filtered and capped by the
+// backend, so this pane draws `models` as-is.
+//
+// Every block's height is a `Metrics` constant; `panel.slint` sums the same
+// constants (gated on the same visibility flags) to size the window, so the
+// 1-4 rows case needs no hand-maintained height table.
+import { Tokens } from "tokens.slint";
+import { Txt, Lbl, Note, Bar, Hair, HintText, Metrics } from "primitives.slint";
+
+export struct ModelRow {
+    name: string,
+    cost: string,
+    // 0..1 of the group max, drawn as the token-share bar (PLAN §5.2)
+    share: float,
+    tokens: string,
+    // "cache 99.6%" / "cache --"
+    hit: string,
+    hit-bad: bool,
+    // "today ¥4.53"
+    today: string,
+}
+
+// .balance: BALANCE + status, the 30/600 amount, the granted/topped-up note.
+component BalanceBlock inherits Rectangle {
+    in property <string> status;
+    in property <bool> status-bad: false;
+    in property <string> total;
+    in property <bool> total-bad: false;
+    in property <string> detail;
+
+    height: Metrics.balance-block + (detail != "" ? Metrics.balance-detail : 0px);
+    background: transparent;
+
+    Lbl { x: 0; y: 4px; text: "BALANCE"; }
+    Txt {
+        x: 0;
+        y: 2px;
+        width: parent.width;
+        text: status;
+        font-size: 11px;
+        color: status-bad ? Tokens.danger : Tokens.ink2;
+        box: 15px;
+        horizontal-alignment: right;
+    }
+    Txt {
+        x: 0;
+        y: 23px;
+        text: total;
+        font-size: 30px;
+        font-weight: 600;
+        letter-spacing: -0.3px;
+        color: total-bad ? Tokens.danger : Tokens.ink1;
+        box: 31.5px;
+    }
+    Note { x: 0; y: 61.5px; text: detail; }
+}
+
+// One .mrow. The last row draws no bottom hairline and is 1px shorter, exactly
+// like `.mrow:last-child { border-bottom: 0 }` (Rust sums 71px * N).
+component ModelRowView inherits Rectangle {
+    in property <string> name;
+    in property <string> cost;
+    in property <float> share;
+    in property <string> tokens;
+    in property <string> hit;
+    in property <bool> hit-bad: false;
+    in property <string> today;
+    in property <bool> last: false;
+
+    height: last ? Metrics.last-model-row : Metrics.model-row;
+    background: transparent;
+
+    Txt {
+        x: 0;
+        y: 11.5px;
+        width: parent.width - cost-txt.width - 10px;
+        text: name;
+        font-size: 12.5px;
+        font-weight: 500;
+        color: Tokens.ink1;
+        box: 16.5px;
+    }
+    cost-txt := Txt {
+        x: parent.width - self.width;
+        y: 9px;
+        text: cost;
+        font-size: 15px;
+        font-weight: 600;
+        color: Tokens.ink1;
+        box: 20px;
+    }
+    Bar { x: 0; y: 37px; width: parent.width; bar-height: 3px; pct: share * 100; }
+    used := Txt {
+        x: 0;
+        y: 47px;
+        text: tokens + " tok · ";
+        font-size: 10.5px;
+        color: Tokens.ink2;
+        box: 14px;
+    }
+    Txt {
+        x: used.x + used.width;
+        y: 47px;
+        text: hit;
+        font-size: 10.5px;
+        color: hit-bad ? Tokens.danger : Tokens.ink2;
+        box: 14px;
+    }
+    Note {
+        x: 0;
+        y: 47px;
+        width: parent.width;
+        text: today;
+        horizontal-alignment: right;
+    }
+    Hair {
+        x: 0;
+        y: parent.height - 1px;
+        width: parent.width;
+        visible: !last;
+    }
+}
+
+// .mrows: top hairline + the model rows.
+component ModelsBlock inherits Rectangle {
+    in property <[ModelRow]> models;
+
+    height: Metrics.model-row * models.length;
+    background: transparent;
+
+    Hair { x: 0; y: 0; width: parent.width; }
+    VerticalLayout {
+        x: 0;
+        y: 1px;
+        width: parent.width;
+        height: parent.height - 1px;
+        spacing: 0;
+        for row[i] in models : ModelRowView {
+            name: row.name;
+            cost: row.cost;
+            share: row.share;
+            tokens: row.tokens;
+            hit: row.hit;
+            hit-bad: row.hit-bad;
+            today: row.today;
+            last: i == models.length - 1;
+        }
+    }
+}
+
+// .total: this month's cost/tokens and today's cost.
+component SummaryBlock inherits Rectangle {
+    in property <string> sum;
+    in property <string> today;
+
+    height: Metrics.summary-row;
+    background: transparent;
+
+    Hair { x: 0; y: 0; width: parent.width; }
+    Note { x: 0; y: 9px; text: sum; }
+    Note { x: 0; y: 9px; width: parent.width; text: today; horizontal-alignment: right; }
+}
+
+// .hint: replaces the rows when usage is missing or empty; it may close the
+// pane on its own, so it carries its own bottom padding (PLAN §3.4).
+component HintBlock inherits Rectangle {
+    in property <string> text;
+    in property <bool> bad: false;
+
+    height: Metrics.hint-row;
+    background: transparent;
+
+    Hair { x: 0; y: 0; width: parent.width; }
+    HintText {
+        x: 0;
+        y: 11px;
+        width: parent.width;
+        text: root.text;
+        color: bad ? Tokens.danger : Tokens.ink2;
+    }
+}
+
+export component DsPane inherits Rectangle {
+    in property <string> status: "";
+    in property <bool> status-bad: false;
+    in property <string> total: "--";
+    in property <bool> total-bad: false;
+    in property <string> detail: "";
+
+    in property <[ModelRow]> models: [];
+    in property <string> hint: "";
+    in property <bool> hint-bad: false;
+
+    in property <bool> has-summary: false;
+    in property <string> sum: "";
+    in property <string> sum-today: "";
+
+    background: transparent;
+
+    // Absolute stacking from the same `Metrics` constants `panel.slint` sums to
+    // size the window. A VerticalLayout here dropped every block after the model
+    // rows (the repeater sits inside that block) — spike/p2/REPORT.md.
+    private property <length> inset: 14px;
+    private property <length> inner-w: self.width - 28px;
+    private property <length> balance-h: Metrics.balance-block + (detail != "" ? Metrics.balance-detail : 0px);
+    private property <length> rows-y: balance-h;
+    private property <length> rows-h: models.length > 0 ? Metrics.model-row * models.length : (hint != "" ? Metrics.hint-row : 0px);
+    private property <length> summary-y: rows-y + rows-h;
+
+    BalanceBlock {
+        x: root.inset;
+        y: 0;
+        width: root.inner-w;
+        status: root.status;
+        status-bad: root.status-bad;
+        total: root.total;
+        total-bad: root.total-bad;
+        detail: root.detail;
+    }
+    ModelsBlock {
+        x: root.inset;
+        y: root.rows-y;
+        width: root.inner-w;
+        visible: root.models.length > 0;
+        models: root.models;
+    }
+    HintBlock {
+        x: root.inset;
+        y: root.rows-y;
+        width: root.inner-w;
+        // Nothing fetched yet draws neither rows nor a hint.
+        visible: root.models.length == 0 && root.hint != "";
+        text: root.hint;
+        bad: root.hint-bad;
+    }
+    SummaryBlock {
+        x: root.inset;
+        y: root.summary-y;
+        width: root.inner-w;
+        visible: root.has-summary;
+        sum: root.sum;
+        today: root.sum-today;
+    }
+}
