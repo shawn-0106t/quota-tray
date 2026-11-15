@@ -22,6 +22,7 @@ use quota_core::update::UpdateStatus;
 use slint::{ComponentHandle, Timer};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 /// Variant names are the contract with `spike/p2/heights_ref.py`: the same name
@@ -1701,7 +1702,289 @@ pub fn start_dialogs(shell: &Rc<RefCell<Shell>>) {
     });
 }
 
-/// `--shots`: open each P3 window in turn and save a PNG (\.shots review).
+/// `--test-signin` (P4): the settings sheet's "Sign in…" and Clear wiring,
+/// driven against the real child process instead of a stub.
+///
+/// Round 1 — the user closes the console. The sheet opens, the button is pressed
+/// through the window's own callback, the child appears with a real top-level
+/// window, and closing that window makes the child exit by itself. The parent's
+/// exit poll must then bring the sheet back with a "cancelled" note: that is the
+/// round trip every real sign-in ends with.
+///
+/// Round 2 — Clear while the console is up. It must kill the child, bump the
+/// credential epoch and leave no usage token behind, and nothing may come back.
+///
+/// Neither round authenticates: the capture channel is `--test-login`'s job and
+/// a human sign-in is the only way to a real token (`spike/p4/REPORT.md`).
+pub fn start_signin(shell: &Rc<RefCell<Shell>>) {
+    let failures = Rc::new(std::cell::Cell::new(0u32));
+    let dir = settings::config_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let cred_file = dir.join("deepseek-credentials.json");
+    // This check seeds a marker credential and then clears it, so whatever was
+    // there has to come back afterwards: `--config-dir` can point at a real
+    // profile, and a token destroyed that way is not recoverable.
+    SIGNIN_CREDENTIAL_BACKUP.with(|slot| *slot.borrow_mut() = Some(std::fs::read(&cred_file).ok()));
+    // A marker credential so "no usage token afterwards" is a real change, not
+    // an already-empty file that would pass even if nothing ran.
+    let _ = std::fs::write(&cred_file, r#"{"v":1,"apiKey":"sk-test","userToken":""}"#);
+
+    let weak = Rc::downgrade(shell);
+    let f = failures.clone();
+    Timer::single_shot(Duration::from_millis(300), move || {
+        let Some(shell) = weak.upgrade() else { return };
+        let Some(pid) = press_sign_in(&shell, &f, "round 1") else {
+            finish_signin(&f);
+            return;
+        };
+        wait_for_window(shell, f, pid, 0, Rc::new(close_console));
+    });
+}
+
+thread_local! {
+    /// The credential file `--test-signin` found before it seeded its marker.
+    /// Restored in `finish_signin`, whatever path the check took.
+    static SIGNIN_CREDENTIAL_BACKUP: RefCell<Option<Option<Vec<u8>>>> = const { RefCell::new(None) };
+}
+
+type SigninStep = Rc<dyn Fn(Rc<RefCell<Shell>>, Rc<std::cell::Cell<u32>>, isize)>;
+
+/// Open the sheet if needed, then press the button through the callback the
+/// window wires it to — not by calling `login::open` directly.
+fn press_sign_in(
+    shell: &Rc<RefCell<Shell>>,
+    failures: &Rc<std::cell::Cell<u32>>,
+    label: &str,
+) -> Option<u32> {
+    if !shell.borrow().settings_open {
+        crate::win::settings::open(shell);
+    }
+    let open_before = shell.borrow().settings_open;
+    let ui = shell.borrow().settings_ui.clone_strong();
+    ui.invoke_sign_in();
+    let running = crate::login::is_running(shell);
+    let pid = crate::login::pid(shell);
+    let open_after = shell.borrow().settings_open;
+    let ok = open_before && running && pid.is_some() && !open_after;
+    println!(
+        "signin: {label}: sheet-before={open_before} running={running} pid={pid:?} sheet-after={open_after} {}",
+        ok_str(ok)
+    );
+    if !ok {
+        failures.set(failures.get() + 1);
+    }
+    pid.filter(|_| ok)
+}
+
+/// Poll for the child's console window (by owning process, never by title: a
+/// leftover console from an earlier run would hide the live one). The tao window
+/// exists before WebView2 initialises, so this is fast even on a cold profile.
+fn wait_for_window(
+    shell: Rc<RefCell<Shell>>,
+    failures: Rc<std::cell::Cell<u32>>,
+    pid: u32,
+    attempt: u32,
+    next: SigninStep,
+) {
+    if let Some(hwnd) = crate::login::console_hwnd(pid) {
+        println!("signin: console window present (pid={pid}, attempt {attempt}) ok");
+        next(shell, failures, hwnd);
+        return;
+    }
+    if attempt >= 120 {
+        failures.set(failures.get() + 1);
+        println!("signin: console window never appeared (pid={pid}) FAIL");
+        crate::login::cancel(&shell);
+        finish_signin(&failures);
+        return;
+    }
+    let weak = Rc::downgrade(&shell);
+    Timer::single_shot(Duration::from_millis(400), move || {
+        let Some(shell) = weak.upgrade() else { return };
+        wait_for_window(shell, failures, pid, attempt + 1, next);
+    });
+}
+
+/// Round 1: close the console like a user would (`WM_CLOSE`). A child still
+/// inside WebView2's cold start cannot answer that message, so the fallback
+/// kills it — the parent's exit poll runs the same code either way, and which
+/// one happened is logged.
+fn close_console(shell: Rc<RefCell<Shell>>, failures: Rc<std::cell::Cell<u32>>, hwnd: isize) {
+    post_close(hwnd);
+    wait_for_exit(shell, failures, 0);
+}
+
+fn wait_for_exit(shell: Rc<RefCell<Shell>>, failures: Rc<std::cell::Cell<u32>>, attempt: u32) {
+    if !crate::login::is_running(&shell) {
+        if attempt > 0 {
+            println!(
+                "signin: round 1: the console exited on its own (WM_CLOSE, {attempt} polls) ok"
+            );
+        }
+        settle_round(&shell, &failures);
+        return;
+    }
+    if attempt >= 40 {
+        println!("signin: round 1: the console did not answer WM_CLOSE, killing it");
+        crate::login::kill_child(&shell);
+        let weak = Rc::downgrade(&shell);
+        let f = failures.clone();
+        Timer::single_shot(Duration::from_millis(600), move || {
+            let Some(shell) = weak.upgrade() else { return };
+            settle_round(&shell, &f);
+        });
+        return;
+    }
+    let weak = Rc::downgrade(&shell);
+    Timer::single_shot(Duration::from_millis(200), move || {
+        let Some(shell) = weak.upgrade() else { return };
+        wait_for_exit(shell, failures, attempt + 1);
+    });
+}
+
+/// The parent must have settled: child gone, sheet back, note explains why, and
+/// still no usage token in the credential file. Settling runs from the exit poll
+/// (250 ms), so give it a few ticks before judging.
+fn settle_round(shell: &Rc<RefCell<Shell>>, failures: &Rc<std::cell::Cell<u32>>) {
+    wait_for_settle(shell.clone(), failures.clone(), 0);
+}
+
+fn wait_for_settle(shell: Rc<RefCell<Shell>>, failures: Rc<std::cell::Cell<u32>>, attempt: u32) {
+    if shell.borrow().settings_open || attempt >= 15 {
+        assert_settled(&shell, &failures);
+        return;
+    }
+    let weak = Rc::downgrade(&shell);
+    Timer::single_shot(Duration::from_millis(200), move || {
+        let Some(shell) = weak.upgrade() else { return };
+        wait_for_settle(shell, failures, attempt + 1);
+    });
+}
+
+fn assert_settled(shell: &Rc<RefCell<Shell>>, failures: &Rc<std::cell::Cell<u32>>) {
+    let running = crate::login::is_running(shell);
+    let (open, note, code) = {
+        let s = shell.borrow();
+        (
+            s.settings_open,
+            s.settings_ui.get_ds_note().to_string(),
+            s.login.last_code,
+        )
+    };
+    let token = quota_core::deepseek::credentials::status().user_token;
+    // Exit 3 is "closed by the user" (login_host), which is what WM_CLOSE is.
+    // Exit 1 is the fallback `kill_child`: the parent terminated it, and
+    // `settle` reports that as a cancellation too.
+    let ok = !running
+        && open
+        && note.to_lowercase().contains("cancelled")
+        && !token
+        && matches!(code, Some(Some(3)) | Some(Some(1)));
+    println!(
+        "signin: round 1: running={running} sheet-open={open} code={code:?} note={note:?} token={token} {}",
+        ok_str(ok)
+    );
+    if !ok {
+        failures.set(failures.get() + 1);
+    }
+
+    let Some(pid) = press_sign_in(shell, failures, "round 2") else {
+        finish_signin(failures);
+        return;
+    };
+    wait_for_window(
+        shell.clone(),
+        failures.clone(),
+        pid,
+        0,
+        Rc::new(clear_console),
+    );
+}
+
+/// Round 2: Clear must take the child away with it.
+fn clear_console(shell: Rc<RefCell<Shell>>, failures: Rc<std::cell::Cell<u32>>, _hwnd: isize) {
+    // The console is up and the sheet is hidden; a user gets to Clear by
+    // reopening the sheet from the tray.
+    if !shell.borrow().settings_open {
+        crate::win::settings::open(&shell);
+    }
+    let before = shell.borrow().cred_epoch.load(Ordering::SeqCst);
+    crate::win::settings::clear(&shell);
+    let running = crate::login::is_running(&shell);
+    let epoch = shell.borrow().cred_epoch.load(Ordering::SeqCst);
+    let token = quota_core::deepseek::credentials::status().user_token;
+    let note = shell.borrow().settings_ui.get_ds_note().to_string();
+    let ok = !running && epoch == before + 1 && !token && !note.is_empty();
+    println!(
+        "signin: round 2: running={running} epoch={before}->{epoch} token={token} note={note:?} {}",
+        ok_str(ok)
+    );
+    if !ok {
+        failures.set(failures.get() + 1);
+    }
+    let weak = Rc::downgrade(&shell);
+    let f = failures.clone();
+    Timer::single_shot(Duration::from_millis(1200), move || {
+        let Some(shell) = weak.upgrade() else { return };
+        let running = crate::login::is_running(&shell);
+        let token = quota_core::deepseek::credentials::status().user_token;
+        let open = shell.borrow().settings_open;
+        let ok = !running && !token && open;
+        println!(
+            "signin: round 2: running={running} token={token} sheet-open={open} {}",
+            ok_str(ok)
+        );
+        if !ok {
+            f.set(f.get() + 1);
+        }
+        crate::login::cancel(&shell);
+        finish_signin(&f);
+    });
+}
+
+fn finish_signin(failures: &Rc<std::cell::Cell<u32>>) {
+    restore_signin_credentials();
+    println!(
+        "signin: verdict={}",
+        if failures.get() == 0 { "PASS" } else { "FAIL" }
+    );
+    let _ = slint::quit_event_loop();
+}
+
+/// Put back what `start_signin` found: the original bytes, or no file at all.
+fn restore_signin_credentials() {
+    let backup = SIGNIN_CREDENTIAL_BACKUP.with(|slot| slot.borrow_mut().take());
+    let Some(backup) = backup else { return };
+    let file = settings::config_dir().join("deepseek-credentials.json");
+    match backup {
+        Some(bytes) => {
+            let _ = std::fs::write(&file, bytes);
+            crate::logf("signin: credential file restored");
+        }
+        None => {
+            let _ = std::fs::remove_file(&file);
+            crate::logf("signin: seeded credential file removed");
+        }
+    }
+}
+
+fn post_close(hwnd: isize) {
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+    unsafe {
+        let _ = PostMessageW(Some(HWND(hwnd as _)), WM_CLOSE, WPARAM(0), LPARAM(0));
+    }
+}
+
+fn ok_str(ok: bool) -> &'static str {
+    if ok {
+        "ok"
+    } else {
+        "FAIL"
+    }
+}
+
+/// `--shots`: open each P3 window in turn and save a PNG (`.shots` review).
 /// Runs in the theme `--theme` selects, so both passes are one command each.
 pub fn start_shots(shell: &Rc<RefCell<Shell>>) {
     let out = shell.borrow().out_dir.clone();

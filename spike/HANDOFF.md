@@ -1,6 +1,6 @@
 # HANDOFF — 不依赖 Tauri 的 Quota Tray（Slint + Skia）
 
-> 新对话从这里接手。一句话现状：**静态视觉、P0 交互、P1 `quota-core` 抽取、P2 真实面板与 P3 三个窗口都已完成并量化（`spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md`、`spike/p3/REPORT.md`）；新壳代码在 `slint/`，四个窗口全部可用、设置落盘重启生效、skills 懒加载、托盘菜单在光标处；下一步 P4 登录链路。**
+> 新对话从这里接手。一句话现状：**静态视觉、P0 交互、P1 `quota-core` 抽取、P2 真实面板、P3 三个窗口与 P4 登录链路都已完成并量化（`spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md`、`spike/p3/REPORT.md`、`spike/p4/REPORT.md`）；新壳代码在 `slint/`，四个窗口全部可用、设置落盘重启生效、skills 懒加载、托盘菜单在光标处、DeepSeek 登录窗作为子进程跑通（捕获 / 拦截 / 拒收 / Clear 都有自动证据）；下一步 P5 对齐门禁。**
 
 ## 0. 位置与前提
 
@@ -34,6 +34,9 @@
 | skills 描述行高 | **统一预留两行（30.44 px）** | Slint 量不到换行后的文本高度；124 个技能里 11 个单行描述会多 15.22 px（`spike/p3/REPORT.md` §5.7） |
 | 菜单定位 | **逐字移植 `panel.rs::show_menu` 的 legacy 公式** | 两个壳要落在同一个像素；`win/menu.rs` 的单测钉住「贴角翻转 / 光标右下 5×13 / 翻转后底边在光标上方 13」 |
 | 设置窗滚动 | 卡片内 `Flickable` + 右侧 4 px 自适应滚动条 | 与 `settings.css` 的 8px 轨道 / 4px 滑块一致；内容宽度不随滚动条收窄是已知偏差 |
+| 登录窗实现 | **一次一个**：`Command::new(current_exe) --login-host`，父进程 250 ms 轮询退出；子进程带 `--parent-pid` 自杀兜底 | WebView2 冷启动实测 175 s，放在托盘进程里等于整机卡死；Clear 只要 `Child::kill()` |
+| 登录窗 profile | `%LOCALAPPDATA%\com.shawnqi.quotatray\EBWebView-login`（自检隔离时落在配置目录下） | 与现版 `EBWebView` 同父目录、不同 profile：一个 profile 不能被两个浏览器进程同时打开，而现版可能正在运行（HANDOFF §6.13） |
+| Clear × 登录窗 | **顺序保证**：`settings::clear` → `login::cancel`（kill **并 wait**）→ `credentials::clear()`；父进程不做 epoch 推断 | 子进程被杀且已退出，写盘不可能落在清空之后。epoch 推断会误伤「登录期间手动粘贴并保存」的凭证（审查 M2） |
 
 ## 2. 已证明 / 未证明
 
@@ -77,7 +80,15 @@
 - 视觉：8 组截图 vs DOM 文本带（设置默认/展开 × 深浅、skills × 深浅、菜单 × 深浅）全部 PASS，文本带最差 1.00 CSS px；唯一 1.56 px 是按钮下边框的抗锯齿起点差。
 - 回归：P2 的 17 个高度变体仍 Δ=0.00，`--test-corner/-tab-anim/-blur/-tray-click/-clamp/-active-tab` 全 PASS。
 
-**未证明**（后续阶段）：三档 DPI 的**真机**验证（只有 225% 现场；100/150/200% 仅算术证明）、混合 DPI/多屏、键盘与 IME、登录链路（P4）、手工粘贴的真实网络往返（P4 的登录自检一并覆盖）。
+**P4 已证明**（`spike/p4/REPORT.md` 有全部数字与复现命令）：
+
+- `--test-login` 四项全 PASS：窗口（`LoginWindow OK`）、通道（`kind=probe` 经取消导航到达宿主）、fetch 拦截（包装器在请求发出前拿到 Bearer）、拒收（假 token 打真实 `amount` → `token-expired`，凭证文件前后逐字节相同）。热 profile 6 s 一轮，冷 profile 175 s（全是 WebView2 首次初始化）。
+- `--test-signin` 两轮全 PASS：用户关窗（`WM_CLOSE` → 子进程 exit 3 → 父进程退出轮询 `settle` → 设置窗回来、note `Sign-in cancelled.`、无 token）；Clear（杀子进程、epoch 0→1、无 token、1.2 s 后仍未被回写）。整轮 2.5 s。
+- **顺带修掉 `verify_user_token` 的真缺陷**：平台对无效 token 回 200 + `{"code":40003,…}`，原来只看状态码 → 「验证后保存」从不拒绝候选。现在读 body（`token_accepted`）+ 1 个单测；`quota-core` 41 个测试全绿。
+- 回归：P2/P3 的十一个检查全 PASS，17 个高度变体仍 Δ=0.00。
+- 独立审查（explore + code-review skill）：1 Critical / 3 Major / 9 Minor，全部处置——父进程存活检测（`ERROR_INVALID_PARAMETER` 判死）、删掉父进程侧的 epoch 兜底（改为 kill→wait→clear 的顺序保证）、`verify_user_token` 判拒后继续走候选且只认非零 `code`、`--test-signin` 快照/还原凭证文件，外加 `killed` 语义、离线不假 PASS、`settings::close` 清 `reopen_sheet`、第二次 Sign in 前置已开窗口、`EnumWindows` 按 pid 找窗、退出码 4（验证通过但没写成功）、`--test-login` 的 verify 说明、tmp 名带 pid、`notify_one`。明细见 `spike/p4/REPORT.md` §4.3。
+
+**未证明**（后续阶段）：三档 DPI 的**真机**验证（只有 225% 现场；100/150/200% 仅算术证明）、混合 DPI/多屏、键盘与 IME、**成功登录（exit 0）的父进程 settle 分支**（需要真 token，只有人能签；exit 3 的分支已覆盖，两者只差一句文案）、跨屏下的 900×680 居中。
 
 **P0 期间实测到的环境限制**：本会话的合成鼠标输入（`mouse_event`/`SetInput`）不生效（连开始菜单都点不开），托盘在 CU 里也不可观察；因此托盘的 tooltip 视觉与悬停截图需要人工看一眼，事件链路用投递 `WM_USER_TRAYICON`(6002) 验证。
 
@@ -111,7 +122,7 @@ spike/p0/              # P0 交互 spike：壳的骨架（Anchor / tray-icon / �
 | **P1 `quota-core` 抽取（已完成 2026-11-15）** | 纯逻辑 + 格式化迁到仓库根 `quota-core/`，`src-tauri` 改 path 依赖并 `pub use` 保住 `crate::xxx` 路径；结果见 `spike/p1/REPORT.md` | 43 测试全绿（原 29 全保留）；`--test-fetch/--test-deepseek/--test-usage` 与改前 exe 在掩掉 4 个 live 字段后逐字节一致（4 组）；格式化 45 例 TS==Rust |
 | **P2 面板（已完成 2026-11-15）** | 新壳 `slint/`：`quota-core` 真实数据、1–4 模型行、`ActiveTab` 持久化、夹取滚动；结果见 `spike/p2/REPORT.md` | 17 个变体高度 Δ=0；8 个变体文本带 ≤1.00 css px；225% 下漂移 0 px（10 次切换 469 采样）；连点 30 次 drift 0；`ActiveTab` 5 项断言；夹取滚动 PASS |
 | **P3 设置 / skills / menu（已完成 2026-11-15）** | 三窗 + 凭证状态 + 手工粘贴 + 自启动/便携/单实例/主题；结果见 `spike/p3/REPORT.md` | 落盘 → 子进程重启读回 PASS；8 组文本带 ≤1.00 css px；显隐语义 `--test-dialogs` PASS |
-| P4 登录完整链路（2–3 天） | `--login-host` + `--test-login`；接上设置窗的「Sign in…」与 Clear 的 epoch | probe 与 fetch 捕获双通过；Clear 不被回写 |
+| **P4 登录完整链路（已完成 2026-11-15）** | 子进程 `--login-host` + `--test-login` + `--test-signin`；接上设置窗的「Sign in…」与 Clear 的 cancel/epoch；结果见 `spike/p4/REPORT.md` | 四项探针全 PASS；用户关窗后设置窗还原；Clear 杀子进程且不被回写；`quota-core` 41 测试 |
 | P5 对齐矩阵与门禁（3–4 天） | `PARITY.md`、token 漂移门禁、截图重生成、CI job | 矩阵无 ❌（`quota-core` 的 fmt/clippy/test 已在 P1 接入 CI，且不阻塞现版） |
 
 ## 6. 陷阱清单（都踩过）
@@ -150,6 +161,15 @@ spike/p0/              # P0 交互 spike：壳的骨架（Anchor / tray-icon / �
 32. **`AtomicU64::fetch_add` 返回的是加之前的值**：credential epoch 的守卫如果拿返回值当「本次世代」，那么 `load() == epoch` 恒为 false —— 表现是手动粘贴永远「被更新的一次请求取代」、一次都不保存、而且 `verifying` 永远为 true（按钮永久禁用、重启才好）。正确写法是 `fetch_add(1, …) + 1`（审查抓到的 Critical，`--test-settings` 现在覆盖失败路径与 Clear 作废在途）。
 33. **只带一个字段的消息批次也要置 `changed`**：主题 watcher 只在变化那一刻发一条 `Msg::Theme`，泵里若不置 `changed`，`apply_theme` 会被跳过——面板可能在下一次轮询时顺带换色，设置/skills/菜单永远不跟随（审查抓到的 Major）。
 34. **关子窗后的焦点不一定回面板**：Windows 通常把焦点还给上一个前台窗口——面板原本在前台时，关 skills 后面板就是「可见且前台」；否则保持不可见。判定写成「不可见 或 前台」，不是「必须不可见」（`--test-dialogs` 两种分支都覆盖）。
+35. **`verify_user_token` 的 2xx 不等于通过**：DeepSeek 对无效 token 回 **HTTP 200** + `{"code":40003,"msg":"Authorization Failed (invalid token)","data":null}`。原来只看状态码，于是「验证后保存」从不拒绝候选（P4 的拒收探针第一次跑就抓到，`spike/p4/REPORT.md` §4.1）。现在 `token_accepted` 读 body；任何新的「验证」入口都要走它。
+36. **WebView2 冷启动能到 175 s**（本机实测，全新 profile）：计时起点必须放在**窗口就绪之后**，父进程给足预算并复用热 profile；把 4.5 s 的探针计时从进程启动算起会得到假阴性。
+37. **WebView2 profile 不可共享、也会被残留进程锁住**：`HRESULT(0x800700AA)`「请求的资源在使用中」。探针用独立 profile 且失败后删目录重试一次；被外部杀掉的自检会留下 `msedgewebview2.exe` 孤儿（用 `spike/p4/list_webview_procs.ps1` 查）。
+38. **被 WebView2 初始化阻塞的子进程收不到 `WM_CLOSE`**：`--test-signin` 投递后等 8 s，超时改 `login::kill_child`（只杀进程、**留在槽位**，让退出轮询照常 `settle`）；`login::cancel` 则是「Clear 语义」——把 `Child` 取走，轮询不再 settle。两者写反的后果是「Clear 后设置窗不回来」或「自检永远等不到 settle」。
+39. **`settle` 在 250 ms 的退出轮询上跑**：任何断言（包括自检）都要等它落地；`kill` 完立刻查 `settings_open` 会读到隐藏态。
+40. **登录期间设置窗是「隐藏但记住」**：`login::open` 只翻 `settings_open` 并 `hide()`，`reopen_sheet` 决定退出时是否还原；**不要**在 `login::open` 里调 `settings::close`，那会顺带触发「关闭后收起面板」的判定。
+41. **父进程存活检测不能把 `OpenProcess` 的任何失败都当活着**：父进程退出后 pid 立即失效，`OpenProcess` 回 `ERROR_INVALID_PARAMETER`——那正是「已死」。原来 `Err(_) => true` 让 `--parent-pid` 这条兜底从不生效，点托盘 Quit 后登录窗会留在屏幕上并锁住 profile（审查 C1）。实测 `--parent-pid 999999` 现在会打印 `parent exited, closing` 并退 3。
+42. **`cred_epoch` 有两个 +1 的来源**（Clear 与每次手动粘贴验证），所以父进程不能拿「epoch 变了」当「用户要求清空」。跨进程的 Clear 只有一条保证：`kill` → `wait` → `clear` 的顺序。
+43. **`--test-signin` 会写凭证文件**：它在开始前快照原字节、结束时还原（原本没有文件就删掉）。任何新的「会动凭证」的自检照抄这个模式；判决只认真实副作用（`code 3`/`1` + note，服务器明确拒绝才算 `reject=ok`）。
 
 ## 7. 复现命令
 
@@ -226,15 +246,36 @@ PYTHONUTF8=1 python spike/p3/ref_windows.py          # 参考页 + rect 基准�
 PYTHONUTF8=1 python spike/p3/compare_windows.py --shot .shots/p3/real-light/settings.png --window settings --theme light
 ```
 
+P4（登录链路；同样每次都带 `SKIA_BINARIES_URL`）：
+
+```bash
+cd ../quota-tray-slint
+EXE=./slint/target/debug/quota-tray-slint.exe
+$EXE --test-login                                  # 凭证来源 + 真实 amount + 探针（热 profile ~6 s）
+$EXE --test-login --verbose                        # 多打一行 usageBase
+$EXE --test-login --config-dir "$(pwd -W)/.shots/p4/cfg-login"   # 隔离 profile
+$EXE --test-signin                                 # Sign in 接线 + 用户关窗 + Clear（~2.5 s）
+
+# 交互路径：托盘左键 -> ⚙ -> Sign in…（登录窗是子进程，日志与父进程同一个 slint.log）
+$EXE
+```
+
+探针的 profile 在 `%TEMP%\quota-tray-slint-login-probe` 并跨轮复用；冷启动首轮可能 3 分钟，之后 ~6 s。`--test-signin` 用 `<config>/EBWebView-login`，两者互不干扰。被中断的自检会留下孤儿浏览器进程，用下面的脚本查（`.shots/` 是 gitignored，脚本也在那里）：
+
+```bash
+pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
+```
+
 `--test-*` 输出一致性要两个 exe 才比得出来：先 `git stash -u` 回到改前构建一份 exe 存到 `.shots/p1/quota-tray-before.exe`，`git stash pop` 后再构建改后的，然后在同一分钟里对每种模式前后各跑一次，`spike/p1/compare_test_output.py BEFORE_DIR AFTER_DIR` 掩掉 4 个 live 字段比对（目录里要有 `fetch.* / deepseek.* / deepseek-verbose.* / usage.*` 共 8 个文件）。
 
 ## 8. 给新对话的第一句（可直接粘贴）
 
-> 接手 `..\quota-tray-slint`（分支 `spike/slint-demo`）。先读 `spike/HANDOFF.md`，再读 `spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md` 与 `spike/p3/REPORT.md`。P0–P3 都已完成，新壳代码在 `slint/`（crate `quota-tray-slint`）：面板接 `quota-core` 真实数据、1–4 行模型、`ActiveTab` 持久化、夹取滚动；设置窗（主题/间隔/自启/凭证状态/手工粘贴）落盘重启生效；skills 懒加载 + 刷新；托盘右键在光标处开自定义菜单。下一步按 HANDOFF §5 做 P4：`--login-host` + `--test-login`，把设置窗的「Sign in…」接上真实登录窗，并验证 Clear 的 epoch 在真实链路里不被回写。
+> 接手 `..\quota-tray-slint`（分支 `spike/slint-demo`）。先读 `spike/HANDOFF.md`，再读 `spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md`、`spike/p3/REPORT.md` 与 `spike/p4/REPORT.md`。P0–P4 都已完成，新壳代码在 `slint/`（crate `quota-tray-slint`）：面板接 `quota-core` 真实数据、`ActiveTab` 持久化、夹取滚动；设置窗落盘重启生效；skills 懒加载；托盘右键光标处菜单；DeepSeek 登录窗是子进程（`--login-host`，tao + wry），捕获 / fetch 拦截 / 拒收 / Clear 都有自动证据，并且顺带修好了 `quota-core` 的 `verify_user_token`（平台对坏 token 回 200）。下一步按 HANDOFF §5 做 P5：`PARITY.md`、token 漂移门禁、截图重生成、CI job。
 
 ## 9. 待拍板
 
 - ~~新壳目录名~~（**已定 2026-11-15：`slint/`**）。
 - 最终是否用 Slint 版替代 Tauri 版（决定 v2.0.0 的发布线怎么切）。
+- **`verify_user_token` 的修复要不要单独发一个 Tauri patch 版本**（v1.0.2）：它在 `quota-core` 里，现版 v1.0.1 的「验证后保存」目前对坏 token 一律放行（`spike/p4/REPORT.md` §4.1）。发版需要走 `check_versions.py` 的五载体流程。
 - skills 的单行描述：本实现统一预留两行（124 行里 11 行多 15.22 px）。P5 若要严格对齐，要么引入文本测量，要么顺手修 `quota-core::skills` 的折叠 YAML 解析（`description: >` 现在显示成裸 `>`，两个壳都一样）——后者会改现版行为，需要单独决定。
 - 三档 DPI 的真机验证：本机固定 225%，改缩放会动用户的桌面布局；用户已选「算术证明 + 现场 225%，100/150/200% 留人工检查单」。

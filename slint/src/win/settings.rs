@@ -204,6 +204,9 @@ pub fn close(shell: &Rc<RefCell<Shell>>, collapse_panel: bool) {
         }
         s.settings_open = false;
         let _ = s.settings_ui.hide();
+        // Closing the sheet is a decision about the sheet: a sign-in window that
+        // is still open must not pop it back up when it exits.
+        s.login.reopen_sheet = false;
     }
     crate::logf("settings: hide");
     if collapse_panel {
@@ -331,6 +334,10 @@ pub fn save_from_ui(shell: &Rc<RefCell<Shell>>) {
 /// Clear both stored DeepSeek credentials (PLAN §5.2). The file stays, empty,
 /// so the one-time legacy import cannot bring them back.
 pub fn clear(shell: &Rc<RefCell<Shell>>) {
+    // An open sign-in window is a live capture channel: kill it before the
+    // credential goes, or the console's own session hands the hook a valid
+    // token seconds later and the Clear looks like it did nothing (PLAN §4).
+    crate::login::cancel(shell);
     deepseek::credentials::clear();
     // Any verification already in flight must drop its result: the console's
     // own session would otherwise hand it a valid token seconds later and the
@@ -467,12 +474,10 @@ pub fn on_checked(
     resize(shell, false);
 }
 
-/// The sign-in window is P4. Until then the button says so instead of doing
-/// nothing — a dead button is worse than an honest note.
+/// "Sign in…": the console window is a child process (`--login-host`), built on
+/// demand and destroyed when it closes (PLAN §4). The sheet hides while it runs
+/// and comes back when the child exits (`login::settle`).
 pub fn sign_in(shell: &Rc<RefCell<Shell>>) {
-    crate::logf("settings: sign-in clicked (P4)");
-    let s = shell.borrow();
-    s.settings_ui
-        .set_ds_note("The sign-in window arrives in P4. Paste a usage token below.".into());
-    s.settings_ui.set_ds_note_bad(false);
+    crate::logf("settings: sign-in clicked");
+    crate::login::open(shell);
 }

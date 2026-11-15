@@ -40,6 +40,13 @@ serde_json = "1"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "sync", "macros"] }
 # System theme (HKCU AppsUseLightTheme), same key as the Tauri shell.
 winreg = "0.56"
+# `--login-host` (P4): the DeepSeek sign-in window is a short-lived CHILD
+# process with its own tao event loop + WebView2 window, so the Slint loop never
+# nests a second event loop and the console gets a real browser window
+# (HANDOFF §4, decisions table).
+tao = "0.37"
+wry = "0.57"
+url = "2"
 
 [build-dependencies]
 slint-build = "=1.18.1"

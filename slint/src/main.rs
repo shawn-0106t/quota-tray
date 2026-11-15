@@ -9,6 +9,8 @@
 mod app;
 mod checks;
 mod height;
+mod login;
+mod login_host;
 mod shell;
 mod view;
 mod win;
@@ -105,6 +107,27 @@ fn main() {
         std::env::set_var("QUOTA_TRAY_APP_DATA_DIR", config_dir);
     }
 
+    // The sign-in window is this same exe re-entered as a CHILD process
+    // (HANDOFF §4): it owns a tao event loop and one WebView2 window, and exits
+    // when that window closes. Dispatched before every other mode — and long
+    // before the single-instance mutex, like every other `--test-*`.
+    if flag(&args, "--login-host") {
+        let code = login_host::run(login_host::Options {
+            probe: flag(&args, "--probe"),
+            data_dir: Some(arg(&args, "--data-dir", "")).filter(|d| !d.is_empty()),
+            parent_pid: arg(&args, "--parent-pid", "").parse().ok(),
+        });
+        std::process::exit(code);
+    }
+
+    // Headless sign-in self-check (PLAN §8): credential status, one real
+    // `amount` request against the stored token, then a sign-in window whose
+    // capture channel is fired from inside the page.
+    if flag(&args, "--test-login") {
+        let code = login::run_test(flag(&args, "--verbose"));
+        std::process::exit(code);
+    }
+
     let mode = if flag(&args, "--test-heights") {
         shell::Mode::Heights
     } else if flag(&args, "--test-corner") {
@@ -139,6 +162,8 @@ fn main() {
         shell::Mode::PrintSkills
     } else if flag(&args, "--test-dialogs") {
         shell::Mode::Dialogs
+    } else if flag(&args, "--test-signin") {
+        shell::Mode::SignIn
     } else {
         shell::Mode::Interactive
     };
@@ -153,6 +178,15 @@ fn main() {
     if mode == shell::Mode::Settings && std::env::var("QUOTA_TRAY_APP_DATA_DIR").is_err() {
         let dir = std::env::temp_dir().join("quota-tray-slint-settings");
         let _ = std::fs::remove_dir_all(&dir);
+        std::env::set_var("QUOTA_TRAY_APP_DATA_DIR", &dir);
+    }
+    // `--test-signin` spawns the real child process, which reads and writes the
+    // same credential file: give it its own profile for the same reason. The
+    // directory is kept between runs (only the credential file is re-seeded) so
+    // the WebView2 profile stays warm and a run does not pay the cold start.
+    if mode == shell::Mode::SignIn && std::env::var("QUOTA_TRAY_APP_DATA_DIR").is_err() {
+        let dir = std::env::temp_dir().join("quota-tray-slint-signin");
+        let _ = std::fs::create_dir_all(&dir);
         std::env::set_var("QUOTA_TRAY_APP_DATA_DIR", &dir);
     }
 

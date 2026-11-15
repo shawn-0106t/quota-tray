@@ -18,6 +18,7 @@
 use crate::app::{self, Data, Msg};
 use crate::checks;
 use crate::height::{self, PANEL_W};
+use crate::login;
 use crate::view;
 use crate::win::{menu, settings, skills};
 use crate::{Anchor, MenuWindow, Panel, SettingsWindow, SkillsWindow};
@@ -85,6 +86,9 @@ pub enum Mode {
     /// panel's blur auto-hide is suspended while a dialog is open, and closing
     /// the dialog collapses the panel (SPEC 20 / 21).
     Dialogs,
+    /// The settings sheet's Sign in / Clear wiring against the real child
+    /// process (`--test-signin`, P4).
+    SignIn,
 }
 
 pub struct Options {
@@ -168,6 +172,8 @@ pub struct Shell {
     /// Bumped by Clear / every new credential verification so a late result
     /// cannot write after the user removed the credential (PLAN §4).
     pub cred_epoch: Arc<AtomicU64>,
+    /// The DeepSeek sign-in window: a child process (`--login-host`).
+    pub login: login::Login,
     /// The pollers + the runtime the window jobs run on. Always present; under
     /// `--no-poll` only the four loops are off.
     pub workers: app::Workers,
@@ -283,6 +289,7 @@ pub fn run(opts: Options) -> Result<(), Box<dyn std::error::Error>> {
         menu_open: false,
         menu_hooked: false,
         cred_epoch: Arc::new(AtomicU64::new(0)),
+        login: login::Login::default(),
         workers,
         checks: Checks::default(),
     }));
@@ -1072,6 +1079,7 @@ fn startup_mode(shell: &Rc<RefCell<Shell>>, seconds: u64) {
         Mode::Skills => checks::start_skills(shell),
         Mode::Shots => checks::start_shots(shell),
         Mode::Dialogs => checks::start_dialogs(shell),
+        Mode::SignIn => checks::start_signin(shell),
     }
 }
 
