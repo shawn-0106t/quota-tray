@@ -131,6 +131,9 @@ pub fn run(opts: Options) -> i32 {
     let mut verifying = false;
     let mut accepted = false;
     let mut refused = false;
+    // The candidate a transient failure already re-tried once. Keyed by value
+    // so a queued candidate starts with a fresh budget without any reset.
+    let mut retried: Option<String> = None;
     let mut close_at: Option<Instant> = None;
     let mut probe_sent = false;
     let mut probe_sent_at: Option<Instant> = None;
@@ -257,6 +260,22 @@ pub fn run(opts: Options) -> i32 {
                             // after the first few). Try that one before
                             // declaring failure.
                             rearm(&handler_proxy, &mut pending, &mut verifying);
+                        } else if retried.as_deref() != Some(value.as_str())
+                            && transient(&error)
+                        {
+                            // The page never resends a token it already
+                            // reported (its hook dedupes by `lastToken`), so a
+                            // blip on the finished token would cost the whole
+                            // sign-in. Same candidate, once, after a pause.
+                            retried = Some(value.clone());
+                            verifying = true;
+                            let proxy = handler_proxy.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(Duration::from_millis(800));
+                                let result = runtime().block_on(client::verify_user_token(&value));
+                                let _ = proxy.send_event(UserEvent::Verified(result, value));
+                            });
+                            logf("login-host: transient failure, re-trying the same candidate");
                         } else {
                             window.set_title(&format!(
                                 "DeepSeek sign-in — {} — keep signing in",
@@ -316,6 +335,13 @@ pub fn run(opts: Options) -> i32 {
             _ => {}
         }
     });
+}
+
+/// A failure that says nothing about the token itself: the same candidate is
+/// worth one more try, where `token-expired` is not.
+fn transient(error: &str) -> bool {
+    matches!(error, "network-error" | "rate-limited" | "server-error")
+        || error.starts_with("http-5")
 }
 
 fn rearm(proxy: &EventLoopProxy<UserEvent>, pending: &mut Option<String>, verifying: &mut bool) {

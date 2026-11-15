@@ -178,7 +178,18 @@ fn submit_token(app: &AppHandle, token: &str) {
     });
 }
 
+/// A failure that says nothing about the token itself: the same candidate is
+/// worth one more try, where `token-expired` is not.
+fn transient(error: &str) -> bool {
+    matches!(error, "network-error" | "rate-limited" | "server-error")
+        || error.starts_with("http-5")
+}
+
 async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
+    // One re-try per candidate, and only for a transient failure. The page never
+    // resends a token it already reported (its hook dedupes by `lastToken`), so
+    // a blip on the finished token used to cost the whole sign-in.
+    let mut retried = false;
     loop {
         set_title(app, STATUS_VERIFYING);
         let result = client::verify_user_token(&token).await;
@@ -213,6 +224,13 @@ async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
                 let next = st.login.pending.lock().ok().and_then(|mut p| p.take());
                 if let Some(next) = next {
                     token = next;
+                    retried = false;
+                    continue;
+                }
+                if !retried && transient(&error) {
+                    retried = true;
+                    recovery::log("login: transient failure, re-trying the same candidate");
+                    tokio::time::sleep(Duration::from_millis(800)).await;
                     continue;
                 }
                 st.login.verifying.store(false, Ordering::SeqCst);
