@@ -1,0 +1,22 @@
+// Design tokens mirroring src/theme.css (PLAN.md §3.2). Light and dark are the
+// same values the shipped panel uses; `dark` is the only switch.
+export global Tokens {
+    in property <bool> dark: false;
+
+    out property <color> stage: dark ? #0f0f12 : #e7e7e4;
+    out property <color> paper: dark ? #181817 : #fbfaf9;
+    out property <color> ink1: dark ? #ffffffd6 : #000000e6;
+    out property <color> ink2: dark ? #ffffff8f : #00000099;
+    out property <color> ink3: dark ? #ffffff42 : #0000004d;
+    out property <color> hair: dark ? #ffffff1f : #00000021;
+    out property <color> hair-soft: dark ? #ffffff12 : #00000012;
+    out property <color> accent: dark ? #9d88bc : #8c74b1;
+    out property <color> accent-bar: dark ? #9d88bc : #7d61a6;
+    out property <color> accent-ink: dark ? #b5abc4 : #6c5293;
+    out property <color> tint: dark ? #9d88bc26 : #8c74b12e;
+    out property <color> seg-track: dark ? #262624 : #f1f0ec;
+    out property <color> seg-on: dark ? #3a3a37 : #ffffff;
+    out property <color> seg-ring: dark ? #9d88bc : #7d61a6;
+    out property <color> danger: dark ? #ff6b6b : #b42318;
+    out property <color> shadow: dark ? #00000059 : #0000001f;
+}

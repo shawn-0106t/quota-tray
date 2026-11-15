@@ -1,0 +1,162 @@
+// Settings sheet, qualitative check for form controls (the panel is the window
+// under pixel review). Same tokens, same .seg cells, the switch from PLAN §3.4.
+import { Tokens } from "tokens.slint";
+import { Txt, Lbl, SegCell, SegTrack } from "primitives.slint";
+
+component Row inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    height: 34px;
+    Rectangle { x: 0; y: 0; width: 100%; height: 1px; background: Tokens.hair; }
+    Text {
+        x: 0; y: 9px; height: 16px;
+        text: label; font-size: 12px; color: Tokens.ink2;
+        vertical-alignment: center; wrap: no-wrap;
+    }
+    Text {
+        x: 0; y: 9px; width: 100%; height: 16px;
+        text: value; font-size: 12.5px; color: Tokens.ink1;
+        horizontal-alignment: right; vertical-alignment: center; wrap: no-wrap;
+    }
+}
+
+component Switch inherits Rectangle {
+    in property <bool> on: true;
+    width: 38px;
+    height: 20px;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: Tokens.ink2;
+    background: on ? Tokens.ink1 : transparent;
+    Rectangle {
+        x: on ? 20px : 2px;
+        y: 2px;
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        background: on ? Tokens.paper : Tokens.ink2;
+    }
+}
+
+component Btn inherits Rectangle {
+    in property <string> label;
+    height: 34px;
+    border-width: 1px;
+    border-color: Tokens.hair;
+    border-radius: 8px;
+    background: transparent;
+    Text {
+        width: 100%; height: 100%;
+        text: label; font-size: 11.5px; font-weight: 500; color: Tokens.ink1;
+        horizontal-alignment: center; vertical-alignment: center;
+    }
+}
+
+export component SettingsSheet inherits Window {
+    in property <bool> dark: false;
+    in property <bool> stage-visible: true;
+    in property <string> cli-version: "0.39.1 → 0.40.0";
+    in property <string> kimi-credential: "OAuth token · expires 17:20";
+    in property <string> api-key: "Configured";
+    in property <string> user-token: "Configured";
+
+    width: 404px;
+    height: 606px;
+    background: stage-visible ? Tokens.stage : transparent;
+    default-font-family: "Segoe UI";
+
+    card := Rectangle {
+        x: 28px;
+        y: 28px;
+        width: 348px;
+        height: 550px;
+        background: Tokens.paper;
+        border-width: 1px;
+        border-color: Tokens.hair;
+        border-radius: 12px;
+        drop-shadow-offset-x: 0px;
+        drop-shadow-offset-y: 8px;
+        drop-shadow-blur: 18px;
+        drop-shadow-color: Tokens.shadow;
+
+        // title bar
+        Text {
+            x: 14px; y: 14px; height: 22px;
+            text: "Settings"; font-size: 13px; font-weight: 500; color: Tokens.ink1;
+            vertical-alignment: center;
+        }
+        Rectangle {
+            x: 312px; y: 14px; width: 22px; height: 22px;
+            border-radius: 6px;
+            background: transparent;
+            Text {
+                width: 100%; height: 100%;
+                text: "×"; font-size: 13px; color: Tokens.ink2;
+                horizontal-alignment: center; vertical-alignment: center;
+            }
+        }
+
+        // general
+        Lbl { x: 14px; y: 48px; text: "GENERAL"; }
+        Text {
+            x: 14px; y: 66px; height: 36px;
+            text: "Theme"; font-size: 12.5px; color: Tokens.ink2; vertical-alignment: center;
+        }
+        SegTrack { x: 104px; y: 66px; width: 216px; height: 36px; }
+        SegCell { x: 107px; y: 69px; width: 68.67px; height: 30px; label: "System"; on: true; }
+        SegCell { x: 177.67px; y: 69px; width: 68.67px; height: 30px; label: "Light"; }
+        SegCell { x: 248.34px; y: 69px; width: 68.66px; height: 30px; label: "Dark"; }
+
+        Text {
+            x: 14px; y: 110px; height: 36px;
+            text: "Refresh interval"; font-size: 12.5px; color: Tokens.ink2; vertical-alignment: center;
+        }
+        SegTrack { x: 104px; y: 110px; width: 216px; height: 36px; }
+        SegCell { x: 107px; y: 113px; width: 51px; height: 30px; label: "1"; on: true; }
+        SegCell { x: 160px; y: 113px; width: 51px; height: 30px; label: "5"; }
+        SegCell { x: 213px; y: 113px; width: 51px; height: 30px; label: "10"; }
+        SegCell { x: 266px; y: 113px; width: 51px; height: 30px; label: "30"; }
+
+        Row {
+            x: 14px; y: 158px; width: 320px;
+            label: "Start with Windows";
+            value: "";
+        }
+        Switch { x: 296px; y: 165px; on: true; }
+
+        // Kimi section (read-only)
+        Lbl { x: 14px; y: 206px; text: "KIMI CODE"; }
+        Row { x: 14px; y: 224px; width: 320px; label: "CLI version"; value: cli-version; }
+        Row { x: 14px; y: 258px; width: 320px; label: "Credential"; value: kimi-credential; }
+
+        // DeepSeek section (credentials)
+        Lbl { x: 14px; y: 306px; text: "DEEPSEEK"; }
+        Row { x: 14px; y: 324px; width: 320px; label: "API key"; value: api-key; }
+        Row { x: 14px; y: 358px; width: 320px; label: "Usage token"; value: user-token; }
+
+        Btn { x: 14px; y: 400px; width: 100px; label: "Sign in…"; }
+        Btn { x: 120px; y: 400px; width: 100px; label: "Clear"; }
+
+        Text {
+            x: 14px; y: 446px; height: 16px;
+            text: "Or paste a token"; font-size: 11px; color: Tokens.ink2; vertical-alignment: center;
+        }
+        Rectangle {
+            x: 14px; y: 468px; width: 250px; height: 34px;
+            background: transparent;
+            border-width: 1px;
+            border-color: Tokens.hair;
+            border-radius: 8px;
+            TextInput {
+                x: 8px; y: 0; width: 234px; height: 34px;
+                text: "quotatray-user-token";
+                font-size: 12px;
+                color: Tokens.ink2;
+                vertical-alignment: center;
+            }
+        }
+        Btn { x: 270px; y: 468px; width: 64px; label: "Save"; }
+
+        Btn { x: 14px; y: 512px; width: 320px; label: "Close"; }
+    }
+}
