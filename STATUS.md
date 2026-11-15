@@ -1,10 +1,11 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-15 22:53（**v1.0.2 已定版并推送，tag 未打**；`main` = `e6e30f7`；v1.0.1 仍是 Latest）。
-> v1.0.2 的内容只有 DeepSeek 的「验证后保存」这一条，但它在五轮独立只读审查里被磨了五遍：
-> `verify_user_token` 不再把 200 + `{"code":40003}` 的错误信封当成通过（PR #4 → squash `5d95f1f`）；临时性失败对同一个候选重试一次；被拒的 token 优先于其他 base 的错误；`LoginState` 的 epoch 只在真正的窗口边界（`new_session`：建窗 / 关窗 / Clear）移动，而不是在「重新前置已有窗口」时。
-> 五载体 1.0.2、`CHANGELOG` 的 `[1.0.2] — 2026-11-15`、`check_versions.py` 六项 ok；`tsc` / `vite build` / `cargo fmt+clippy+test --locked`（31 passed）全绿；`--test-login` 在真机跑过（`verify=ok` + 四窗 OK + 两项捕获 OK）；`main` 的 CI 在 `e6e30f7` 上 success 1m47s。
-> 下一步只剩发布链：打 `v1.0.2` tag（触发草稿 Release）→ 核对三件资产与 `SHA256SUMS.txt` → 手动 publish。
+> 快照：2026-11-15 23:07（**v1.0.2 已定版并推送，tag 未打**；`main` = `35308af`；v1.0.1 仍是 Latest）。
+> v1.0.2 的内容只有 DeepSeek 的「验证后保存」这一条，但它在五轮独立只读审查里被磨了五遍（表格见下）：
+> `verify_user_token` 不再把 200 + `{"code":40003}` 的错误信封当成通过（PR #4 → squash `5d95f1f`）；临时性失败对同一个候选重试一次；被拒的 token 优先于其他 base 的错误；epoch 只在真正的窗口边界（`new_session`：建窗 / 关窗 / Clear）移动；重试循环的闸门排在一切副作用之前（被取代的 future 不写标题、不偷队列、不清别人的 `verifying`）。
+> 五载体 1.0.2、`CHANGELOG` 的 `[1.0.2] — 2026-11-15`、`check_versions.py` 六项 ok；`tsc` / `vite build` / `cargo fmt+clippy+test --locked`（31 passed）全绿；`--test-login` 在真机跑过（`verify=ok` + 四窗 OK + 两项捕获 OK）；`main` 的 CI 在 `2d06418`（2m3s）与 `35308af`（2m14s）上 success，CodeQL 仍在结算。
+> **下一步（唯一动作）**：① 真人登录验收一次——登录过程中关窗再重开、并在 Settings 里再点一次「Sign in…」，确认不会卡在「verifying…」、也不会把完成态 token 丢掉；② 通过后打 `v1.0.2` tag → 核对草稿 Release 的三件资产与 `SHA256SUMS.txt` → 手动 publish。
+> 已知未修（不阻塞发版，留给 P5）：`candidate_bases()` 的 `Vec::dedup()` 只折叠相邻重复（记住的第二个 base 每次 walk 多一次 404 请求）；Clear 之后到窗口销毁前毫秒级到达的候选仍会被盖上新 epoch。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
