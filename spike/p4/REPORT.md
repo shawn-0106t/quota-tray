@@ -165,6 +165,24 @@ v1.0.2 定版后又对 `main` 上的两个提交（`5d95f1f` 修复 + `f92748f` 
 
 **已知缺口（不打算在发版前修）**：`verify_and_save` 的决策（保存哪个 token、要不要再发一次请求、什么时候放弃）只有 `transient()` 被测试；要真正钉住它需要把决策抽成纯函数并做表驱动断言——那是一处结构改动，放在 P5 做比在 v1.0.2 打 tag 前做更稳。
 
+## 4.6 第三轮（整体通读）：补丁拼起来的验证路径
+
+前两轮审的是增量，第四轮改成把四轮补丁拼起来的**整条路径**从头通读（`verify_user_token` 的 walk + `login.rs` 的状态机 + `LoginState` 的 epoch + Clear/恢复的调用点），报 **2 Major / 6 Minor**，处置为 `2d06418`：
+
+| 级 | 发现 | 处置 |
+|---|---|---|
+| Major | 重试睡眠后的 `continue` 回到循环顶部，而 `set_title(VERIFYING)` 排在 epoch 闸门**之前**——`set_title` 按 label 找窗，被取代的旧 future 会把 "verifying…" 写进**新窗口**然后 return，标题永远停在假的 verifying | 闸门提到每次循环的顶部，睡眠后再查一次 |
+| Major | 同一路径在睡眠后 `pending.take()`，会把**新会话**排队的候选拿走丢掉（页面不会重发） | 睡眠后先查 epoch 再取队列 |
+| Major | 被取代的 future 退出时还 `verifying.store(false)`——那已经是新会话的单飞标志 | 被取代时直接 return，不碰标志 |
+| Major | `open()` 的「重新前置」分支调 `reset()`，把 `verifying`/`pending` 清掉：可并发出第二个验证、并丢掉已排队的候选 | 前置只 `show()` + `set_focus()`，不动并发状态 |
+| Minor | Clear 只 bump 不 reset，`verifying` 可能没有对应 future | 改调 `new_session()`（bump + 清标志） |
+| Minor | 两个 base 都 404（端点漂移）时标题写 "token not accepted"，把人引向反复登录 | `explain()` 只有 `token-expired` 说 token，其余说 "verification failed" |
+| Minor | 页面控制的 `kind` 原样进 `webview.log`（`query_pairs()` 会解码 `%0A`，可伪造日志行） | 只保留可打印 ASCII、截断 32 字符 |
+| Minor | `candidate_bases()` 的 `Vec::dedup()` 只折叠相邻重复：记住的 base 是第二个时每次 walk 多打一次 404 | **未修**，记为已知：影响取数与验证各一次请求，不改变结论 |
+| Minor | Clear 之后、窗口销毁之前到达的候选会被盖上**新** epoch 并落盘 | **未修**，毫秒级窗口且页面按 `lastToken` 去重，记为已知 |
+
+审查同时确认：成功分支的写序列在同一次无 await 的同步块里受闸门保护、`swap(true)` 的单飞顺序没有丢唤醒、`valid envelope` 的六种组合对用户方向都正确、recovery 全链路不读写 `AppState.login`、五载体与 release 的切段逻辑就绪。
+
 ## 5. 陷阱（给后面接手的人）
 
 1. **设置窗在登录期间是「隐藏但记住」**：`login::open` 只翻 `settings_open` 并 `hide()`，不动 `skills`/`menu`；`reopen_sheet` 决定退出时是否 `settings::open`。不要在 `login::open` 里调 `settings::close`——那会顺带触发「关闭后收起面板」的判定。

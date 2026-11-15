@@ -39,14 +39,10 @@ const STATUS_SAVED: &str = "DeepSeek sign-in — verified, saved";
 pub fn open(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(LABEL) {
         // Reopening: keep it where it is, but bring it forward again — a stale
-        // hidden window would otherwise stay behind the topmost overlays. This
-        // is NOT a new session: a verification in flight belongs to the window
-        // the user is looking at, so the epoch must not move (the page never
-        // resends a token it already reported).
-        {
-            let st = app.state::<AppState>();
-            st.login.reset();
-        }
+        // hidden window would otherwise stay behind the topmost overlays. Only
+        // that: this is not a new session, and clearing `verifying` here would
+        // let a second verification spawn next to the one already running
+        // (PLAN §5.2: one at a time) while orphaning whatever was queued.
         let _ = w.show();
         let _ = w.set_focus();
         recovery::log("login: sign-in window refocused");
@@ -153,7 +149,16 @@ fn on_navigation(app: &AppHandle, url: &tauri::Url) -> bool {
             .login
             .probe
             .store(true, Ordering::SeqCst),
-        other => recovery::log(&format!("login: unknown capture kind {other}")),
+        other => {
+            // `kind` comes from a remote page and lands in webview.log;
+            // query_pairs() percent-decodes, so %0A would forge a log line.
+            let safe: String = other
+                .chars()
+                .filter(char::is_ascii_graphic)
+                .take(32)
+                .collect();
+            recovery::log(&format!("login: unknown capture kind {safe}"))
+        }
     }
     false
 }
@@ -197,6 +202,13 @@ async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
     // a blip on the finished token used to cost the whole sign-in.
     let mut retried = false;
     loop {
+        // Re-checked at the top of every pass: a re-try re-enters the loop long
+        // after the request that started it, and `set_title` resolves by label —
+        // it would write into the window that replaced this one.
+        if app.state::<AppState>().login.epoch.load(Ordering::SeqCst) != epoch {
+            recovery::log("login: session replaced, result dropped");
+            return;
+        }
         set_title(app, STATUS_VERIFYING);
         let result = client::verify_user_token(&token).await;
         let st = app.state::<AppState>();
@@ -210,9 +222,10 @@ async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
         match result {
             Ok(()) => {
                 // Clear ran while this verification was in flight: the user
-                // asked for no credential at all, so do not put one back.
+                // asked for no credential at all, so do not put one back. The
+                // flag belongs to the live session now — clearing it here would
+                // break its single-flight guard.
                 if st.login.epoch.load(Ordering::SeqCst) != epoch {
-                    st.login.verifying.store(false, Ordering::SeqCst);
                     recovery::log("login: cleared while verifying, candidate dropped");
                     return;
                 }
@@ -248,6 +261,12 @@ async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
                     retried = true;
                     recovery::log("login: transient failure, re-trying the same candidate");
                     tokio::time::sleep(Duration::from_millis(800)).await;
+                    // The window may have been closed and reopened during the
+                    // pause; its queue is not ours to consume.
+                    if app.state::<AppState>().login.epoch.load(Ordering::SeqCst) != epoch {
+                        recovery::log("login: session replaced during the pause, result dropped");
+                        return;
+                    }
                     // A newer candidate that arrived during the pause is the
                     // better one to try: it is the console's later, more
                     // finished token, and the page never resends anything.
@@ -259,9 +278,8 @@ async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
                 }
                 // Closing and reopening the window bumps the epoch: a future
                 // that outlived its window must not write a title into the new
-                // one.
+                // one, nor clear its `verifying`.
                 if st.login.epoch.load(Ordering::SeqCst) != epoch {
-                    st.login.verifying.store(false, Ordering::SeqCst);
                     recovery::log("login: window replaced while verifying, result dropped");
                     return;
                 }
@@ -285,10 +303,13 @@ fn set_title(app: &AppHandle, text: &str) {
 /// Error code -> short window-title text (PLAN §5.2 codes).
 fn explain(error: &str) -> &'static str {
     match error {
-        "rate-limited" => "rate limited, retry in a moment",
+        "rate-limited" => "rate limited, try again in a moment",
         "network-error" => "network error",
-        "server-error" => "DeepSeek server error, retry in a moment",
-        _ => "token not accepted",
+        "server-error" => "DeepSeek server error, try again in a moment",
+        "token-expired" => "token not accepted",
+        // Every candidate answering 404/410 is a moved endpoint (PLAN §6.2), not
+        // a bad token — telling the user to sign in again would be a dead end.
+        _ => "verification failed",
     }
 }
 

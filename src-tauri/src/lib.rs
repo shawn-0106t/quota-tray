@@ -336,7 +336,10 @@ fn clear_credentials(app: AppHandle) {
     // is already in flight drop its result.
     {
         let st = app.state::<AppState>();
-        st.login.epoch.fetch_add(1, Ordering::SeqCst);
+        // A real boundary: bump the epoch AND clear the flags, so a candidate
+        // captured just before the clear cannot be stamped with the new epoch
+        // and saved afterwards, and `verifying` never outlives its future.
+        st.login.new_session();
         let handle = app.clone();
         tauri::async_runtime::spawn(async move { login::close(&handle) });
     }
