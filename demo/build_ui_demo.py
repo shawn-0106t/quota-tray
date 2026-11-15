@@ -24,7 +24,7 @@ def read(rel: str) -> str:
 
 def body_of(html: str) -> str:
     """Inner body HTML, minus the module scripts and the root id."""
-    match = re.search(r"<body>(.*)</body>", html, re.S | re.I)
+    match = re.search(r"<body[^>]*>(.*)</body>", html, re.S | re.I)
     assert match, "no <body>"
     # Case-insensitive on purpose (HTML tag names are), and both tags accept
     # anything up to '>' the way a parser does: CodeQL's py/bad-tag-filter
@@ -95,6 +95,12 @@ def build() -> str:
     main_css = re.sub(r"body\.enter \.root \{[^}]*\}", "", main_css)
     main_css = re.sub(r"body\.leave \.root \{[^}]*\}", "", main_css)
     main_css = re.sub(r"\.root \{\s*opacity: 0;\s*transform: translateY\(16px\);\s*\}", "", main_css)
+    # The panel's card is bottom-anchored only in the real window: the rule hangs
+    # off `body.panel`, and `body_of()` keeps the inner HTML only, so the demo's
+    # <body> has no class and these selectors can never match there. Drop them
+    # instead of shipping dead rules. `[^{}*/]*` keeps the pattern out of
+    # comments, which quote `body.panel > #root` themselves.
+    main_css = re.sub(r"body\.panel > \.root[^{}*/]*\{[^}]*\}", "", main_css)
     settings_css = read("src/settings.css").replace("#root", ".root")
     skills_css = read("src/skills.css").replace("#root", ".root")
     menu_css = read("src/menu.css").replace("#root", ".root")

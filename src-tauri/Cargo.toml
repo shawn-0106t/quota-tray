@@ -1,6 +1,6 @@
 [package]
 name = "quota-tray"
-version = "1.0.0"
+version = "1.0.1"
 description = "Quota Tray — Kimi Code and DeepSeek quota in one Windows tray panel"
 edition = "2021"
 rust-version = "1.77.2"

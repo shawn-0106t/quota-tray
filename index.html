@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quota Tray</title>
   </head>
-  <body>
+  <body class="panel">
     <div id="root">
       <!-- Header (PLAN §3.1): wordmark + last-updated stamp, then the provider
            tab. The control is the shared .seg component from theme.css — the
@@ -28,92 +28,97 @@
         </div>
       </div>
 
-      <section class="pane" id="pane-kimi">
-        <!-- Two bare readout columns -->
-        <div class="quota">
-          <div class="field">
-            <div class="label">Weekly</div>
-            <div class="num"><b id="week-pct">--</b><span class="unit">%</span></div>
-            <div class="bar"><i id="week-fill"></i></div>
-            <div class="note" id="week-reset"></div>
+      <!-- Both provider panes share one relatively positioned cell, so only the
+           tab on screen decides the card's height; main.ts animates that cell
+           while the outgoing pane is lifted out of flow (PLAN §3.6). -->
+      <div class="panes">
+        <section class="pane" id="pane-kimi">
+          <!-- Two bare readout columns -->
+          <div class="quota">
+            <div class="field">
+              <div class="label">Weekly</div>
+              <div class="num"><b id="week-pct">--</b><span class="unit">%</span></div>
+              <div class="bar"><i id="week-fill"></i></div>
+              <div class="note" id="week-reset"></div>
+            </div>
+            <div class="field">
+              <div class="label">5-hour</div>
+              <div class="num"><b id="five-pct">--</b><span class="unit">%</span></div>
+              <div class="bar"><i id="five-fill"></i></div>
+              <div class="note" id="five-reset"></div>
+            </div>
           </div>
-          <div class="field">
-            <div class="label">5-hour</div>
-            <div class="num"><b id="five-pct">--</b><span class="unit">%</span></div>
-            <div class="bar"><i id="five-fill"></i></div>
-            <div class="note" id="five-reset"></div>
-          </div>
-        </div>
 
-        <!-- Cache / decode block (PLAN §5.1, demo/ui-demo.html): read from the
-             local CLI session logs, so it is labelled `local` and appears only
-             once the first scan has numbers. -->
-        <div class="quota rule" id="kimi-cache" hidden>
-          <div class="field">
-            <div class="label">Cache 7d · local</div>
-            <div class="num" id="cache-week-num"><b id="cache-week">--</b><span class="unit">%</span></div>
-            <div class="bar"><i id="cache-week-fill"></i></div>
-            <div class="note" id="cache-week-note"></div>
+          <!-- Cache / decode block (PLAN §5.1, demo/ui-demo.html): read from the
+               local CLI session logs, so it is labelled `local` and appears only
+               once the first scan has numbers. -->
+          <div class="quota rule" id="kimi-cache" hidden>
+            <div class="field">
+              <div class="label">Cache 7d · local</div>
+              <div class="num" id="cache-week-num"><b id="cache-week">--</b><span class="unit">%</span></div>
+              <div class="bar"><i id="cache-week-fill"></i></div>
+              <div class="note" id="cache-week-note"></div>
+            </div>
+            <div class="field">
+              <div class="label">Cache today</div>
+              <div class="num" id="cache-today-num"><b id="cache-today">--</b><span class="unit">%</span></div>
+              <div class="bar"><i id="cache-today-fill"></i></div>
+              <div class="note" id="cache-today-note"></div>
+            </div>
           </div>
-          <div class="field">
-            <div class="label">Cache today</div>
-            <div class="num" id="cache-today-num"><b id="cache-today">--</b><span class="unit">%</span></div>
-            <div class="bar"><i id="cache-today-fill"></i></div>
-            <div class="note" id="cache-today-note"></div>
-          </div>
-        </div>
 
-        <div class="row" id="kimi-speed" hidden>
-          <div class="row-main">
-            <span class="row-label">Decode</span>
-            <span class="row-value muted" id="speed-value">--</span>
+          <div class="row" id="kimi-speed" hidden>
+            <div class="row-main">
+              <span class="row-label">Decode</span>
+              <span class="row-value muted" id="speed-value">--</span>
+            </div>
+            <div class="note tight" id="speed-note"></div>
           </div>
-          <div class="note tight" id="speed-note"></div>
-        </div>
 
-        <!-- Extra usage row -->
-        <div class="row">
-          <div class="row-main">
-            <span class="row-label">Extra usage</span>
-            <span class="row-value muted" id="extra-balance">--</span>
+          <!-- Extra usage row -->
+          <div class="row">
+            <div class="row-main">
+              <span class="row-label">Extra usage</span>
+              <span class="row-value muted" id="extra-balance">--</span>
+            </div>
+            <div class="extra-meta" id="extra-monthly" hidden>
+              <div class="bar"><i id="extra-fill"></i></div>
+              <div class="extra-note" id="extra-monthly-text"></div>
+            </div>
           </div>
-          <div class="extra-meta" id="extra-monthly" hidden>
-            <div class="bar"><i id="extra-fill"></i></div>
-            <div class="extra-note" id="extra-monthly-text"></div>
-          </div>
-        </div>
 
-        <!-- CLI version row -->
-        <div class="row" id="version-row" title="View Kimi Code releases">
-          <div class="row-main">
-            <span class="row-label">Kimi Code CLI</span>
-            <span class="row-side">
-              <span class="row-value muted" id="cli-version">--</span>
-              <span class="badge" id="badge" hidden>Update</span>
-            </span>
+          <!-- CLI version row -->
+          <div class="row" id="version-row" title="View Kimi Code releases">
+            <div class="row-main">
+              <span class="row-label">Kimi Code CLI</span>
+              <span class="row-side">
+                <span class="row-value muted" id="cli-version">--</span>
+                <span class="badge" id="badge" hidden>Update</span>
+              </span>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- DeepSeek tab (PLAN §3.1): balance block, one row per model, total row.
-           The model list arrives already filtered and capped at four, so this
-           pane draws `byModel` as-is. A usage failure replaces the rows with a
-           hint line; the balance block keeps its own status either way. -->
-      <section class="pane" id="pane-deepseek" hidden>
-        <div class="balance">
-          <div class="row-main">
-            <span class="label">Balance</span>
-            <span class="status" id="ds-status"></span>
+        <!-- DeepSeek tab (PLAN §3.1): balance block, one row per model, total row.
+             The model list arrives already filtered and capped at four, so this
+             pane draws `byModel` as-is. A usage failure replaces the rows with a
+             hint line; the balance block keeps its own status either way. -->
+        <section class="pane" id="pane-deepseek" hidden>
+          <div class="balance">
+            <div class="row-main">
+              <span class="label">Balance</span>
+              <span class="status" id="ds-status"></span>
+            </div>
+            <div class="num" id="ds-total-num"><b id="ds-total">--</b></div>
+            <div class="note" id="ds-detail" hidden></div>
           </div>
-          <div class="num" id="ds-total-num"><b id="ds-total">--</b></div>
-          <div class="note" id="ds-detail" hidden></div>
-        </div>
-        <div class="mrows" id="ds-models"></div>
-        <div class="total" id="ds-summary" hidden>
-          <span id="ds-sum"></span>
-          <span id="ds-sum-today"></span>
-        </div>
-      </section>
+          <div class="mrows" id="ds-models"></div>
+          <div class="total" id="ds-summary" hidden>
+            <span id="ds-sum"></span>
+            <span id="ds-sum-today"></span>
+          </div>
+        </section>
+      </div>
 
       <!-- Footer: four ghost actions -->
       <footer class="actions">

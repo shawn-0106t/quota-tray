@@ -345,31 +345,222 @@ function renderStamp(): void {
 
 // ---- Provider tab (PLAN §3.4 / §3.6) ----
 
-function applyTab(animate: boolean): void {
+function syncRadios(): void {
   document.querySelectorAll<HTMLInputElement>('input[name="provider"]').forEach((input) => {
     input.checked = input.value === tab;
   });
-  const kimi = el('pane-kimi');
-  const ds = el('pane-deepseek');
-  kimi.hidden = tab !== 'kimi';
-  ds.hidden = tab !== 'deepseek';
-  const shown = tab === 'kimi' ? kimi : ds;
-  shown.classList.remove('tab-in');
-  if (animate) {
-    void shown.offsetWidth; // restart the keyframes on a repeated switch
-    shown.classList.add('tab-in');
+}
+
+function applyPanes(): void {
+  el('pane-kimi').hidden = tab !== 'kimi';
+  el('pane-deepseek').hidden = tab !== 'deepseek';
+}
+
+function applyTab(): void {
+  syncRadios();
+  applyPanes();
+}
+
+// Tab-switch motion (PLAN §3.6). The numbers are WinUI's page-refresh set: the
+// cell grows on the entrance curve (fast out, slow in) and shrinks on the exit
+// curve (slow out, fast in); both panes cross-fade over the same 167ms on those
+// two curves. The fade deliberately runs for the whole move instead of WinUI's
+// 83ms `ControlFasterAnimationDuration`: the outgoing pane paints above the
+// incoming one, so fading it early would expose a bare `--paper` band while the
+// cell is still collapsing (DS → Kimi leaves ~190px of it for ~40ms). Windows
+// never animates a top-level window's size frame by frame, so the window jumps
+// once to the taller tab (invisible, see the CSS) and everything the eye follows
+// happens inside the WebView.
+const MOTION = {
+  grow: 200, // Fluent durationNormal: 167ms is too tight for ~280px of travel
+  shrink: 167, // ControlFastAnimationDuration
+  fadeIn: 167,
+  fadeOut: 167, // matches the shrink: the old content must cover the closing cell
+  enter: 'cubic-bezier(0, 0, 0, 1)', // WinUI: fast out, slow in
+  exit: 'cubic-bezier(1, 0, 1, 1)', // WinUI: slow out, fast in
+};
+
+// A switch owns the panes for ~200ms. `tabRun` is the same generation guard
+// `hideGen` uses: timers and promises left over from a superseded switch must
+// never settle the one on screen.
+let tabRun = 0;
+let tabSwitching = false;
+let tabStarted = false;
+let tabAnims: Animation[] = [];
+
+const reducedMotion = (): boolean =>
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+/** Drop every trace of an in-flight switch without deciding what shows. */
+function resetTabMotion(): void {
+  tabSwitching = false;
+  tabStarted = false;
+  // Supersede a coroutine still parked on a frame: the fallback timer can settle
+  // a switch while the panel is hidden (rAF pauses), and without this the
+  // coroutine would wake up later and replay a stale pair of heights into the
+  // freshly shown window.
+  tabRun += 1;
+  for (const anim of tabAnims) anim.cancel();
+  tabAnims = [];
+  const panes = document.querySelector<HTMLElement>('.panes');
+  if (panes) panes.style.height = '';
+  for (const id of ['pane-kimi', 'pane-deepseek']) {
+    const pane = el(id);
+    pane.style.opacity = '';
+    pane.classList.remove('pane-leaving');
   }
+}
+
+/** Snap to the current `tab`. This is the end of a switch and the escape hatch
+    for a second click that lands while the first one is still running. It fixes
+    the panes only: the radio is owned by `switchTab`, which has already moved on
+    to the new tab by then — re-syncing it here would snap the segmented control
+    back to the tab the user just left. */
+function settleTab(): void {
+  if (!tabSwitching) return;
+  resetTabMotion();
+  applyPanes();
+  reportHeight();
 }
 
 function switchTab(next: ProviderTab): void {
   if (next === tab) return;
+  settleTab(); // a click inside the previous 200ms lands first, without motion
+  const prev = tab;
   tab = next;
-  applyTab(true);
-  renderStamp();
-  // Height changes in the same frame as the content, and the backend re-pins
-  // the card's bottom-right corner while resizing (PLAN §4).
-  reportHeight();
+  // The segmented control follows the click immediately (that IS the feedback);
+  // the header stamp belongs to the content, so it flips with the panes instead
+  // (see playTabSwitch) — otherwise the stamp reads "DeepSeek" for the frames
+  // the body is still Kimi.
+  syncRadios();
   invoke('set_active_tab', { tab }).catch(() => undefined);
+
+  const panes = document.querySelector<HTMLElement>('.panes');
+  const root = document.getElementById('root');
+  if (!panes || !root || reducedMotion()) {
+    applyPanes();
+    renderStamp();
+    reportHeight();
+    return;
+  }
+  // The generation is bumped here, synchronously, so the rejection handler below
+  // can tell "my switch failed" from "a newer switch is running and I must not
+  // touch it" — the one recovery path a bare `catch` would get wrong.
+  const run = ++tabRun;
+  playTabSwitch(run, prev, next, panes, root).catch(() => {
+    if (tabSwitching && run === tabRun) settleTab();
+  });
+}
+
+async function playTabSwitch(
+  run: number,
+  prev: ProviderTab,
+  next: ProviderTab,
+  panes: HTMLElement,
+  root: HTMLElement,
+): Promise<void> {
+  const outgoing = el(prev === 'kimi' ? 'pane-kimi' : 'pane-deepseek');
+  const incoming = el(next === 'kimi' ? 'pane-kimi' : 'pane-deepseek');
+
+  // Both layouts are measured inside one task, so nothing paints in between:
+  // the outgoing pane leaves the flow first, which lets the incoming one alone
+  // decide the height (PLAN §3.6 — an in-flow pair measures the taller pane and
+  // would size the window for the tab that is not on screen).
+  const h0 = root.offsetHeight;
+  const p0 = panes.offsetHeight;
+  // Header + footer + the card's 2px border, measured off the CONTENT height:
+  // `h0` is the capped box once `.clamped` is on, and `h0 - p0` would then
+  // under-report the chrome and make every later height too small.
+  const chrome = root.scrollHeight + 2 - p0;
+  outgoing.classList.add('pane-leaving');
+  incoming.hidden = false;
+  incoming.style.opacity = '0';
+  panes.style.height = `${p0}px`; // pin at the old height while the card animates
+  tabSwitching = true;
+  // With `.panes` pinned, the live height of the incoming tab has to be asked of
+  // the pane itself. Read at use time, never once: a poll tick can add rows while
+  // the window resize is in flight, and a stale end keyframe would clip the new
+  // rows until the settle snaps them in.
+  const cardHeight = (): number => chrome + incoming.offsetHeight;
+
+  // Window first, content second: it has to be tall enough for the card to grow
+  // into before the first animated frame, or the card's top edge — and the tab
+  // the user just clicked — gets cut by the window edge. The extra room appears
+  // above a card whose bottom edge is anchored, so this jump cannot be seen.
+  // A switch cut short by a hide still has to settle: rAF pauses for a hidden
+  // page, so the frame awaited below may not arrive until the panel is visible
+  // again. Only a coroutine that never reached the animation is rescued here —
+  // a slow IPC that eventually starts one must not be cut off mid-flight (the
+  // animation has its own end timer). `settleTab()` is idempotent, and a newer
+  // switch bumps `run` first.
+  window.setTimeout(() => {
+    if (run === tabRun && !tabStarted) settleTab();
+  }, MOTION.grow + 260);
+  let target = Math.max(h0, cardHeight()) + SHADOW_ROOM;
+  await invoke('panel_height', { height: target }).catch(() => undefined);
+  if (run !== tabRun) return;
+  // The IPC reply means the size was applied, not that the WebView has resized
+  // its viewport yet; a card that grows first gets clipped at the top. Wait for
+  // the real viewport, capped so a stuck resize cannot stall the switch forever.
+  for (let i = 0; i < 3 && window.innerHeight + 1 < target; i += 1) await nextFrame();
+  if (run !== tabRun) return;
+  // Content that arrived during the resize belongs to this animation, not to a
+  // snap at the end: grow the window once more if the tab got taller meanwhile.
+  const retarget = Math.max(h0, cardHeight()) + SHADOW_ROOM;
+  if (retarget > target + 0.5) {
+    target = retarget;
+    await invoke('panel_height', { height: target }).catch(() => undefined);
+    for (let i = 0; i < 3 && window.innerHeight + 1 < target; i += 1) await nextFrame();
+    if (run !== tabRun) return;
+  }
+  // If the backend had to clamp the window (small work area), the card has to
+  // cap itself BEFORE it grows past the window's top edge — the steady-state
+  // toggle only runs at the settle, which would leave the header and the
+  // provider tab clipped for the whole animation. The max matters: shrinking
+  // FROM an overflowing tab stays capped until the animation has come down.
+  root.classList.toggle(
+    'clamped',
+    Math.max(chrome + p0, cardHeight()) + SHADOW_ROOM > window.innerHeight + 1,
+  );
+
+  const end = incoming.offsetHeight;
+  const grow = end > p0;
+  // The header stamp belongs to the pane on screen, so it flips with it — not
+  // with the radio, which moved the moment the user clicked.
+  renderStamp();
+  tabStarted = true;
+  const card = panes.animate([{ height: `${p0}px` }, { height: `${end}px` }], {
+    duration: grow ? MOTION.grow : MOTION.shrink,
+    easing: grow ? MOTION.enter : MOTION.exit,
+    fill: 'forwards',
+  });
+  const out = outgoing.animate([{ opacity: 1 }, { opacity: 0 }], {
+    // Never longer than the cell's own move: `settleTab()` hides the pane when
+    // the cell lands, so a fade still running then would pop. The invariant is
+    // shrink <= fadeOut <= grow; the shrink matches, the grow has headroom.
+    duration: Math.min(MOTION.fadeOut, grow ? MOTION.grow : MOTION.shrink),
+    easing: MOTION.exit,
+    fill: 'forwards',
+  });
+  const into = incoming.animate([{ opacity: 0 }, { opacity: 1 }], {
+    duration: MOTION.fadeIn,
+    easing: MOTION.enter,
+    fill: 'forwards',
+  });
+  tabAnims = [card, out, into];
+
+  const done = (): void => {
+    if (run !== tabRun) return;
+    settleTab();
+  };
+  card.finished.then(done).catch(() => undefined);
+  // Timers keep firing when a hidden window throttles rAF, so hiding the panel
+  // mid-switch can never leave the panes pinned at a stale height.
+  window.setTimeout(done, (grow ? MOTION.grow : MOTION.shrink) + 60);
 }
 
 // ---- Content height reporting (PLAN §4) ----
@@ -378,13 +569,32 @@ function switchTab(next: ProviderTab): void {
 // renders while its window is still hidden (startup, and every quota-updated
 // tick while hidden), and Chromium pauses rAF for hidden pages — an rAF-based
 // report would only land after the window became visible, so the first show
-// would use a stale height. Reading offsetHeight forces the layout we need.
+// would use a stale height. Reading scrollHeight forces the layout we need.
 // Only the active pane is laid out, so this is always the height of the tab on
-// screen.
+// screen — except during a tab switch, where the window is deliberately held at
+// the taller of the two tabs and `settleTab()` reports the final height itself.
 function reportHeight(): void {
+  if (tabSwitching) return;
   const root = document.getElementById('root');
   if (!root) return;
-  invoke('panel_height', { height: root.offsetHeight + SHADOW_ROOM }).catch(() => undefined);
+  // Report the CONTENT height, not the box: once `.clamped` is on, offsetHeight
+  // is the cap and the backend would follow it down to nothing.
+  const natural = root.scrollHeight + 2 + SHADOW_ROOM;
+  invoke('panel_height', { height: natural })
+    .catch(() => undefined)
+    .then(() => {
+      // Compare against the viewport AFTER the resize has landed: comparing
+      // before it makes every growing tick flash a scrollbar for a frame (and
+      // reflow the two columns by its width). The backend clamps to the work
+      // area, so a genuinely too-short window still shows up here.
+      requestAnimationFrame(() => {
+        // Re-measure at frame time: several reports can land in one tick
+        // (quota + cache), and a `natural` captured before the IPC round trip
+        // would flip the flag onto content that has already changed again.
+        const live = root.scrollHeight + 2 + SHADOW_ROOM;
+        root.classList.toggle('clamped', live > window.innerHeight + 1);
+      });
+    });
 }
 
 // ---- Show/hide animation (SPEC 15.1 / 15.2) ----
@@ -437,7 +647,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // The persisted tab decides which pane is on screen before the first
   // measurement, so the window is never sized for the other provider (PLAN §4).
   tab = state.settings.activeTab === 'deepseek' ? 'deepseek' : 'kimi';
-  applyTab(false);
+  applyTab();
   renderQuota(state.quota);
   renderVersion(state.update);
   // Re-report once fonts have settled: the first measurement can precede the

@@ -66,19 +66,16 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # The tag names a version; the carriers decide which version gets built.
+      # A mismatch would publish an exe whose file properties lie, or a source
+      # zip whose lockfile disagrees with it. Runs before `npm ci` so a stale
+      # lockfile fails the job instead of paying for the install first.
+      - name: Verify tag against the version carriers
+        shell: bash
+        run: python scripts/release/check_versions.py --tag "$GITHUB_REF_NAME"
+
       - name: Install frontend dependencies
         run: npm ci
-
-      # The tag names a version; tauri.conf.json decides which version gets
-      # built. A mismatch would publish an exe whose file properties lie.
-      - name: Verify tag against tauri.conf.json
-        shell: bash
-        run: |
-          version=$(python -c "import json;print(json.load(open('src-tauri/tauri.conf.json', encoding='utf-8'))['version'])")
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "tag $GITHUB_REF_NAME does not match tauri.conf.json version $version" >&2
-            exit 1
-          fi
 
       # beforeBuildCommand (npm run build) runs as part of tauri build; the app
       # ships as a portable exe only, so no bundler runs here

@@ -5,6 +5,50 @@ All notable changes to Quota Tray are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each section carries
 the English notes first, then the Chinese mirror.
 
+## [1.0.1] — 2026-11-15
+
+### Added
+
+- `scripts/release/check_versions.py`, run by CI on every push and by the
+  release workflow before it builds: a release is one version written in five
+  files (`package.json`, `package-lock.json`, `tauri.conf.json`, `Cargo.toml`,
+  `Cargo.lock`) and only one of them is read by the build, so a half-bumped
+  tree used to stay green. `--tag vX.Y.Z` also checks the pushed tag.
+
+### Changed
+
+- Tab switching between Kimi and DeepSeek now follows Windows' own motion
+  values instead of a 120ms linear fade. The card grows into the taller tab
+  (200ms, entrance curve `cubic-bezier(0,0,0,1)`) or shrinks back (167ms, exit
+  curve `cubic-bezier(1,0,1,1)`); both panes cross-fade over the same 167ms (the
+  old content fades out on the exit curve so it covers the cell until it has
+  closed), and the window is pre-sized to the taller tab before the first
+  animated frame
+  (and re-sized once more if data lands while that resize is in flight), and the
+  animation re-reads the live height before it starts, so the card's top edge no
+  longer jumps: it animates, and a data tick that lands mid-switch retargets
+  instead of snapping at the end. The bottom edge, the action footer and the
+  tray-corner anchoring stay put. On a clamped work area the card caps itself at
+  the viewport and scrolls, so the header and the provider tab stay reachable.
+  `prefers-reduced-motion` switches instantly.
+
+### 中文
+
+- **新增**：`scripts/release/check_versions.py`——一次发版的版本号写在五个文件里
+  （`package.json`、`package-lock.json`、`tauri.conf.json`、`Cargo.toml`、
+  `Cargo.lock`），而构建只读其中一个，半升级的树以前不会报错；现在 CI 每次推送
+  都跑一遍，发版工作流在建 exe 之前带 `--tag` 跑（顺带校验 tag）。
+- **变更**：Kimi / DeepSeek 的 tab 切换改用 Windows 原生 motion 的时长与曲线，
+  不再是 120ms linear。卡片长高到较高的那个 tab（200ms，进场
+  `cubic-bezier(0,0,0,1)`）、缩回 167ms（退场 `cubic-bezier(1,0,1,1)`）；两个 pane
+  用同一组 167ms 交叉淡入淡出（旧内容走退场曲线，压在上面盖到格子收完才消失），
+  三者同帧起跑。窗口在切换
+  开始时放大到较高者（resize 期间数据到达时会再放大一次），动画起跑前再重读一次
+  实时高度，所以卡片顶边不再瞬移而是平滑移动；切换途中到达的数据会让窗口与终点
+  关键帧一起重新对齐，不会在收尾时「啪」一下补齐。底边、底部动作行与托盘角的贴边
+  关系都不动。后端把窗口夹到工作区时，卡片改为限制在视口内并自行滚动，header 与
+  provider tab 仍然点得到。`prefers-reduced-motion` 下瞬时切换。
+
 ## [1.0.0] — 2026-11-14
 
 First stable release. Behaviour is unchanged from 0.1.0 — same app, with the

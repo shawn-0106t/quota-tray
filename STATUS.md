@@ -1,12 +1,23 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-14 21:05（**v1.0.0 已 publish**；`main` 干净、CI 绿、告警清零）。
+> 快照：2026-11-15（**v1.0.0 已 publish**；工作区里有一处未提交的动效改动，已 bump 到 1.0.1（未 push tag），见下方 2026-11-15 一节）。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
 ## 一句话
 
 **v1.0.0 已在 `https://github.com/shawn-0106t/quota-tray` 发布**（2026-11-14 13:02 UTC，Latest），行为与 0.1.0 一致——版本号表达的是「发布门禁到位 + 依赖当前」：全量审查、每次推送跑 CI、branch protection、CodeQL、Dependabot、社区文档齐备，依赖升到 vite 8.3.8 / tauri-plugin-opener 2.7.3 / base64 0.23.1。
+
+## 2026-11-15 tab 切换动效重做（按 Windows 原生 motion）
+
+- **起因**：切 tab 时卡片顶边瞬移 73–215px（`demo/heights.py` 实测 Kimi 330 / DeepSeek 单模型 403 / 四模型 545），再叠 120ms linear 淡入、旧 pane 直接 `hidden`，读起来像闪一下。
+- **做法**（契约见 `PLAN.md` §3.6，已重写）：窗口只在切换开始时**一次性**放大到两屏较高者（不可见——卡片在窗口内 bottom-anchored，多出来的空间在卡片上方且透明），`.panes` 的高度在 WebView 内按 WinUI 数值动：长高 200ms / 收缩 167ms、进场 `cubic-bezier(0,0,0,1)`；两个 pane 各 167ms 交叉淡入淡出（旧内容走退场曲线，盖到格子收完再消失——不用 WinUI 的 83ms，否则中段会露空白纸色）；结束时窗口缩回新高度、卡片不动。footer 与卡片底边一起钉住，移动的只有卡片顶边（header + tab 条）。
+- **结构改动**：`index.html` 两个 pane 外包一层 `.panes`、`<body class="panel">`；`body.panel > #root` 改成窗口内 bottom-anchored；旧 pane 切换时提离文档流（`.pane-leaving`），所以测到的高度永远只由当前 tab 决定。`main.ts` 里的 `MOTION` 是唯一一处可调的时长/曲线，`prefers-reduced-motion` 走瞬时路径。
+- **审查**（explore + code-review skill，只读）：1 Major / 6 Minor，全部处置——(1) `resetTabMotion()` 现在自增 `tabRun`，面板收起后停在 rAF 上的 coroutine 醒来只会看到过期世代号，不会再重放一次旧切换；(2) 动画起跑前重读实时高度，resize 期间的 poll tick 会触发一次 retarget，不再在收尾时「啪」一下补齐；(3) 底边锚定把裁切移到顶部，因此内容高于实时视口时给卡片加 `.clamped`（`max-height` + 内部滚动），避免工作区夹取时 header/tab 被裁掉；同时 `reportHeight()` 改报 `scrollHeight`（内容高）而不是被夹过的 `offsetHeight`；(4) 收缩改用退场曲线（原来两个方向都用进场曲线，首帧就走掉 45%）；(5) 「旧 pane 画在新 pane 之上」确认是刻意行为并写进契约；(6) demo 生成器显式剥掉 `body.panel > .root` 规则（demo 的 `<body>` 没有 `panel` 类，这些选择器本来就不命中，留着只是死规则）；(7) 三处文档与代码不一致的说法按实际行为改写。
+- **二轮（delta）复查**：只审 7 处修复的 diff，又报 1 Major / 7 Minor，全部处置——**Major**：`.clamped` 在切换路径上完全没被维护，工作区夹取时整段长高动画会把 header + tab 顶出窗口上沿（修：`playTabSwitch` 起跑前按「实际视口 < 目标高度」再判一次）；**Minor**：`.clamped` 用 resize 前的视口判定，每次内容长高会闪一帧滚动条（修：挪到 resize 落地后的 rAF 里判）、460ms 救援定时器可能砍掉正在跑的动画（修：加 `tabStarted` 闸门，只救「动画没起来」的 coroutine）、滚动条 CSS 重复两遍、demo 剥规则的注释理由不成立且正则会跨注释匹配（修：`[^{}*/]*` + 改写理由）、AGENTS/CHANGELOG 的 "pre-sized ONCE" 与 retarget 矛盾、AGENTS 把设置窗的 `max(offsetHeight, scrollHeight)` 公式挂在面板上、STATUS 的验证指针指空。另确认 7 处修复中 `tabRun`、`cardHeight()` 算术、`scrollHeight + 2` 稳态等值、CSS 夹取几何、曲线/`fill: forwards` 清理都成立。
+- **三轮（全量复核，逐条按前两轮对照）**：**0 Critical / 0 Major / 7 Minor**，结论「可以发 1.0.1」。已处置 7 条——表头时间戳比内容早 1–4 帧（`renderStamp()` 挪到 pane 翻转处，radio 仍即时反馈）、`switchTab` 的错误兜底缺世代号（`run` 提到调用方再比对）、`chrome` 与 `end` 量的是两个盒模型（`.panes > .pane { display: flow-root }`，今天零布局变化）、`reportHeight` 的 `.clamped` 判定拿旧 `natural`（rAF 里重测）、`package-lock.json` 仍写 1.0.0（已升）、收缩期空白带（`MOTION.fadeOut` 83 → 167，旧内容盖到格子收完）、CI 缺「载体版本一致」校验（新增 `scripts/release/check_versions.py`，CI 每次推送跑、release 带 `--tag` 跑）。
+- **四轮（增量：`fadeOut` 167 + 版本门禁）**：2 Major / 8 Minor，全部处置——AGENTS 的发版步骤仍写「三处」而门禁要五处（改成五载体 + `npm install --package-lock-only`，第 4 步同步改口）、`Cargo.toml` 版本解析取「文件里第一个 `version =`」（改用 `tomllib` 读 `[package]`，`Cargo.lock` 也改成 tomllib 扫描，`version.workspace = true` 会如实报 missing）、`--tag ""` 被当成「不校验」（改成 `is not None` + `vX.Y.Z` 格式校验）、缺文件时抛 traceback（改成一行提示 + exit 1）、stdout 阻塞导致摘要印在表格之前（`flush=True`）、`fadeOut` 与格子时长之间的隐含不变量（`Math.min(fadeOut, 格子时长)` + 注释写明）、「v1.0.1 已发布且锁文件过期」措辞不实（1.0.1 其实未发）、AGENTS 仓库布局漏了新脚本、CHANGELOG 没提新门禁且 release 里门禁跑在 `npm ci` 之后（补 `### Added` / 中文「新增」，门禁提到 `npm ci` 之前）。
+- **验证**：`npx tsc --noEmit` / `npm run build` / `cargo fmt --check` / `cargo test`（29 passed）/ `--test-ui`（四窗口 OK）全绿；用 CDP 逐帧采样真实打包产物：长高 200ms/进场曲线、收缩 167ms/退场曲线、内联固定值、结束时高度回调、连点打断后无残留，以及「resize 期间数据到达 → 窗口与终点一起 retarget」都对；README 截图重生成后与仓库**字节一致**（稳态几何未变）；真机 CU 截图 + 60fps 录屏：Kimi 1222 ↔ DeepSeek 585 切换后窗口高度精确等于卡片 + 56，录到的收缩过程逐帧无裁切（圆角与阴影完整）、footer 与底边不动。
 
 ## 两次发版的记录（2026-11-14）
 

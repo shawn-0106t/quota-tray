@@ -53,6 +53,7 @@ Run the same commands locally before opening a PR:
 | Gate | Command |
 |---|---|
 | Secrets | gitleaks over the full commit history (CI) |
+| Version carriers | `python scripts/release/check_versions.py` — `package.json`, `package-lock.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock` must agree |
 | Rust format | `cargo fmt --check` (in `src-tauri`) |
 | Rust lints | `cargo clippy --all-targets --locked -- -D warnings` (in `src-tauri`) |
 | Rust tests | `cargo test --locked` (in `src-tauri`) |
@@ -156,6 +157,7 @@ CI（`.github/workflows/ci.yml`）必须全绿，branch protection 要求构建 
 | 门禁 | 命令 |
 |---|---|
 | 敏感信息 | gitleaks 扫全历史（CI） |
+| 版本号一致 | `python scripts/release/check_versions.py`——`package.json`、`package-lock.json`、`tauri.conf.json`、`Cargo.toml`、`Cargo.lock` 必须相同 |
 | Rust 格式 | `cargo fmt --check`（在 `src-tauri`） |
 | Rust lint | `cargo clippy --all-targets --locked -- -D warnings`（在 `src-tauri`） |
 | Rust 测试 | `cargo test --locked`（在 `src-tauri`） |

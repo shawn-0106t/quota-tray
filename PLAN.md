@@ -120,8 +120,11 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 ### 3.6 动效
 
 - 面板开场：opacity 160ms linear + translateY 16→0 220ms `cubic-bezier(.215,.61,.355,1)`；收场 130/160ms，结束后回调后端真正隐藏（沿用 kimi 的 `finish_hide` 语义）。
-- tab 切换：内容 120ms 淡入，窗口高度同帧变更（底部锚定）。实现是一次「入场 pane 淡入」而不是真正的交叉淡入：交叉淡入要把两个 pane 叠在同一格里，而那一格量出来是**较高**的那个 pane，高度就会按没显示的那个 tab 算，底部锚定跟着跳。淡入期间只有 opacity 变，`offsetHeight` 不受影响，实测高度与内容同帧。
-- 全局 `prefers-reduced-motion` 同时关掉过渡与动画。
+- tab 切换（2026-11-15 按 Windows 原生 motion 重做）：**窗口跳一次，卡片自己长**。时长/曲线取 WinUI 的 page-refresh 一组（[Timing and easing](https://learn.microsoft.com/en-us/windows/apps/design/motion/timing-and-easing)）：长高 200ms 用进场曲线 `cubic-bezier(0,0,0,1)`（fast out, slow in），收缩 167ms 用退场曲线 `cubic-bezier(1,0,1,1)`（slow out, fast in，`ControlFastAnimationDuration`）；两个 pane 用同一组 167ms 交叉淡入淡出（进场/退场曲线）。淡出**故意不取** WinUI 的 83ms `ControlFasterAnimationDuration`：旧 pane 画在新 pane 之上，提早淡完会在格子还没收完时露出一条光秃秃的 `--paper` 空白带（`DeepSeek → Kimi` 中段约 190px、持续约 40ms），所以让它盖到收合结束。依据：官方把「在 tab / 左侧导航项之间切换」定义为 page refresh（incoming slide up + fade in，[Page transitions](https://learn.microsoft.com/en-us/windows/apps/design/motion/page-transitions)），顶层内容切换优先用 quick fade，容器尺寸变化属另一类 container transform，且父级（容器）动得比子级（内容）久。旧 pane 被提离文档流后按 CSS 2.1 绘制顺序画在新 pane **之上**，所以那 167ms 的重叠是「旧内容淡出、露出新内容」，不是新压旧。
+- 窗口为什么不参与逐帧 resize：Windows 自己从不这样（`AnimateWindow` 只能整窗淡入/滚动，`ThemeTransition` 只在一个固定表面内动内容）。所以切换时先把窗口**一次性**放大到两屏中较高者（不可见：卡片底边锚定，多出来的空间在卡片上方、透明），再让 `.panes` 的高度在 WebView 内动，卡片高度随之变化；footer 与卡片底边一起钉住不动，屏幕上移动的只有卡片顶边（header + tab 条）。结束时窗口缩回新高度，卡片纹丝不动。动画起跑前会**重读一次**实时高度：poll tick / `deepseek-updated` 恰好落在 resize 期间时，窗口按新高度再放大一次、终点关键帧也用新值，不会停在过期高度再「啪」一下补齐。
+- 结构约束：两个 pane 共用一个 `.panes` 单元格（`position: relative; overflow: hidden`），切换时旧的 pane **被提离文档流**（`.pane-leaving { position: absolute }`），所以量到的高度永远只由屏幕上那个 pane 决定。把两个 in-flow pane 叠进同一格就会量到较高的那个，窗口随之按没显示的 tab 定尺寸。面板的 `#root` 因此改成窗口内 bottom-anchored（`body.panel > #root`）：稳态与 top-anchored 完全一致，但窗口短暂高于内容时卡片不会浮到托盘角上方。底边锚定把「窗口不够高」的裁切从卡片底部移到**顶部**，所以内容高于实时视口时卡片加 `.clamped`（`max-height: calc(100vh - 56px)` + 内部滚动，与设置窗同一套 4px 滚动条）：后端把窗口夹到工作区时 header 与 provider tab 不会被裁掉，否则用户会被锁在切不走的那个 tab 上。判定在两处做——`reportHeight()` 每次 resize 落地后判一次，切换则在起跑前再判一次（否则长高那 200ms 一直被裁）。这一判定走 JS 而不是纯 CSS 的 `100vh` 上限：窗口尺寸按物理像素取整，125% 缩放下视口可能比内容短 0.4px，纯 CSS 会在本来放得下的卡片上常驻一条滚动条；`reportHeight()` 上报的始终是 `scrollHeight + 2`（内容高），不是被夹过的 `offsetHeight`，否则窗口会跟着一起缩小。
+- 连点打断：切到一半再点，先 `settleTab()` 瞬时落定到上一次的目标，再从当时的实测高度重新起跑；`tabRun` 世代号在 `resetTabMotion()` 里自增，所以被 settle 掉的那一次即使 coroutine 还挂在 rAF 上（面板被收起后 rAF 暂停），醒来也只会看到过期世代号而退出。
+- 全局 `prefers-reduced-motion` 关掉 CSS 过渡与动画；`main.ts` 另有一处 `matchMedia` 判断（WAAPI 不吃 CSS 的 `@media` 重置），命中时走瞬时切换。
 
 ## 4. 窗口与信息架构
 
@@ -244,6 +247,8 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 | **P5（已完成 2026-11-14）** | 打包、发布线、README、独立 code review | ✅ `npx tauri build` 只出便携 exe（`bundle.targets = []`；2026-11-14 决定不再提供 NSIS 安装包）；✅ `--test-fetch` / `--test-deepseek` / `--test-update` / `--test-usage` / `--test-ui` / `--test-login` 全绿；✅ 中英双语 `README.md` + 生成的 `docs/screenshot-{light,dark}.png`；✅ `.github/workflows/{ci,release}.yml` + `scripts/release/make_release_zip.py`（tag → 草稿 Release，gitleaks 前置，正文取自 CHANGELOG，`sha256sum -c` 通过）；✅ 独立 code review 报 2 Blocker / 3 Major / 3 Minor，全部修复并复验（明细见 `STATUS.md`）。**未做**：建 remote、打 tag、真人在登录窗里输账号（需要人）。 |
 
 **顺序调整（2026-11-14 决定）**：P2 剩余的分段 tab 移到 P3 之后。理由是先让 DeepSeek 有真实数据，tab 一次做对，不做空态占位面板。tab 于同日随后落地，验收仍是「连点 30 次不跳位、底边与右边缘不动」。
+
+**P5 之后（2026-11-15，未发版）**：tab 切换动效按 Windows 原生 motion 重做（§3.6），并新增发版门禁 `scripts/release/check_versions.py`（五个版本载体必须一致，CI 每次推送跑、release 带 `--tag` 跑）。两者都在 `CHANGELOG.md` 的 `## [1.0.1]` 段，树上的版本号已 bump 到 1.0.1，**tag 与 Release 尚未创建**。
 
 ## 9. 风险与未决
 

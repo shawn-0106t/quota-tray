@@ -29,20 +29,74 @@ body.leave #root {
   margin: 10px 0 12px;
 }
 
-/* Tab switch (PLAN §3.6): the incoming pane fades in over 120ms while the
-   window height changes in the same frame. A true cross-fade would need both
-   panes stacked in one grid cell, and that cell measures the TALLER pane — the
-   window would then be sized for the tab that is not on screen. */
-.pane.tab-in {
-  animation: pane-in 120ms linear;
+/* Tab switch (PLAN §3.6): both panes share one clipped, relatively positioned
+   cell, and only that cell's height is animated (main.ts, WinUI page-refresh
+   timings). The leaving pane is lifted out of flow so the incoming pane alone
+   decides the measured height — stacking two in-flow panes would measure the
+   taller one and mis-size the bottom-anchored window. */
+.panes {
+  position: relative;
+  overflow: hidden;
 }
-@keyframes pane-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+.pane.pane-leaving {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+}
+
+/* `.panes` is a BFC (overflow:hidden), so its height includes the LAST child's
+   bottom margin, while `.pane` — a plain block — would let that margin collapse
+   out of its own offsetHeight. `flow-root` makes the pane a BFC too, so the
+   pinned height, `cardHeight()` and the animated end keyframe all measure the
+   same box. No pane's last child has a margin today (the last row carries its
+   bottom padding instead, PLAN §3.4); this keeps a future one from silently
+   clipping the last row by its margin. */
+.panes > .pane {
+  display: flow-root;
+}
+
+/* The card is anchored to the WINDOW's bottom edge, not its top (PLAN §3.6):
+   a tab switch pre-sizes the window to the taller pane while the card itself
+   grows from the bottom, so a window that is briefly taller than the content
+   can never leave the card floating above the tray corner. Steady state is
+   unchanged — the window is always card + 2 x 28px, which both anchors place
+   identically. `margin: 0` is required: the 28px inset replaces the 28px
+   margin, otherwise the card would lose another 56px of width. */
+body.panel > #root {
+  position: absolute;
+  inset: auto 28px 28px;
+  margin: 0;
+}
+
+/* Bottom anchoring moves the clamp clip to the card's TOP (panel.rs caps the
+   window at the work area), so without a cap the header and the provider tab
+   would be the first things lost — and losing the tab locks the user on the tab
+   they cannot leave. `main.ts` marks the card `.clamped` when the reported
+   content is taller than the live viewport, and it scrolls itself then, like the
+   settings sheet. Deliberately not a CSS-only `100vh` cap: at e.g. 125% the
+   rounded window can come out 0.4px shorter than its content, which would park
+   a scrollbar in a card that fits. */
+body.panel > #root.clamped {
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+}
+body.panel > #root::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+body.panel > #root::-webkit-scrollbar-track {
+  background: transparent;
+}
+body.panel > #root::-webkit-scrollbar-thumb {
+  background: var(--hair);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+body.panel > #root:hover::-webkit-scrollbar-thumb {
+  background: var(--ink-3);
+  background-clip: padding-box;
 }
 
 /* Cache block (PLAN §5.1): a second readout row, separated from the quota one by

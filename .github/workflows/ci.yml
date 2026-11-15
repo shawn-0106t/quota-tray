@@ -45,6 +45,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # A release version is written in five files and only tauri.conf.json is
+      # read by the build, so a half-bumped tree stays green until the source
+      # zip or the exe properties disagree (the 1.0.1 bump left
+      # package-lock.json stale until a review caught it). Pure file
+      # comparison, no dependencies needed.
+      - name: Version carriers agree
+        run: python scripts/release/check_versions.py
+
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:

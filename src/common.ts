@@ -143,8 +143,9 @@ export interface CredentialStatus {
   updateAvailable: boolean;
 }
 
-/** Transparent shadow-fade room around a window card: the #root margin is
-    28px on each side. Must match PANEL_MARGIN in src-tauri/src/panel.rs. */
+/** Transparent shadow-fade room around a window card: 28px on each side (a
+    margin in the settings/skills/menu windows, the `inset` of the panel's
+    bottom-anchored card). Must match PANEL_MARGIN in src-tauri/src/panel.rs. */
 export const SHADOW_ROOM = 56;
 
 // ---- Theme ----
