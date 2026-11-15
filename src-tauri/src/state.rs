@@ -96,6 +96,11 @@ pub struct LoginState {
 
 impl LoginState {
     pub fn reset(&self) {
+        // Bump the epoch, like Clear does: `verifying` is a flag, not a
+        // cancellation, so a future spawned for the old window keeps running.
+        // Without this it could save a token the user already walked away from,
+        // and retitle (or close) the window they just reopened.
+        self.epoch.fetch_add(1, Ordering::SeqCst);
         self.verifying.store(false, Ordering::SeqCst);
         self.accepted.store(false, Ordering::SeqCst);
         self.probe.store(false, Ordering::SeqCst);

@@ -220,6 +220,12 @@ pub async fn verify_user_token(token: &str) -> Result<(), String> {
             last_error = error;
             continue;
         }
+        // A refusal already seen outranks this base's failure: the token IS the
+        // answer, and reporting `server-error` here would also talk the caller
+        // into re-trying a token the platform has already refused.
+        if refused {
+            return Err("token-expired".to_string());
+        }
         return Err(error);
     }
     if refused {
@@ -255,11 +261,16 @@ fn token_accepted(body: &str) -> bool {
 fn code_is_error(code: &Value) -> bool {
     // Any numeric value that is not zero: integer or float, number or string.
     match code {
-        Value::Number(number) => number.as_f64().is_some_and(|value| value != 0.0),
+        // `f64::from_str` accepts "NaN" and "inf", which are not zero — a
+        // non-finite value must not reject a candidate (a false rejection locks
+        // the user out; a false acceptance is overwritten by the next sign-in).
+        Value::Number(number) => number
+            .as_f64()
+            .is_some_and(|value| value.is_finite() && value != 0.0),
         Value::String(text) => text
             .trim()
             .parse::<f64>()
-            .map(|value| value != 0.0)
+            .map(|value| value.is_finite() && value != 0.0)
             .unwrap_or(false),
         _ => false,
     }
@@ -617,6 +628,10 @@ mod tests {
         // but the envelope is third-party data and this costs two assertions).
         assert!(!token_accepted(r#"{"code":40003.0,"data":null}"#));
         assert!(!token_accepted(r#"{"code":"40003.0","data":null}"#));
+        // A non-finite value is not an error code: rejecting on it would be the
+        // one direction this predicate must never take.
+        assert!(token_accepted(r#"{"code":"NaN","data":null}"#));
+        assert!(token_accepted(r#"{"code":"inf","data":null}"#));
         // `data: null` WITHOUT an error code is not a rejection: a valid account
         // with no usage this month may look like that, and a false rejection
         // locks the user out of signing in entirely.

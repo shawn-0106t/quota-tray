@@ -20,7 +20,10 @@ the English notes first, then the Chinese mirror.
   lock a valid token out. A candidate that fails *transiently* (`network-error`,
   `rate-limited`, `server-error`, a 5xx) is re-tried once before the window gives
   up — the page never resends a token it already reported, so a blip on the
-  finished one used to cost a whole sign-in. (Reproduced against the live
+  finished one used to cost a whole sign-in. A refused token is also reported as
+  `token-expired` now instead of whichever endpoint the walk ended on, so the
+  paste field says "invalid or expired — not saved" instead of
+  "verification failed (http-404) — not saved". (Reproduced against the live
   endpoint 2026-11-15; the balance endpoint is not affected — `api.deepseek.com`
   answers 401 for a bad key.)
 
@@ -34,6 +37,9 @@ the English notes first, then the Chinese mirror.
   base 否则会让有效 token 永远登不进去。候选 token 遇到**临时性**失败
   （`network-error` / `rate-limited` / `server-error` / 5xx）会在窗口放弃前重试一次；
   页面对已经上报过的 token 不再重发，所以完成态 token 上的一次抖动以前等于白登一次。
+  被拒的 token 现在统一报 `token-expired`（不再跟着 walk 的最后一条错误走），手工
+  粘贴的文案由「verification failed (http-404) — not saved」变成
+  「invalid or expired — not saved」。
   （2026-11-15 对真实接口复现；余额接口不受影响，`api.deepseek.com` 对坏 key 回 401。）
 
 ## [1.0.1] — 2026-11-15

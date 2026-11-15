@@ -232,7 +232,22 @@ async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
                     retried = true;
                     recovery::log("login: transient failure, re-trying the same candidate");
                     tokio::time::sleep(Duration::from_millis(800)).await;
+                    // A newer candidate that arrived during the pause is the
+                    // better one to try: it is the console's later, more
+                    // finished token, and the page never resends anything.
+                    if let Some(next) = st.login.pending.lock().ok().and_then(|mut p| p.take()) {
+                        token = next;
+                        retried = false;
+                    }
                     continue;
+                }
+                // Closing and reopening the window bumps the epoch: a future
+                // that outlived its window must not write a title into the new
+                // one.
+                if st.login.epoch.load(Ordering::SeqCst) != epoch {
+                    st.login.verifying.store(false, Ordering::SeqCst);
+                    recovery::log("login: window replaced while verifying, result dropped");
+                    return;
                 }
                 st.login.verifying.store(false, Ordering::SeqCst);
                 set_title(
@@ -380,3 +395,21 @@ const HOOK_JS: &str = r#"
   }
 })();
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::transient;
+
+    // The list is the whole retry budget: a real refusal must never be retried,
+    // and a transport blip always is. `usage_error` maps every 5xx to
+    // `server-error`, so a raw `http-5…` never reaches this predicate.
+    #[test]
+    fn only_transport_failures_are_retried() {
+        for retry in ["network-error", "rate-limited", "server-error"] {
+            assert!(transient(retry), "{retry}");
+        }
+        for final_answer in ["token-expired", "http-404", "http-400", "http-410"] {
+            assert!(!transient(final_answer), "{final_answer}");
+        }
+    }
+}
