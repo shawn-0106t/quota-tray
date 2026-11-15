@@ -203,5 +203,7 @@ slint/Cargo.toml              + tao / wry / url
 
 ## 10. 给 P5 的提醒
 
-- 这个子进程模式改了两处发布面：`slint/Cargo.toml` 新增 3 个依赖（tao/wry 与 Tauri 版同一套底层），以及 `quota-core` 的行为修复。后者会随 `src-tauri` 一起发布，**建议在 Tauri 线单独发一个 patch 版本**（v1.0.2），否则「验证后保存」在发行版里仍然是坏的。
+- 这个子进程模式改了两处发布面：`slint/Cargo.toml` 新增 3 个依赖（tao/wry 与 Tauri 版同一套底层），以及 `quota-core` 的行为修复。
+- **`verify_user_token` 的修复已经单独开了 PR**（`fix/verify-before-save`，[#4](https://github.com/shawn-0106t/quota-tray/pull/4)）：`main` 上没有 `quota-core/`（P1 只在这条分支上），所以它是**移植**到 `src-tauri/src/deepseek/client.rs` 的同一份修复 + 单测，外加 `PLAN.md` §5.2 与 `CHANGELOG.md` 的 `[Unreleased]`；`credentials.rs` 的 tmp 名带 pid 那处**没有**带过去（那是 P4 引入第二个写者才需要的）。合并后要不要打 `v1.0.2` 是发布决策，尚未拍板。
+- 两条线收敛时：`quota-core/src/deepseek/client.rs` 已经是修好的版本，`src-tauri` 那份在抽取完成的那一刻应当删掉，不要留两份实现。
 - 若 P5 要把新壳并进发布线，`profile.webview` 的路径规则要与现版统一（现在新壳用 `EBWebView-login`，现版用 `EBWebView`），并决定便携模式下这个目录是否跟着 exe 走（当前固定 `%LOCALAPPDATA%`，与 Tauri 一致）。

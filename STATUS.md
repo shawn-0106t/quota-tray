@@ -7,7 +7,7 @@
 > **本分支（`spike/slint-demo`）是 Slint 调研线，不是下面这份 Tauri 主线的快照。**
 > 新对话先读 `spike/HANDOFF.md`（现状 / 决策 / 坑 / 阶段），实测数字在 `spike/slint-demo/REPORT.md`（静态视觉）、`spike/p0/REPORT.md`（P0 交互）、`spike/p1/REPORT.md`（P1 `quota-core` 抽取）、`spike/p2/REPORT.md`（P2 真实面板）、`spike/p3/REPORT.md`（P3 三个窗口）与 `spike/p4/REPORT.md`（P4 登录链路）。P0–P4 已完成：新壳在 `slint/`（crate `quota-tray-slint`），面板接 `quota-core` 真实数据（17 个变体与 DOM 逐像素相等）、`ActiveTab` 持久化、225% 贴角漂移 0 px；P3 补齐设置 / skills / 托盘菜单三个窗口（设置窗内容尺寸 + 居中 + 90% 上限并在卡片内滚动，保存后**子进程重启读回**确认落盘生效、主题即时切到四个窗口；skills 按需扫描 124 技能 / 134 行并可滚动；托盘右键在光标处开自定义菜单，动作先关菜单再执行）；**P4 把 DeepSeek 登录窗做成子进程**（`--login-host`，tao + wry/WebView2），`--test-login` 证明窗口 / 取消导航通道 / `fetch` 拦截 / 拒收坏候选（凭证文件逐字节不变），`--test-signin` 证明「用户关窗 → 设置窗还原」与「Clear → 杀子进程 + 不回写」。三个窗口的截图与 DOM 文本带最差 1.00 CSS px。下一步 P5（对齐门禁）。`src-tauri` 依赖仓库根的 `quota-core/`：纯逻辑都在那边，`src-tauri` 只剩窗口/托盘/登录壳；发布产物与 v1.0.1 行为不变。
 >
-> **P4 顺带修了一个 `quota-core` 的真缺陷**：DeepSeek 对无效 token 回 **HTTP 200** + `{"code":40003,…}`，`verify_user_token` 原来只看状态码，等于「验证后保存」从不拒绝任何候选。现在读 body（`token_accepted`，只认非零 `code`）、被拒时继续走下一个候选 base，并有单测。**这条修复也在 Tauri 线里生效**——v1.0.1 的发行版仍然带着旧行为，建议单独发一个 v1.0.2（见 `spike/HANDOFF.md` §9）。
+> **P4 顺带修了一个 `quota-core` 的真缺陷**：DeepSeek 对无效 token 回 **HTTP 200** + `{"code":40003,…}`，`verify_user_token` 原来只看状态码，等于「验证后保存」从不拒绝任何候选。现在读 body（`token_accepted`，只认非零 `code`）、被拒时继续走下一个候选 base，并有单测。**这条修复也已经单独开了 PR** [#4](https://github.com/shawn-0106t/quota-tray/pull/4)（`fix/verify-before-save`，从 `main` 切出；`main` 上没有 `quota-core/`，所以是移植到 `src-tauri/src/deepseek/client.rs` 的同一份修复 + 单测）。合并后 v1.0.1 的旧行为才会消失；打不打 `v1.0.2` 仍待拍板（见 `spike/HANDOFF.md` §9）。
 
 ## 一句话
 

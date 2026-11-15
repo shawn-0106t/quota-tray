@@ -276,6 +276,7 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 
 - ~~新壳目录名~~（**已定 2026-11-15：`slint/`**）。
 - 最终是否用 Slint 版替代 Tauri 版（决定 v2.0.0 的发布线怎么切）。
-- **`verify_user_token` 的修复要不要单独发一个 Tauri patch 版本**（v1.0.2）：它在 `quota-core` 里，现版 v1.0.1 的「验证后保存」目前对坏 token 一律放行（`spike/p4/REPORT.md` §4.1）。发版需要走 `check_versions.py` 的五载体流程。
+- **`verify_user_token` 的修复要不要打 `v1.0.2`**：修复已在 PR [#4](https://github.com/shawn-0106t/quota-tray/pull/4)（分支 `fix/verify-before-save`，从 `main` 切出）里，因为 `main` 上没有 `quota-core/`，它是**移植**到 `src-tauri/src/deepseek/client.rs` 的同一份修复 + 单测。合并进 `main` 后修复进 `[Unreleased]`；打不打 tag 是发布决策，要走 `check_versions.py` 的五载体流程。
+  两条线收敛时注意：`quota-core` 里那份已经是修好的，`src-tauri` 的副本在抽取完成时应当删除，不要留两份实现。
 - skills 的单行描述：本实现统一预留两行（124 行里 11 行多 15.22 px）。P5 若要严格对齐，要么引入文本测量，要么顺手修 `quota-core::skills` 的折叠 YAML 解析（`description: >` 现在显示成裸 `>`，两个壳都一样）——后者会改现版行为，需要单独决定。
 - 三档 DPI 的真机验证：本机固定 225%，改缩放会动用户的桌面布局；用户已选「算术证明 + 现场 225%，100/150/200% 留人工检查单」。
