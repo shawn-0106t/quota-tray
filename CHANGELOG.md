@@ -5,6 +5,32 @@ All notable changes to Quota Tray are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each section carries
 the English notes first, then the Chinese mirror.
 
+## [Unreleased]
+
+### Fixed
+
+- "Verify before save" now actually verifies. The DeepSeek platform answers
+  **HTTP 200** for a bad usage token and puts the failure in the body
+  (`{"code":40003,"msg":"Authorization Failed (invalid token)","data":null}`), so
+  the sign-in window and the manual paste field both accepted every candidate
+  they were handed — a wrong or half-finished token replaced a working one, and
+  `--test-login` printed `verify=ok` for any string longer than 20 characters.
+  Verification reads the envelope now, and a base that rejects the candidate is
+  skipped instead of ending the walk: a remembered dead endpoint could otherwise
+  lock a valid token out. (Reproduced against the live endpoint 2026-11-15; the
+  balance endpoint is not affected — `api.deepseek.com` answers 401 for a bad
+  key.)
+
+### 中文
+
+- **修复**：「验证后保存」现在真的会验证。DeepSeek 平台对无效的 usage token 回
+  **HTTP 200**，失败写在 body 里（`{"code":40003,…,"data":null}`），只判状态码等于
+  任何候选都算通过——登录窗与手工粘贴兜底都可能把错的或没完成的 token 顶掉原本
+  正常的那个，`--test-login` 也会对任何超过 20 个字符的串打印 `verify=ok`。
+  现在会读信封里非零的 `code`，并且某个候选 base 被判拒时继续试下一个：记住的坏
+  base 否则会让有效 token 永远登不进去。（2026-11-15 对真实接口复现；余额接口不受
+  影响，`api.deepseek.com` 对坏 key 回 401。）
+
 ## [1.0.1] — 2026-11-15
 
 ### Added
