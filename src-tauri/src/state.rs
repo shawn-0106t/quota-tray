@@ -89,18 +89,18 @@ pub struct LoginState {
     /// costs the user a whole sign-in, so it is retried once the current
     /// verification finishes (login.rs).
     pub pending: Mutex<Option<String>>,
-    /// Bumped by Clear. A verification that started before the bump must not
-    /// save its token afterwards, or "Clear" would silently undo itself.
+    /// Bumped by Clear and by every real window boundary (a new session, or a
+    /// close). A verification that started before the bump must not save its
+    /// token, retitle, or close the window that now exists.
     pub epoch: std::sync::atomic::AtomicU64,
 }
 
 impl LoginState {
+    /// Clear the per-session flags without touching the epoch. Used when the
+    /// console window is merely brought forward: the user is still in the same
+    /// sign-in, and an in-flight verification of a good candidate must survive
+    /// (the page never resends a token it already reported).
     pub fn reset(&self) {
-        // Bump the epoch, like Clear does: `verifying` is a flag, not a
-        // cancellation, so a future spawned for the old window keeps running.
-        // Without this it could save a token the user already walked away from,
-        // and retitle (or close) the window they just reopened.
-        self.epoch.fetch_add(1, Ordering::SeqCst);
         self.verifying.store(false, Ordering::SeqCst);
         self.accepted.store(false, Ordering::SeqCst);
         self.probe.store(false, Ordering::SeqCst);
@@ -108,6 +108,13 @@ impl LoginState {
         if let Ok(mut pending) = self.pending.lock() {
             *pending = None;
         }
+    }
+
+    /// A real window boundary: the console window was built or destroyed, so
+    /// anything still in flight belongs to a session nobody is looking at.
+    pub fn new_session(&self) {
+        self.reset();
+        self.epoch.fetch_add(1, Ordering::SeqCst);
     }
 }
 

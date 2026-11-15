@@ -174,7 +174,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
   读取按前缀判断：带 `dpapi:` 的解密，不带的按明文接受（手工调试与「退回明文」的逃生口，结构不用改）。解密失败按「未配置」处理，`--test-deepseek --verbose` 必须区分 `credential source: env | file | imported | none | undecryptable`，且**永不打印密钥**。
   **一次性导入的判据是「我们的文件是否存在」，不是「值是否为空」**：`Clear` 会把文件写成空值而不是删除它，否则下一次轮询就会从旧文件把刚清掉的凭证又导回来。手工 `Clear` 对 `env` 来源无效——设置窗因此显式写出这一行。
   采用前先验证（PLAN §4）：API key 走一次 `user/balance`，浏览器 token 走一次 `usage/amount`；只有通过才落盘，坏值不会顶掉工作正常的值。
-  **2xx 不等于通过**（2026-11-15 P4 探针实测）：平台对无效 token 回 `HTTP 200` + `{"code":40003,"msg":"Authorization Failed (invalid token)","data":null}`，所以浏览器 token 的验证必须读 body 里非零的 `code`（`data: null` 本身不算拒绝——零用量账号可能长这样）；一个候选 base 被判拒时**继续试下一个**，记住的 base 可能是坏的，直接返回会永久锁死有效 token 的登录。
+  **2xx 不等于通过**（2026-11-15 P4 探针实测）：平台对无效 token 回 `HTTP 200` + `{"code":40003,"msg":"Authorization Failed (invalid token)","data":null}`，所以浏览器 token 的验证必须读 body 里非零的 `code`（`data: null` 本身不算拒绝——零用量账号可能长这样）；一个候选 base 被判拒时**继续试下一个**，记住的 base 可能是坏的，直接返回会永久锁死有效 token 的登录。临时性失败（`network-error` / `rate-limited` / `server-error`）对**同一个**候选重试一次——页面的钩子按 `lastToken` 去重，被丢掉的候选不会重发；`token-expired` 不重试。已经见过拒绝时，后续 base 的**非临时**失败也报 `token-expired`，临时失败仍交给重试（假拒绝是更坏的方向）。关闭登录窗或 `Clear` 都会 bump `epoch`：在途的验证不得保存、改标题或关闭之后才出现的窗口；「重新前置已有窗口」不是新会话，不动 epoch。
   一次只验一个：验证期间到达的新候选顶掉队列里的旧候选，并在本次验证失败后重试——页面按自己的 `lastToken` 去重，被丢掉的候选不会被重发，等于白登一次。`--test-login` 的 probe URL 带 `quotatray=probe` 标记，宿主据此拒绝学习端点。
   有意的取舍：密钥绑当前 Windows 账号，便携盘插到别的账号下解不开（重填即可）；迁移期新旧两版不再共用凭证（旧版读不了密文，新版也不再回写旧文件）。
 - 缓存：`config_dir()/deepseek-cache.json`（原子写 temp + rename，失败保留上次成功值）。
