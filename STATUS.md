@@ -1,10 +1,25 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-15 22:10（**v1.0.2 已定版并推送，tag 未打**；主线 `main` = 定版提交；v1.0.1 仍是 Latest）。
-> v1.0.2 的内容：`verify_user_token` 对 DeepSeek 的 200 + `{"code":40003}` 错误信封不再误判（PR #4，squash 合并 `5d95f1f`），外加一条同源加固——临时性失败（`network-error` / `rate-limited` / `server-error` / 5xx）对**同一个**候选重试一次（`fix:` 提交，见下）。定版时五个载体已升到 1.0.2，`check_versions.py` 六项全 ok，`tsc` / `vite build` / `cargo fmt+clippy+test --locked`（30 passed）全绿，`--test-login` 在真机跑过：`verify=ok` + 四个窗口 OK + `LoginWindow capture channel OK` / `fetch capture OK`。
+> 快照：2026-11-15 22:53（**v1.0.2 已定版并推送，tag 未打**；`main` = `e6e30f7`；v1.0.1 仍是 Latest）。
+> v1.0.2 的内容只有 DeepSeek 的「验证后保存」这一条，但它在四轮独立只读审查里被磨了四遍：
+> `verify_user_token` 不再把 200 + `{"code":40003}` 的错误信封当成通过（PR #4 → squash `5d95f1f`）；临时性失败对同一个候选重试一次；被拒的 token 优先于其他 base 的错误；`LoginState` 的 epoch 只在真正的窗口边界（`new_session`：建窗 / 关窗 / Clear）移动，而不是在「重新前置已有窗口」时。
+> 五载体 1.0.2、`CHANGELOG` 的 `[1.0.2] — 2026-11-15`、`check_versions.py` 六项 ok；`tsc` / `vite build` / `cargo fmt+clippy+test --locked`（31 passed）全绿；`--test-login` 在真机跑过（`verify=ok` + 四窗 OK + 两项捕获 OK）；`main` 的 CI 在 `e6e30f7` 上 success 1m47s。
 > 下一步只剩发布链：打 `v1.0.2` tag（触发草稿 Release）→ 核对三件资产与 `SHA256SUMS.txt` → 手动 publish。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
+
+## v1.0.2 的四轮审查与处置（2026-11-15）
+
+发版的是一条修复，但它被独立只读审查磨了四遍；每一轮都抓到真东西，记录在此以免重复劳动：
+
+| 轮 | 范围 | 发现 | 处置 |
+|---|---|---|---|
+| 1 | P4 的登录链路（spike 线） | 1 Critical / 3 Major / 9 Minor（父进程存活检测、父进程侧 epoch 兜底会抹掉手工粘贴的凭证、`--test-signin` 会覆盖凭证文件……） | 全部处置，见 `spike/p4/REPORT.md` §4.3 |
+| 2 | `5d95f1f` + `f92748f`（v1.0.2 定版） | 2 Major / 10 Minor（`Err` 从死代码变热路径却无重试；`AGENTS.md` 仍写「2xx 即通过」） | `c7f0594` + `96c8a3c` |
+| 3 | `c7f0594` + `b016576` 的增量 | 1 Major / 6 Minor（拒绝优先级没覆盖所有出口；睡眠期间的新候选被吞；`reset()` 不 bump epoch） | `b016576` + `4ba92ee` |
+| 4 | `4ba92ee` 的增量 | 2 Major / 7 Minor（拒绝优先级反过来吞掉了重试；`reset()` 把 bump 放到了「重新前置已有窗口」路径上） | `e6e30f7` |
+
+第 3、4 轮抓的都是**上一轮修复自己引入的**问题，这也是为什么现在停下来打 tag 而不是再走第五轮。**已知缺口**（不打算在发版前修）：`verify_and_save` 的决策表没有测试，只测了 `transient()`——要钉住需要把决策抽成纯函数，那是一次结构改动，留给 P5；以及 `--test-login` 无法复现「验证在途时重新前置窗口」的时序，这条只能靠真人登录验一次。
 
 ## 一句话
 
