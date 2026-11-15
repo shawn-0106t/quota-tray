@@ -276,7 +276,7 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 
 - ~~新壳目录名~~（**已定 2026-11-15：`slint/`**）。
 - 最终是否用 Slint 版替代 Tauri 版（决定 v2.0.0 的发布线怎么切）。
-- ~~`verify_user_token` 的修复要不要打 `v1.0.2`~~（**2026-11-15 已定**：等 PR [#4](https://github.com/shawn-0106t/quota-tray/pull/4) 的 CodeQL 转绿 → squash 合并 → 五载体升 1.0.2 + CHANGELOG 定版；打 tag 仍待点头。修复因为 `main` 上没有 `quota-core/`，是**移植**到 `src-tauri/src/deepseek/client.rs` 的同一份实现 + 单测；发版流程见 `STATUS.md` 顶部那张记录。）
+- ~~`verify_user_token` 的修复要不要打 `v1.0.2`~~（**2026-11-15 已完成**：PR [#4](https://github.com/shawn-0106t/quota-tray/pull/4) squash 合并为 `5d95f1f`，定版提交 `f92748f` 把五个载体升到 1.0.2 并把 `[Unreleased]` 写进 `## [1.0.2] — 2026-11-15`，`check_versions.py` 六项通过、本地四道门禁全绿。**只剩打 `v1.0.2` tag** 才会触发草稿 Release，待点头。修复因为 `main` 上没有 `quota-core/`，是**移植**到 `src-tauri/src/deepseek/client.rs` 的同一份实现 + 单测。）
   两条线收敛时注意：`quota-core` 里那份已经是修好的，`src-tauri` 的副本在抽取完成时应当删除，不要留两份实现。
 - skills 的单行描述：本实现统一预留两行（124 行里 11 行多 15.22 px）。P5 若要严格对齐，要么引入文本测量，要么顺手修 `quota-core::skills` 的折叠 YAML 解析（`description: >` 现在显示成裸 `>`，两个壳都一样）——后者会改现版行为，需要单独决定。
 - 三档 DPI 的真机验证：本机固定 225%，改缩放会动用户的桌面布局；用户已选「算术证明 + 现场 225%，100/150/200% 留人工检查单」。

@@ -11,10 +11,10 @@
 
 ## 2026-11-15 已定的发布动作（记录）
 
-1. 等 PR [#4](https://github.com/shawn-0106t/quota-tray/pull/4) 的 CodeQL 转绿（`Build & test` 与 gitleaks 已绿）。
-2. **squash 合并**进 `main`（仓库按 squash 合并、合并后删 head branch）。
-3. 合并后把五个版本载体升到 **1.0.2**（`package.json`、`package-lock.json`、`tauri.conf.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`），`CHANGELOG.md` 的 `[Unreleased]` 段定版为 `## [1.0.2] — <日期>`，`python scripts/release/check_versions.py` 必须通过。
-4. 打 `v1.0.2` tag 才会触发 release workflow（草稿 Release，发布仍手动）——**这一步等用户点头**。
+1. ~~等 PR [#4](https://github.com/shawn-0106t/quota-tray/pull/4) 的 CodeQL 转绿~~ —— **已完成**（CodeQL / gitleaks / `Build & test` 全绿）。
+2. ~~squash 合并进 `main`~~ —— **已完成**，`5d95f1f`。
+3. ~~五个版本载体升到 1.0.2 + CHANGELOG 定版~~ —— **已完成**，`f92748f`（`chore(release): v1.0.2`，已 push）；`check_versions.py` 六项全 ok，`tsc` / `vite build` / `cargo fmt+clippy+test --locked`（30 passed）全绿。
+4. 只剩一步：打 `v1.0.2` tag 才会触发 release workflow（草稿 Release，发布仍手动）——**这一步等用户点头**。
 
 注意：本地 `main` 在 `../kimi-deepseek-quota-dashboard`（同一仓库的另一个 worktree），合并后在那里 `git pull --ff-only` 再升版本；不要在 worktree 里 `git switch main`。
 
