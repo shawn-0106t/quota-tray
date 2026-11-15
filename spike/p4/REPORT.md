@@ -129,6 +129,24 @@ HTTP/1.1 200 OK
 
 审查还确认了几件事：新代码没有把 token 写进任何日志（只有 pid、退出码、错误码、布尔与 base URL）；`--probe` 模式不可能落盘；捕获仍是取消导航、页面没有 IPC 面；Clear 的 kill+wait→clear 顺序是对的；没有找到 `RefCell` 重入；`try_wait` 不会吞掉退出码；`tao`/`wry` 在 lock 里只有一份。
 
+## 4.4 发版前对 `main` 的复查（2026-11-15）
+
+v1.0.2 定版后又对 `main` 上的两个提交（`5d95f1f` 修复 + `f92748f` 定版）做了一轮只读审查，报 **2 Major / 10 Minor**，全部处置（`c7f0594` + `96c8a3c`，并镜像回本分支）：
+
+| 级 | 发现 | 处置 |
+|---|---|---|
+| Major | 修复把 `Err` 从死代码推成热路径，却没有任何重试：页面按 `lastToken` 去重不会再发，完成态 token 上的一次抖动等于白登一次 | 子进程与 Tauri 版都加了「同一候选遇临时性失败重试一次」（`network-error` / `rate-limited` / `server-error` / `http-5xx`）；`token-expired` 不重试——那是答案，不是抖动 |
+| Major | `AGENTS.md` 的不可回退陷阱仍写「2xx 即通过」，与本次修复相反 | 改写成信封规则 + 走候选 + 临时重试；后续 agent 不会再把它「简化」回去 |
+| Minor | `last_error` 被循环顺序覆盖：被拒 token 可能被报成 `http-404` | 单独记 `refused`，结束时优先返回 `token-expired` |
+| Minor | 只认无符号整数 `code`；`"40003"` / 负数会放行 | 新增 `code_is_error`：数字与数字字符串、任意非零都算错误 |
+| Minor | 200 + 空 body 算通过，与旁边注释矛盾 | 把「读不出」与「只是空」分开写清楚（空 body 仍通过，理由写在注释里） |
+| Minor | 单测只钉 `token_accepted`，没钉 `verify_user_token` 调用它 | 该缺口如实记录：谓词有单测，**接线**靠运行时证据（下面那条） |
+| Minor | `AGENTS.md` 说 `--test-login` 只发一次 `amount`、tag 停在 v1.0.0 | 两处措辞按现状改写 |
+| Minor | `STATUS.md` 快照时间晚于提交时间；「只剩两件」列了三步 | 时间改对，改成「只剩发布链」 |
+| Minor | bug 模板的版本示例仍是 `v1.0.0` | 改成 `v1.0.2` |
+
+审查同时确认：移植保真（与 `quota-core` 版逐行只差三处 doc comment）、记忆的 base 只在真正接受后才写、`data:null`/`code:0`/非 JSON/空 body 不会误杀、粘贴路径把 `token-expired` 映射成「invalid or expired — not saved」且不清空输入框。**缺的运行时证据也补上了**：修复后 `--test-login` 在真机打印 `verify=ok`，四个窗口 OK、`LoginWindow capture channel OK` 与 `fetch capture OK`。
+
 ## 5. 陷阱（给后面接手的人）
 
 1. **设置窗在登录期间是「隐藏但记住」**：`login::open` 只翻 `settings_open` 并 `hide()`，不动 `skills`/`menu`；`reopen_sheet` 决定退出时是否 `settings::open`。不要在 `login::open` 里调 `settings::close`——那会顺带触发「关闭后收起面板」的判定。
