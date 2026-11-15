@@ -5,7 +5,7 @@ All notable changes to Quota Tray are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each section carries
 the English notes first, then the Chinese mirror.
 
-## [Unreleased]
+## [1.0.2] — 2026-11-15
 
 ### Fixed
 
