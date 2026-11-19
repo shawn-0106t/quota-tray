@@ -539,34 +539,44 @@ body {
 
     /* ---------- settings.css ---------- */
     .win-settings .root{
+  display: flex;
+  flex-direction: column;
   max-height: calc(100vh - 56px);
+}
+.win-settings .root > .pane{
   overflow-y: auto;
 }
-.win-settings .root::-webkit-scrollbar{
+.win-settings .root > .pane::-webkit-scrollbar{
   width: 8px;
   height: 8px;
 }
-.win-settings .root::-webkit-scrollbar-track{
+.win-settings .root > .pane::-webkit-scrollbar-track{
   background: transparent;
 }
-.win-settings .root::-webkit-scrollbar-thumb{
+.win-settings .root > .pane::-webkit-scrollbar-thumb{
   background: var(--hair);
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
 }
-.win-settings .root:hover::-webkit-scrollbar-thumb{
+.win-settings .root > .pane:hover::-webkit-scrollbar-thumb{
   background: var(--ink-3);
   background-clip: padding-box;
 }
 .win-settings #titlebar{
   cursor: default;
+  flex: none;
+  padding-bottom: 14px;
 }
 .win-settings .pane{
   display: flex;
   flex-direction: column;
-  padding-top: 14px;
+  min-height: 0;
+  padding-top: 0;
   padding-bottom: 14px;
+}
+.win-settings .pane > *{
+  flex: none;
 }
 .win-settings .pane .seg{
   margin-top: 8px;
@@ -695,7 +705,7 @@ body {
 }
 .win-settings .cred-field input::placeholder{
   color: var(--ink-2);
-  opacity: 0.75;
+  opacity: 1;
 }
 .win-settings .cred-field input:focus-visible{
   outline: 2px solid var(--accent-bar);

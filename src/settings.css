@@ -1,51 +1,73 @@
 /* Settings window — D layout. Shared tokens/primitives live in theme.css.
-   The window is content-sized: settings.ts reports #root's height and the
-   backend resizes + re-centres it, so adding a section (P4: DeepSeek
+   The window is content-sized: settings.ts reports the card's content height
+   and the backend resizes + re-centres it, so adding a section (P4: DeepSeek
    credentials) needs no fixed height anywhere. */
 
-/* The backend caps the window at 90% of the work area (panel.rs), which on a
-   short work area is less than the sheet: the manual-paste block alone adds
-   ~170px. The card scrolls itself in that case (`settings.ts` reports
-   `max(offsetHeight, scrollHeight)` so the height report stays honest), and the
-   scrollbar lives inside the card instead of at the transparent window edge. */
+/* The card is a column so the title bar can stay put while the content scrolls
+   underneath it — the same structure as the skills window (skills.css), where
+   only `.list` scrolls. The header is never inside the scroll box.
+   `max-height` is the work-area cap the backend applies (panel.rs: 90% of the
+   work area, which on a short work area is less than the sheet — the manual
+   paste block alone adds ~170px): the card can never be taller than its window,
+   so the bottom buttons can always be reached by scrolling. */
 #root {
+  display: flex;
+  flex-direction: column;
   max-height: calc(100vh - 56px);
+}
+
+/* Always the scroll box, never the card: the cap above turns into a scrollbar
+   here while the title bar stays outside it. The card keeps theme.css's
+   `overflow: hidden`, so its rounded corners still clip the pane. */
+#root > .pane {
   overflow-y: auto;
 }
 
 /* Thin, theme-coloured scrollbar (WebView2 is Chromium): an 8px lane with a
    4px thumb floating 2px inside the card's edge — the transparent border is
    what insets it, and `background-clip` keeps the fill inside that border. */
-#root::-webkit-scrollbar {
+#root > .pane::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-#root::-webkit-scrollbar-track {
+#root > .pane::-webkit-scrollbar-track {
   background: transparent;
 }
 
-#root::-webkit-scrollbar-thumb {
+#root > .pane::-webkit-scrollbar-thumb {
   background: var(--hair);
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
 }
 
-#root:hover::-webkit-scrollbar-thumb {
+#root > .pane:hover::-webkit-scrollbar-thumb {
   background: var(--ink-3);
   background-clip: padding-box;
 }
 
+/* The gap under the title belongs to the title, not to the scroll box: inside
+   the pane it would scroll away and the first row would read as glued to the
+   header. Same 14px as before, so the card's height is unchanged. */
 #titlebar {
   cursor: default;
+  flex: none;
+  padding-bottom: 14px;
 }
 
 .pane {
   display: flex;
   flex-direction: column;
-  padding-top: 14px;
+  min-height: 0;
+  padding-top: 0;
   padding-bottom: 14px;
+}
+
+/* Children never shrink: shrinking a row clips its own content instead of
+   overflowing, which would silently swallow the bottom of the sheet. */
+.pane > * {
+  flex: none;
 }
 
 /* Segmented rows sit 8px under their label */
@@ -192,10 +214,13 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-/* ink-2, not ink-3: a placeholder is text, and ink-3 is icons only (PLAN §3.2) */
+/* ink-2 at full alpha: `--ink-2` alone clears AA at 5.67:1 light / 6.26:1
+   dark (demo/check_contrast.py), and the old
+   `opacity: 0.75` composited it down to 3.33:1 — below AA, while the comment
+   above rightly says a placeholder is text (PLAN §3.2). Do not dim it again. */
 .cred-field input::placeholder {
   color: var(--ink-2);
-  opacity: 0.75;
+  opacity: 1;
 }
 .cred-field input:focus-visible {
   outline: 2px solid var(--accent-bar);
