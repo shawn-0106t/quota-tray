@@ -504,11 +504,12 @@ Overall: `Grid Margin=16`, 5 rows. All copy is in English (terminology aligned w
 
 ### 16.3 Response JSON parsing
 - **5-hour segment**: `root.limits` (array; take the `detail` object of element 0) → `ParseSegment`
-- **Weekly segment**: `root.usage` (object) → `ParseSegment`
-- `ParseSegment`: `percent = used/limit*100` (`used`, `limit` tolerate numbers or numeric strings, missing treated as 0; `limit<=0` treated as 1 to avoid division by zero); **non-finite percents become 0** — hostile strings (`"1e999"`, `"NaN"`) can parse to inf/NaN, and any percent that is not `IsFinite` is forced to 0; `resetTime` (string, `DateTimeOffset.TryParse`) → `ResetAt`
-- **Extra Usage**: `root.boosterWallet` (object):
+- **Weekly segment**: `root.usage` (object) → `ParseSegment`; the percentage prefers `root.usages.limit_7d.used_ratio` (a fraction: 0.0013 = 0.13 %), then `usage.used`/`usage.limit`, then `limit - remaining` (the 2026-11-19 payload carries only integer `limit`/`remaining`, no `used`)
+- `ParseSegment`: `percent = used/limit*100` (`used`, `limit` tolerate numbers or numeric strings, missing treated as 0; a missing `used` is derived as `max(0, limit - remaining)`; `limit<=0` treated as 1 to avoid division by zero); **non-finite percents become 0** — hostile strings (`"1e999"`, `"NaN"`) can parse to inf/NaN, and any percent that is not `IsFinite` is forced to 0; `resetTime` (string, `DateTimeOffset.TryParse`) → `ResetAt`
+- **Extra Usage**: `root.booster_wallet` (object; since 2026-11-19 the live payload uses the proto snake_case top-level key, and the older `root.boosterWallet` is still accepted — the wallet's own fields are camelCase, only this outermost key differs):
   - Not an object / missing → `State = NotActivated` ("Not activated")
   - `isEnabled == false` → `NotActivated` (defense: when the booster is not enabled, `amountLeft` is an estimate of "monthly limit minus used" rather than a real balance, and must be treated as not activated — borrowed from the KimiCodeBar v1.1.1 bug)
+  - no `isEnabled` but a `status` (the live shape) → only `STATUS_ACTIVE` counts, everything else is `NotActivated` (the other face of the same trap: a paused booster also reports an estimate)
   - `balance.amountLeft` (numeric string, numeric type tolerated) parseable → `State = Ready`; the unit is **1e-8 yuan**, converted to cents: `BalanceCents = saturating_add(raw, 500000) / 1000000` (with rounding; the addition saturates to guard against overflow — a pathological value near `i64.MaxValue` must not wrap)
   - Otherwise → `State = NoData` ("No data")
   - `monthlyChargeLimitEnabled == true` → `MonthlyEnabled=true`, `monthlyUsed.priceInCents` → `MonthlyUsedCents`, `monthlyChargeLimit.priceInCents` → `MonthlyLimitCents` (unit cents, numeric strings)
@@ -637,7 +638,7 @@ All self-check modes run **before the single-instance mutex check** (so they wor
 - **Event subscription lifecycle**: the main panel subscribes to `Quota.Updated`/`Updates.Updated` at construction and unsubscribes on close (the window is actually only hidden, never closed — singleton reuse); the tray subscribes to `Quota.Updated` to update the tooltip, and unsubscribes and destroys the tray icon on exit.
 - **Exception handling baseline**: all IO, registry, external process, and HTTP calls are wrapped in try/catch and silently swallowed; failure paths are expressed via UI text ("Update failed"/"Not detected") or state fields — never pop up an error dialog.
 - **Currency unit trap**: `amountLeft` is in 1e-8 yuan (convert to cents with `(raw + 500000) / 1000000`, with rounding); `priceInCents` is already cents; all JSON numbers are strings.
-- **`isEnabled=false` trap**: when the booster is not enabled, `amountLeft` is not a real balance; the whole card must be judged as "Not activated".
+- **`isEnabled=false` trap**: when the booster is not enabled, `amountLeft` is not a real balance; the whole card must be judged as "Not activated". The live payload carries `status` instead (only `STATUS_ACTIVE` counts), so both checks must stay.
 - **Exit cleanup**: hide and destroy the tray icon → stop the refresh timer → release the single-instance mutex.
 
 ---

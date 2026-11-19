@@ -25,7 +25,7 @@
 > | 17 CLI 版本检查 | 适用 |
 > | 18 设置持久化 | 适用；新增 `ActiveTab` 字段（`PLAN.md` §7） |
 > | 19 自检命令 | `--test-fetch` / `--test-update` / `--test-ui` / `--test-deepseek` / `--test-login` 适用 |
-> | 20 其他实现细节 | 适用；命名互斥锁改为 `QuotaTray.SingleInstance`，配置目录改为 `%APPDATA%\QuotaTray` |
+> | 20 其他实现细节 | 适用；命名互斥锁改为 `QuotaTray.SingleInstance`，配置目录改为 `%APPDATA%\QuotaTray-Slint`（Slint 壳）与 `%APPDATA%\QuotaTray`（Tauri 壳） |
 > | 21 Skills 只读窗口 | 适用 |
 > | 22 WebView2 故障检测与恢复 | 适用 |
 
@@ -505,11 +505,12 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 
 ### 16.3 响应 JSON 解析
 - **5 小时段**：`root.limits`（数组，取第 0 个元素的 `detail` 对象）→ `ParseSegment`
-- **周段**：`root.usage`（对象）→ `ParseSegment`
-- `ParseSegment`：`percent = used/limit*100`（`used`、`limit` 兼容数字或数字字符串，缺失按 0；`limit<=0` 时按 1 防除零）；**非有限百分比归零**——敌意字符串（如 `"1e999"`、`"NaN"`）可解出 inf/NaN，非 `IsFinite` 的百分比一律置 0；`resetTime`（字符串，`DateTimeOffset.TryParse`）→ `ResetAt`
-- **Extra Usage**：`root.boosterWallet`（对象）：
+- **周段**：`root.usage`（对象）→ `ParseSegment`；百分比优先取 `root.usages.limit_7d.used_ratio`（小数，0.0013 = 0.13%），没有则用 `usage` 的 `used`/`limit`，再没有则用 `limit - remaining`（2026-11-19 的线上报文只有整数 `limit`/`remaining`，没有 `used`）
+- `ParseSegment`：`percent = used/limit*100`（`used`、`limit` 兼容数字或数字字符串，缺失按 0；`used` 缺失时按 `max(0, limit - remaining)` 推导；`limit<=0` 时按 1 防除零）；**非有限百分比归零**——敌意字符串（如 `"1e999"`、`"NaN"`）可解出 inf/NaN，非 `IsFinite` 的百分比一律置 0；`resetTime`（字符串，`DateTimeOffset.TryParse`）→ `ResetAt`
+- **Extra Usage**：`root.booster_wallet`（对象；2026-11-19 起线上是 proto 的 snake_case 顶层键，旧的 `root.boosterWallet` 仍然兼容——钱包内部字段一律 camelCase，只有最外层这一个键不同）：
   - 非对象/缺失 → `State = NotActivated`（"Not activated"）
   - `isEnabled == false` → `NotActivated`（防御：booster 未启用时 `amountLeft` 是"月度上限-已用"估算值而非真实余额，必须视为未开通——借鉴 KimiCodeBar v1.1.1 的 bug）
+  - **没有** `isEnabled`、但有 `status`（线上报文就是这样）→ 只认 `STATUS_ACTIVE`，其余一律 `NotActivated`（同一个陷阱的另一副形状：paused 的 booster 也会给出估算值）
   - `balance.amountLeft`（字符串数字，兼容数字型）可解析 → `State = Ready`；单位 **1e-8 元**，换算分：`BalanceCents = saturating_add(raw, 500000) / 1000000`（四舍五入；加法饱和防溢出，接近 `i64.MaxValue` 的畸形值不得回绕）
   - 否则 → `State = NoData`（"No data"）
   - `monthlyChargeLimitEnabled == true` → `MonthlyEnabled=true`，`monthlyUsed.priceInCents` → `MonthlyUsedCents`，`monthlyChargeLimit.priceInCents` → `MonthlyLimitCents`（单位分，字符串数字）
@@ -638,7 +639,7 @@ QuotaResult  { five_hour: Option<QuotaSegment>, week: Option<QuotaSegment>,
 - **事件订阅生命周期**：主面板构造时订阅 `Quota.Updated`/`Updates.Updated`，关闭时取消订阅（窗口实际只 Hide 不 Close，单例复用）；托盘订阅 `Quota.Updated` 更新 tooltip，退出时退订并销毁托盘图标。
 - **异常处理基调**：所有 IO、注册表、外部进程、HTTP 调用均 try/catch 静默吞掉，失败路径以 UI 文案（"Update failed"/"Not detected"）或状态字段表达，绝不弹窗报错。
 - **金额单位陷阱**：`amountLeft` 是 1e-8 元（换算分需 `(raw + 500000) / 1000000` 四舍五入），`priceInCents` 才是分；JSON 中数字均为字符串。
-- **`isEnabled=false` 陷阱**：booster 未启用时 `amountLeft` 并非真实余额，必须整体判为 "Not activated"。
+- **`isEnabled=false` 陷阱**：booster 未启用时 `amountLeft` 并非真实余额，必须整体判为 "Not activated"。线上报文改用 `status`（只认 `STATUS_ACTIVE`），两条判据都要在。
 - **退出清理**：隐藏并销毁托盘图标 → 停刷新定时器 → 释放单实例 Mutex。
 
 ---

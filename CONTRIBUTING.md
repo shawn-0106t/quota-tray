@@ -22,7 +22,7 @@ get a change merged is to keep it that way.
 
 ## Getting started
 
-Prerequisites: Windows 10/11 with the WebView2 runtime, Node 24+, a stable MSVC Rust
+Prerequisites: Windows 10/11 with the WebView2 runtime, Node 22+, a stable MSVC Rust
 toolchain, and the Kimi Code CLI signed in if you want live Kimi data.
 
 ```sh
@@ -126,7 +126,7 @@ remembering) and `CHANGELOG.md` in the same PR.
 
 ## 上手
 
-前提：Windows 10/11 + WebView2 运行时、Node 24+、stable MSVC Rust 工具链；想要真实的
+前提：Windows 10/11 + WebView2 运行时、Node 22+、stable MSVC Rust 工具链；想要真实的
 Kimi 数据还需要本机已登录 Kimi Code CLI。
 
 ```sh

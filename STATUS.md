@@ -118,7 +118,7 @@
 2. **同步命令跑在主线程**：任何 `#[tauri::command]` 里都**不要**直接 `WebviewWindowBuilder::build()`——它会跳主线程并等待，结果就是「窗口出现但一片空白、关不掉」。`open_login` / `close_login` 都已交给 `tauri::async_runtime::spawn`。
 3. **reload 与 rebuild 是两条路**：`rebuild` 会等页面加载再调 `show_panel`（所以有 `panel-show`）；`reload` 不会，才需要在 `main.ts` 里按窗口可见性补首帧。以后再动是恢复逻辑，两条路都要想一遍。
 4. **评审页的样式顺序是契约**：`demo/build_ui_demo.py` 把 `#root` 换成 `.root`（`body_of()` 去重复 id、`read().replace("#root", ".root")`），所以舞台覆盖必须写成 **`.win-skills .root`**，与 scoped 版同特异性、靠「排在最后」取胜；写成 `#root` 会一条也匹配不到（这个坑已经踩过一次）。产品 CSS 先注入、舞台规则最后注入，挪回前面评审页就又不能滚、浅色底又丢。
-5. **设置窗高度是「上限 90% + 卡片内滚动」**：`#root` 自己 `max-height` + `overflow-y: auto`，滚动条 4px 内缩细线；上报 `max(offsetHeight, scrollHeight)` 才不会自我缩小。
+5. **设置窗高度是「上限 90% + pane 内滚动、标题固定」**：`#root` 是 flex 列（`max-height: calc(100vh - 56px)`），只有 `.pane` 滚动，滚动条 4px 内缩细线、从标题下方开始；上报「标题栏 + `pane.scrollHeight` + 2px 边框 + 56 + 1」——报内容高，报被夹过的 `offsetHeight` 会让窗口跟着缩小，多出的 1px 是物理像素取整的余量。
 6. **阴影必须收在 28px 留白内**：`--shadow: 0 8px 18px`；更大的模糊会被窗口边缘裁成硬边。`PLAN.md` 里那张表已删掉旧的 40px 行。
 7. **发版只发便携 exe**：`bundle.targets = []` + `--no-bundle`，资产三件；`make_release_zip.py` 的 `binaries()` 只有一个 exe。别再往回收安装包。
 8. 原有几条仍然有效：图标是生成物、托盘嵌 48px、Kimi 数字是本机口径、扫描节奏、`ui-demo.html` 是生成物、登录窗没有 IPC 面。
@@ -128,7 +128,7 @@
 
 - **Kimi**：**token 已过期**（20:50），需在 CLI 重新登录；`--test-fetch` 目前报 `no-token`，面板显示过期提示。
 - **DeepSeek**：API key 与 usage token 都已配置（`--test-login` 报 `credentialSource=file`、`apiKeyConfigured=true`、`verify=ok`）；余额 ¥34.64。
-- `%APPDATA%\QuotaTray`：credentials / endpoints / models / cache / kimi-usage / `settings.json`（`Theme=system`、`RefreshMinutes=5`、`AutoStart=false`、`ActiveTab=kimi`）/ `webview.log`。
+- `%APPDATA%\QuotaTray-Slint`：本构建自己的 `settings.json`（`Theme=system`、`RefreshMinutes=5`、`AutoStart=false`、`ActiveTab=kimi`）与缓存；`%APPDATA%\QuotaTray\shared`：DeepSeek 凭证 / endpoints / models / `kimi-usage.json`（与 Tauri 构建共用）；`%APPDATA%\QuotaTray` 只剩 Tauri 构建自己的 settings 与 `webview.log`。
 - 仓库根留三件本地构建的产物（gitignored）：`QuotaTray.exe`（1.0.0）、`QuotaTray-v1.0.0.zip`、`SHA256SUMS.txt`；哈希与 Release 里 runner 构建的那份不同（正常，两台机器/两次构建）。
 - **仓库根那个 `QuotaTray.exe` 进程被关掉了**（它锁着产物文件，`make_release_zip.py` 会 `PermissionError`）。要再跑就双击根目录的 exe；再次打包前先退出它。
 - git：`main` 干净并与 `origin/main` 同步；两个 tag `v0.1.0`（`39f691d`）与 `v1.0.0`（`e984c61`）。
