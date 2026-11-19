@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
-"""check_contrast.py -- WCAG ratios for the demo token pairs.
+"""check_contrast.py -- WCAG ratios for the shipped palette.
 
-Usage: check_contrast.py
-Composites alpha colors over their ground, then reports sRGB contrast for the
-text pairs that actually appear in the demos (body/muted/accent/badge/status).
+Usage: check_contrast.py          # parses src/theme.css: the tokens that ship
+       check_contrast.py --demos  # the frozen A-E demos' historical literals
+
+The default table reads the real tokens, so editing `theme.css` is what the gate
+sees: change `--seg-ring` to a light grey and this fails. The old table was a
+transcription of the tokens, which meant it kept passing after the stylesheet
+drifted away from it.
 """
+import re
+import sys
 from itertools import product
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+THEME = ROOT / "src" / "theme.css"
 
 
 def hex_rgb(h: str) -> tuple[float, float, float]:
@@ -30,7 +40,83 @@ def ratio(a, b) -> float:
     return (hi + 0.05) / (lo + 0.05)
 
 
-def main() -> int:
+def hex_rgba(text: str) -> tuple[tuple[float, float, float], float]:
+    """`#rrggbb` or `#rrggbbaa` -> (rgb in 0-1, alpha in 0-1)."""
+    h = text.strip().lstrip("#")
+    rgb = tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))  # type: ignore[return-value]
+    alpha = int(h[6:8], 16) / 255 if len(h) == 8 else 1.0
+    return rgb, alpha
+
+
+def read_theme(path: Path = THEME) -> dict[str, dict[str, tuple[tuple[float, float, float], float]]]:
+    """Both `:root[data-theme='...']` blocks, as token -> (rgb, alpha)."""
+    text = path.read_text(encoding="utf-8")
+    themes: dict[str, dict[str, tuple[tuple[float, float, float], float]]] = {}
+    for name, body in re.findall(r":root\[data-theme='(\w+)'\]\s*\{(.*?)\}", text, re.S):
+        tokens = dict(re.findall(r"(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{6,8})", body))
+        themes[name] = {k: hex_rgba(v) for k, v in tokens.items()}
+    return themes
+
+
+def solid(tokens, name: str) -> tuple[float, float, float]:
+    """A token composited over the paper, for use as a backdrop."""
+    rgb, alpha = tokens[name]
+    if alpha >= 1.0:
+        return rgb
+    return over(rgb, alpha, tokens["--paper"][0])
+
+
+def text_on(tokens, fg: str, bg: str) -> float:
+    backdrop = solid(tokens, bg)
+    rgb, alpha = tokens[fg]
+    return ratio(over(rgb, alpha, backdrop), backdrop)
+
+
+# label, foreground token, backdrop token, minimum ratio (PLAN §3.2 / §3.5)
+PAIRS = [
+    ("body ink-1 on paper", "--ink-1", "--paper", "4.5"),
+    ("muted ink-2 on paper", "--ink-2", "--paper", "4.5"),
+    ("muted ink-2 on seg track", "--ink-2", "--seg-track", "4.5"),
+    ("badge accent-ink on tint", "--accent-ink", "--tint", "4.5"),
+    ("danger on paper", "--danger", "--paper", "4.5"),
+    ("ring vs selected cell", "--seg-ring", "--seg-on", "3.0"),
+    ("ring vs seg track", "--seg-ring", "--seg-track", "3.0"),
+    ("icons ink-3 on paper", "--ink-3", "--paper", "3.0"),
+    ("usage bar on paper", "--accent-bar", "--paper", "3.0"),
+]
+
+
+def report(rows: list[tuple[str, float, str]]) -> int:
+    bad = 0
+    for label, r, need in rows:
+        ok = r >= float(need)
+        bad += 0 if ok else 1
+        print(f"{'PASS' if ok else 'FAIL'}  {r:5.2f}  (>= {need})  {label}")
+    print(f"\n{len(rows) - bad}/{len(rows)} pairs pass")
+    return 0 if bad == 0 else 1
+
+
+def shipped() -> int:
+    themes = read_theme()
+    if not themes:
+        print(f"no tokens found in {THEME}", file=sys.stderr)
+        return 1
+    rows: list[tuple[str, float, str]] = []
+    for theme in ("light", "dark"):
+        tokens = themes.get(theme)
+        if not tokens:
+            print(f"theme {theme} missing from {THEME}", file=sys.stderr)
+            return 1
+        for label, fg, bg, need in PAIRS:
+            missing = fg if fg not in tokens else bg if bg not in tokens else None
+            if missing:
+                print(f"token {missing} missing from the {theme} block", file=sys.stderr)
+                return 1
+            rows.append((f"{theme:<5} {label}", text_on(tokens, fg, bg), need))
+    return report(rows)
+
+
+def demos() -> int:
     black, white = hex_rgb("#000000"), hex_rgb("#ffffff")
     rows: list[tuple[str, float, str]] = []
 
@@ -141,13 +227,11 @@ def main() -> int:
         ("E dark  seg ring vs tile", ratio(e_ring_d, e_tile_d), "3.0"),
     ]
 
-    bad = 0
-    for label, r, need in rows:
-        ok = r >= float(need)
-        bad += 0 if ok else 1
-        print(f"{'PASS' if ok else 'FAIL'}  {r:5.2f}  (>= {need})  {label}")
-    print(f"\n{len(rows) - bad}/{len(rows)} pairs pass")
-    return 0 if bad == 0 else 1
+    return report(rows)
+
+
+def main() -> int:
+    return demos() if "--demos" in sys.argv else shipped()
 
 
 if __name__ == "__main__":

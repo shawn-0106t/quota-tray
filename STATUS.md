@@ -8,8 +8,8 @@
 > 「验证后保存」这一条在五轮独立只读审查里被磨了五遍（表格见下）：
 > `verify_user_token` 不再把 200 + `{"code":40003}` 的错误信封当成通过（PR #4 → squash `5d95f1f`）；临时性失败对同一个候选重试一次；被拒的 token 优先于其他 base 的错误；epoch 只在真正的窗口边界（`new_session`：建窗 / 关窗 / Clear）移动；重试循环的闸门排在一切副作用之前（被取代的 future 不写标题、不偷队列、不清别人的 `verifying`）。
 > 五载体 1.0.2、`CHANGELOG` 的 `[1.0.2] — 2026-11-19`、`check_versions.py` 六项 ok；`tsc` / `vite build` / `cargo fmt+clippy+test --locked`（31 passed）全绿；`--test-login` 在真机跑过（`verify=ok` + 四窗 OK + 两项捕获 OK）；`main` 的 CI 在 `2d06418`（2m3s）与 `35308af`（2m14s）上 success，CodeQL 仍在结算。
-> **下一步（没有发版动作了）**：① spike 线做 P5——产品身份/资产名、`slint` 与 `quota-core` 进版本门禁、独立发布路径、CI 覆盖 Slint 构建；② main 上三件工具/硬化小事（`heights.py` 量产品页、`check_contrast.py` 读 `theme.css`、`expires_at` 秒/毫秒归一）攒到下一次有真实用户可见改动时一起发 1.0.3。
-> **已知未修**（不阻塞发布，见上一条的 ①②）：`demo/heights.py` 只量 A–E 冻结 demo，量不到产品页；`demo/check_contrast.py` 硬编码色值、改 `theme.css` 不会失败；`expires_at` 一律按秒读（毫秒会被当成几千年后到期）；`limits[0]` 恒被当作 5h 窗口是假设（今天报文对得上）；`MODELS_REFETCHED` 每进程一次是 PLAN 的设计，不是缺陷。
+> **下一步（没有发版动作了）**：只剩 spike 线 P5——产品身份/资产名、`slint` 与 `quota-core` 进版本门禁、独立发布路径、CI 覆盖 Slint 构建。`main` 上没有已知未修项。
+> **本轮收尾（2026-11-20）**：`demo/heights.py` 默认量产品页（`--demos` 保留 A–E 历史表，读 `ui-demo.html` 的 `#m-product` 读数）；`demo/check_contrast.py` 改成解析 `theme.css`——当场抓出 `--ink-3` 只有 2.11/2.34（已提到 3.22/3.35，`PLAN.md` §3.2 同步），把 `--seg-ring` 改坏会真的 FAIL；`expires_at` 秒/毫秒归一；`limits[0]` 被当作 5h 写进 PLAN 并有测试钉住；`MODELS_REFETCHED` 每进程一次仍是 PLAN 的设计，不是缺陷。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 

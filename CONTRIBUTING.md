@@ -77,7 +77,7 @@ derived artifacts and keep them in the same PR:
 ```sh
 PYTHONUTF8=1 python demo/build_ui_demo.py     # all windows on one page
 PYTHONUTF8=1 python demo/make_readme_shots.py # docs/screenshot-*.png
-PYTHONUTF8=1 python demo/check_contrast.py    # token pairs must stay all-pass
+PYTHONUTF8=1 python demo/check_contrast.py    # parses theme.css; every pair must pass
 ```
 
 `demo/ui-demo.html` and `docs/screenshot-*.png` are generated — never hand-edit them. The
@@ -181,7 +181,7 @@ GitHub 的 secret scanning **push protection** 是开着的：diff 里带被识�
 ```sh
 PYTHONUTF8=1 python demo/build_ui_demo.py     # 所有窗口一页
 PYTHONUTF8=1 python demo/make_readme_shots.py # docs/screenshot-*.png
-PYTHONUTF8=1 python demo/check_contrast.py    # token 对比度必须全过
+PYTHONUTF8=1 python demo/check_contrast.py    # 读 theme.css；所有对必须通过
 ```
 
 `demo/ui-demo.html` 与 `docs/screenshot-*.png` 是生成物，**不要手改**。冻结的 demo

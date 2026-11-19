@@ -423,6 +423,21 @@ mod tests {
         assert!(week.reset_at.is_none());
     }
 
+    // The payload carries no window identifier: `limits[0]` is taken as the
+    // 5-hour window (PLAN §5.1). This pins that, and proves a second entry is
+    // ignored rather than averaged in.
+    #[test]
+    fn the_five_hour_window_is_the_first_limit_entry() {
+        let root = json!({
+            "limits": [
+                { "detail": { "used": "1", "limit": "100" } },
+                { "detail": { "used": "60", "limit": "100" } }
+            ]
+        });
+        let seg = parse_five_hour(&root).expect("first entry");
+        assert!((seg.percent - 1.0).abs() < 1e-9, "got {}", seg.percent);
+    }
+
     #[test]
     fn hostile_numbers_never_emit_a_non_finite_percent() {
         let root = json!({ "usage": { "used": "1e999", "limit": "1" } });

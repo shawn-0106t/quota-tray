@@ -73,7 +73,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 | `--paper` | `#fbfaf9` | `#181817` | 面板底 |
 | `--ink-1` | `#000000e6` | `#ffffffd6` | 主文字、数字 |
 | `--ink-2` | `#00000099` | `#ffffff8f` | 次文字、标签、说明（10–12px 也达标） |
-| `--ink-3` | `#0000004d` | `#ffffff42` | **仅图标/装饰**，不可用于文字 |
+| `--ink-3` | `#00000070` | `#ffffff5c` | **仅图标/装饰**，不可用于文字；唯一消费者是悬停时的滚动条拇指，须 ≥3:1（WCAG 1.4.11，30% / 26% 只有 2.11 / 2.34） |
 | `--hair` | `#00000021` | `#ffffff1f` | 分区发丝线 |
 | `--hair-soft` | `#00000012` | `#ffffff12` | 进度条轨道 |
 | `--accent` | `#8c74b1` | `#9d88bc` | 强调紫（选中态之外的强调基准）：浅 3.84:1、深 5.65:1 对纸面 |
@@ -154,6 +154,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 - 凭证链：`~/.kimi-code/credentials/kimi-code.json` 的 `access_token`（`expires_at` 须 > now + 30s）→ 回退 `~/.kimi-code/config.toml` 中 `base_url` 含 `api.kimi.com/coding` 的 `[providers.*]` 的 `api_key`；`KIMI_CODE_HOME` 覆盖家目录。
 - **Extra Usage 单位**：`booster_wallet.balance.amountLeft`（2026-11-19 线上是 snake_case 顶层键，旧的 `boosterWallet` 仍兼容；钱包内部字段是 camelCase）是 **1e-8 元**，转分用 `(raw + 500000) / 1000000`；`priceInCents` 已是分；所有 JSON 数字按字符串建模（容忍数字型）。
 - 未开通的两副形状都要判 `Not activated`：`isEnabled=false`，或没有 `isEnabled` 而 `status` 不是 `STATUS_ACTIVE`——两种情况下 `amountLeft` 都是估算值，不是余额。
+- **5 小时窗口取 `limits[0]`**：报文没有窗口标识（`detail` 只有 used/limit/resetTime），只能按数组序取第一个；5h 重置与周重置相差整 7 天，可据此核对。若将来插入别的窗口，这里要改成按字段选择——`quota.rs` 的 `the_five_hour_window_is_the_first_limit_entry` 钉住了「只取第一个」。
 - **周窗口百分比有三个来源**（按权威度）：`usages.limit_7d.used_ratio`（小数）→ `usage.used/limit` → `usage.limit - usage.remaining`（线上只有整数，看不到 1% 以下的细节）。`usage.resetTime` 仍是重置时间的来源；只有 ratio 的报文也要出卡片（resetAt 为空）。
 - CLI 版本：`kimi --version`；新版徽章来自官方 changelog（GitHub API 兜底）。
 - **缓存命中与解码速度来自本机会话日志**（2026-11-14 落地，`src-tauri/src/kimi_usage.rs`）：
