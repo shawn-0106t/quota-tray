@@ -110,8 +110,22 @@ fn oauth_entry(home: &Path) -> Option<(String, i64)> {
     }
     Some((
         token.to_string(),
-        v.get("expires_at").and_then(as_f64).unwrap_or(0.0) as i64,
+        unix_seconds(v.get("expires_at").and_then(as_f64).unwrap_or(0.0)),
     ))
+}
+
+/// `expires_at` is documented (and observed) as Unix **seconds**. A value in
+/// milliseconds would read as "valid for a few thousand years", so the app would
+/// keep using a dead token and print `Fetch failed` instead of `Expired — sign in
+/// with the Kimi CLI`. 1e11 seconds is the year 5138: anything past that is a
+/// millisecond stamp.
+fn unix_seconds(raw: f64) -> i64 {
+    let seconds = if raw.abs() >= 1.0e11 {
+        raw / 1000.0
+    } else {
+        raw
+    };
+    seconds as i64
 }
 
 fn api_key_entry(kimi: &Path) -> Option<String> {
@@ -159,5 +173,19 @@ fn match_provider(
             Some(k.to_string())
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod unit_tests {
+    use super::*;
+
+    #[test]
+    fn expires_at_seconds_and_milliseconds_both_land_in_seconds() {
+        assert_eq!(unix_seconds(1_763_600_000.0), 1_763_600_000);
+        assert_eq!(unix_seconds(1_763_600_000_000.0), 1_763_600_000);
+        // Junk that parses as a number must not panic or wrap.
+        assert_eq!(unix_seconds(0.0), 0);
+        assert_eq!(unix_seconds(-1.0), -1);
     }
 }

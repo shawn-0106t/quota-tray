@@ -289,6 +289,29 @@ def build() -> str:
             list.append(item);
           }
         }
+
+        // Machine-readable card/window heights for demo/heights.py: the review
+        // page is built from the shipped CSS, so its heights are the product's.
+        // `window` adds the 56px shadow room the app reports to its backend.
+        // A <script type="application/json"> keeps the page's layout untouched.
+        const heights = {};
+        for (const [key, sel] of [
+          ['main-kimi', '.win-kimi'],
+          ['main-deepseek', '.win-deepseek'],
+          ['settings', '.win-settings'],
+          ['skills', '.win-skills'],
+          ['menu', '.win-menu'],
+        ]) {
+          const card = document.querySelector(sel + ' .root');
+          if (!card) continue;
+          const h = Math.round(card.getBoundingClientRect().height);
+          heights[key] = { card: h, window: h + 56 };
+        }
+        const readout = document.createElement('script');
+        readout.type = 'application/json';
+        readout.id = 'm-product';
+        readout.textContent = JSON.stringify(heights);
+        document.body.append(readout);
       })();
     </script>
     """
