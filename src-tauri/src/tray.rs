@@ -163,7 +163,11 @@ fn deepseek_line(last: Option<&DeepseekResult>) -> String {
 /// two decimals (PLAN §5.2).
 fn money(amount: f64, currency: &str) -> String {
     let symbol = if currency == "USD" { "$" } else { "¥" };
-    format!("{symbol}{amount:.2}")
+    // Round at the cent BEFORE formatting: Rust's `{:.2}` breaks an exact tie to
+    // even while JS `toFixed` picks the larger candidate, so ¥0.125 printed
+    // "¥0.12" here and "¥0.13" in the pane (AGENTS: keep them identical).
+    let cents = (amount * 100.0).round() / 100.0;
+    format!("{symbol}{cents:.2}")
 }
 
 fn pct(seg: &Option<QuotaSegment>) -> String {

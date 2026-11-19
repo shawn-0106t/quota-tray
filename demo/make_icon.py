@@ -234,7 +234,7 @@ def review_page() -> str:
       </div>
 
       <footer>
-        Violet is #8c74b1: 3.54:1 on #f3f3f3 and 4.06:1 on #202020, so the silhouette
+        Violet is #8c74b1: 3.61:1 on #f3f3f3 and 4.07:1 on #202020, so the silhouette
         clears the 3:1 WCAG 1.4.11 asks of meaningful graphics on both taskbars. The
         tray embeds the 48px cut; the exe and the bundle use the 256px / ICO sets.
       </footer>

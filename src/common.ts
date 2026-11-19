@@ -154,11 +154,14 @@ export function applyTheme(theme: string): void {
   document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
 }
 
-/** Apply current effective theme and subscribe to live changes. */
+/** Apply current effective theme and subscribe to live changes.
+    Subscription first: `get_state` is an IPC round trip, and a theme change that
+    lands during it would be lost (a WebView2 rebuild re-runs this path). */
 export async function initTheme(): Promise<AppStateDto> {
+  const subscription = listen<string>('theme-changed', (e) => applyTheme(e.payload));
   const state = await invoke<AppStateDto>('get_state');
   applyTheme(state.theme);
-  await listen<string>('theme-changed', (e) => applyTheme(e.payload));
+  await subscription;
   return state;
 }
 

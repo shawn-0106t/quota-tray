@@ -32,7 +32,7 @@
 | 托盘 / 应用图标 | 双条配额条（`#8c74b1` 透明底，7u 宽、radius 1.6），由 `demo/make_icon.py` 生成三件套 | 复用面板的进度条语言；四个候选里只有它在 16px 仍读得出形状（2026-11-14 用户选定 A）。图标是品牌标示，不属于 §3.5 对面板强调色的两条职责 |
 | 版本 | 1.0.0 起 | — |
 | DeepSeek 登录捕获 | 进 v1 | 与现版功能对齐；代价是 WebView2 COM 互操作是本项目风险最高的一块 |
-| DeepSeek 凭证存储 | `config_dir()/deepseek-credentials.json`，值用 Windows DPAPI 加密（`dpapi:` 前缀），旧版文件首次运行一次性导入 | API Key 能花钱，不该落明文盘；存储跟着 `config_dir()` 走，便携模式才带得走；旧文件只读不写，旧应用不受影响 |
+| DeepSeek 凭证存储 | `shared_dir()/deepseek-credentials.json`（= `%APPDATA%\QuotaTray\shared`，两个 Quota Tray 构建共用；便携模式下就是 exe 目录），值用 Windows DPAPI 加密（`dpapi:` 前缀），旧版文件首次运行一次性导入 | API Key 能花钱，不该落明文盘；账号侧事实（凭证、网络缓存）两个应用共用，配置/窗口状态各自私有；旧文件只读不写，旧应用不受影响 |
 
 ## 3. 设计定稿（E 版）
 
@@ -138,7 +138,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 
 面板高度由前端测量内容后上报（`panel_height`），后端用 `LogicalSize` 改高 + `PhysicalPosition` 把窗口**右下角钉回原位**，并按工作区高度夹取；`show_panel` 先按当前 tab 定尺寸再显示，避免可见跳变。tab 选择持久化到 settings.json 的 `ActiveTab`：切换时前端调 `set_active_tab`，后端只改这一个字段并落盘，不碰两个 poller、调度与 last-good 槽位。两个 pane 只有活动那个参与布局（另一个 `hidden`），所以上报的高度天然是当前 tab 的，后端不需要按 tab 记住两套尺寸。
 
-设置窗同样内容自适应（`settings_height`），首次打开（或高度变化时）按工作区居中，同高度重复打开只钉尺寸、不动位置——用户拖动过标题栏的位置不会被重置；以后加分区（P4 的 DeepSeek 凭证）不需要再写死高度。窗口高度上限是工作区 90%，**内容比窗口高时卡片自己滚动**（`#root { max-height: calc(100vh - 56px); overflow-y: auto }`，滚动条 4px、嵌在卡片内侧）：展开「Paste a credential instead」后约 824，在 1280×752 逻辑工作区下会被夹到 677，不滚动就会被切掉底部。
+设置窗同样内容自适应（`settings_height`），首次打开（或高度变化时）按工作区居中，同高度重复打开只钉尺寸、不动位置——用户拖动过标题栏的位置不会被重置；以后加分区（P4 的 DeepSeek 凭证）不需要再写死高度。窗口高度上限是工作区 90%。卡片结构与 Kimi Skills 窗一致（2026-11-19）：`#root` 是 flex 列，标题栏 `flex: none` 留在滚动区之外，只有 `.pane` 是滚动容器（`#root { max-height: calc(100vh - 56px) }`、`#root > .pane { overflow-y: auto }`，滚动条 4px、内缩在卡片内侧、从标题下方才开始）——展开「Paste a credential instead」后内容约 776，在 1280×752 逻辑工作区下窗口被夹到 677，此时标题不动、pane 自己滚动，不会再把标题和底部按钮一起卷走。上报的是**内容高**：标题栏 + `pane.scrollHeight` + 卡片上下 1px 边框（`scrollHeight` 无论是否正在滚动都是 pane 的自然内容高，报被夹过的 `offsetHeight` 会让窗口跟着一起缩小），再加 57——多出的 1px 是「窗口高度按物理像素取整」的余量：125% 缩放下视口可能比内容短 0.4px，纯 CSS 上限会在本来放得下的卡片上常驻一条滚动条。设置窗居中，这 1px 只是透明留白；面板底边锚定不能这么做，所以那边走 JS 的 `.clamped` 判定。
 
 设置窗三个分区（2026-11-14 落地）：**通用**（主题 / 刷新间隔 / 开机自启 + 底部 `Save settings`）、**Kimi 只读**（CLI 版本、凭证来源与 OAuth 到期时间）、**DeepSeek 凭证**（两个凭证各自「已配置 / 未配置 / 无法解密」，`Sign in…` 与 `Clear`，以及 `<details>` 折叠的手工粘贴兜底）。只读分区**只显示状态，永不显示凭证值**（后端没有任何字段能送出去）；红色只给真正坏掉的状态（Kimi token 过期、密文解不开），「未配置」用次级墨色——失败本身由面板 header 报。
 
@@ -152,8 +152,9 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 
 - 端点：`GET https://api.kimi.com/coding/v1/usages`（Bearer）。
 - 凭证链：`~/.kimi-code/credentials/kimi-code.json` 的 `access_token`（`expires_at` 须 > now + 30s）→ 回退 `~/.kimi-code/config.toml` 中 `base_url` 含 `api.kimi.com/coding` 的 `[providers.*]` 的 `api_key`；`KIMI_CODE_HOME` 覆盖家目录。
-- **Extra Usage 单位**：`boosterWallet.balance.amountLeft` 是 **1e-8 元**，转分用 `(raw + 500000) / 1000000`；`priceInCents` 已是分；所有 JSON 数字按字符串建模（容忍数字型）。
-- `isEnabled=false` 时 `amountLeft` 是估算值，整张卡显示 `Not activated`。
+- **Extra Usage 单位**：`booster_wallet.balance.amountLeft`（2026-11-19 线上是 snake_case 顶层键，旧的 `boosterWallet` 仍兼容；钱包内部字段是 camelCase）是 **1e-8 元**，转分用 `(raw + 500000) / 1000000`；`priceInCents` 已是分；所有 JSON 数字按字符串建模（容忍数字型）。
+- 未开通的两副形状都要判 `Not activated`：`isEnabled=false`，或没有 `isEnabled` 而 `status` 不是 `STATUS_ACTIVE`——两种情况下 `amountLeft` 都是估算值，不是余额。
+- **周窗口百分比有三个来源**（按权威度）：`usages.limit_7d.used_ratio`（小数）→ `usage.used/limit` → `usage.limit - usage.remaining`（线上只有整数，看不到 1% 以下的细节）。`usage.resetTime` 仍是重置时间的来源；只有 ratio 的报文也要出卡片（resetAt 为空）。
 - CLI 版本：`kimi --version`；新版徽章来自官方 changelog（GitHub API 兜底）。
 - **缓存命中与解码速度来自本机会话日志**（2026-11-14 落地，`src-tauri/src/kimi_usage.rs`）：
   - 服务端没有这组数字——`usages` 只有窗口百分比与钱包，官方文档也只有额度与计费口径。CLI 自己的记录里有：`sessions/<workspace>/<session>/agents/<agent>/wire.jsonl` 的 `usage.record`（`usageScope=turn`）带 `inputCacheRead` / `inputCacheCreation` / `inputOther` / `output`。
@@ -161,7 +162,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
   - 解码速度 = `Σoutput ÷ ΣllmServerDecodeMs`（`event` 记录里的每次调用计时），首 token = 平均 `llmServerFirstTokenMs`。这是**服务端解码阶段的平均速度**，不是墙上时钟吞吐。
   - 窗口只有两个：**最近 7 天**（含今天）与**今天**，按 `time`（epoch ms）落到本地日历日。
   - 只读 `usage` 相关字段，绝不成段保留对话内容；`message.meta.usage` 是同一组数字的副本、`usageScope=session` 是会话合计，两者都不计，否则翻倍。
-  - 索引 `config_dir()/kimi-usage.json`：每个文件记录已读字节长度与 mtime，以及按天的小计。追加只读新字节；文件变短或等长重写则清掉它的小计重扫；只保留 30 天。后台任务启动先走一次全量（走树约 0.1 s + 首次读约 1 s），之后**每分钟一次、隔分钟走一次目录树**（走树约 0.1 s，只 stat 约 30 ms），数字变了才发 `kimi-usage-updated`。
+  - 索引 `shared_dir()/kimi-usage.json`：每个文件记录已读字节长度与 mtime，以及按天的小计。追加只读新字节；文件变短或等长重写则清掉它的小计重扫；只保留 30 天。后台任务启动先走一次全量（走树约 0.1 s + 首次读约 1 s），之后**每分钟一次、隔分钟走一次目录树**（走树约 0.1 s，只 stat 约 30 ms），数字变了才发 `kimi-usage-updated`。
   - 与 DeepSeek 的口径差异必须写在界面上：DeepSeek 是账号级（平台控制台聚合），Kimi 是**本机 CLI**——面板标签写 `Cache 7d · local`。
 
 ### 5.2 DeepSeek
@@ -169,7 +170,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 - 余额：`GET https://api.deepseek.com/user/balance`（Bearer API Key）。
 - 模型元数据（**仅供展示名**，不参与用量口径）：`GET https://api.deepseek.com/models`（Bearer 同一 API Key）；回落顺序与缓存策略见 §6。
 - 用量：`GET https://platform.deepseek.com/api/v0/usage/{amount,cost}?month=&year=`（Bearer userToken + `x-app-version: 1.0.0` + Chrome UA + `Accept: */*`）。
-- 凭证链：`DEEPSEEK_API_KEY` / `DEEPSEEK_USER_TOKEN` 环境变量优先（命中即用，不读也不写文件）→ `config_dir()/deepseek-credentials.json` → 首次运行时从旧版 `~/.deepseek-planbar/credentials.json` **一次性导入**（旧文件只读不写）→ 未配置。
+- 凭证链：`DEEPSEEK_API_KEY` / `DEEPSEEK_USER_TOKEN` 环境变量优先（命中即用，不读也不写文件）→ `shared_dir()/deepseek-credentials.json` → 首次运行时从旧版 `~/.deepseek-planbar/credentials.json` **一次性导入**（旧文件只读不写）→ 未配置。拆分前的位置（`config_dir()/deepseek-credentials.json`）仍作为只读兜底：读到就原样复制一份到 `shared_dir()`（旧文件保留），这样另一个构建立刻能看到账号；`Clear` 两处都写空，避免旧路径把刚清掉的凭证又答回来。手工粘贴那条路径单独受 `LoginState::clears`（只由 Clear 自增）保护，判定点在**验证之后、写盘之前**：验证期间用户点了 Clear，就返回 `cleared` 而不是把值写回去；这里不用 `epoch`，因为那个计数器在登录窗开关时也会变，而开窗不该作废用户正在等的粘贴。
   文件格式 `{"v":1,"apiKey":"dpapi:<base64>","userToken":"dpapi:<base64>","importedFrom":"~/.deepseek-planbar/credentials.json"}`：**键名明文、值加密**，值用 Windows DPAPI（`CryptProtectData` + `CRYPTPROTECT_UI_FORBIDDEN`）逐字段保护。
   读取按前缀判断：带 `dpapi:` 的解密，不带的按明文接受（手工调试与「退回明文」的逃生口，结构不用改）。解密失败按「未配置」处理，`--test-deepseek --verbose` 必须区分 `credential source: env | file | imported | none | undecryptable`，且**永不打印密钥**。
   **一次性导入的判据是「我们的文件是否存在」，不是「值是否为空」**：`Clear` 会把文件写成空值而不是删除它，否则下一次轮询就会从旧文件把刚清掉的凭证又导回来。手工 `Clear` 对 `env` 来源无效——设置窗因此显式写出这一行。
@@ -214,12 +215,12 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 
 1. **零成本 + 官方命名元数据**：显示名按四段回落 —— 官方 `GET https://api.deepseek.com/models` 的 `name`（Bearer 同一 API Key，按 id 精确匹配）→ 静态表（已知 id，离线兜底）→ 规则派生（去 `deepseek-` 前缀、`v4-pro` → `V4 Pro`、剥离 `-0`/日期后缀）→ 原始 id。
    **优先级于 2026-11-14 调整（用户决定）**：官方名压过静态表，且必须跟随厂商上游的实际命名变动 —— 上游改名后最长 24 小时（缓存 TTL）即反映到面板，不需要发新版本；静态表退化为「拿不到网络时的兜底」。派生只对 `deepseek-*` 形式的 id 生效，含空白的组合行（如 `A & B`）与外部 id 原样显示，不做任何改写。
-   刷新与缓存：启动后首次校验抓一次；出现未知 id 时补抓一次（每次启动最多一次）；结果写 `config_dir()/deepseek-models.json`，TTL 24 小时；无 API Key、请求失败或 `name` 缺失都静默回落到下一段。只取 `id` 与 `name`，其余字段（`context_window` / `effort` / `api_capabilities`）与额度面板无关，不解析、不落盘。
+   刷新与缓存：启动后首次校验抓一次；出现未知 id 时补抓一次（每次启动最多一次）；结果写 `shared_dir()/deepseek-models.json`，TTL 24 小时；无 API Key、请求失败或 `name` 缺失都静默回落到下一段。只取 `id` 与 `name`，其余字段（`context_window` / `effort` / `api_capabilities`）与额度面板无关，不解析、不落盘。
    注意：该端点属于 `api.deepseek.com`，与用量所在的 `platform.deepseek.com` 内部接口无关，**不解决路径/参数漂移**；用量口径来自平台控制台聚合，可能出现组合行（`A & B`）或已下线模型，因此**永不因为某个 id 不在 `/models` 里就丢弃它的用量**。
    诊断：`--test-deepseek --verbose` 打印所用端点 + 响应顶层键 + 每模型聚合 + `/models` 命中情况。
-2. **候选链**：常量之外准备候选（`/api/v0/usage` → `/api/v1/usage` …），遇 404/410 逐个试，成功后写入 `config_dir()/deepseek-endpoints.json`，之后优先用记住的。
+2. **候选链**：常量之外准备候选（`/api/v0/usage` → `/api/v1/usage` …），遇 404/410 逐个试，成功后写入 `shared_dir()/deepseek-endpoints.json`，之后优先用记住的。
 3. **从登录窗学习**：hook 已经能看到 console 发出的每个请求；除 `Authorization` 外，把该请求的 `{url, 方法, 非敏感头}` 记成模板（token 仍只进 `deepseek-credentials.json`），路径/参数名/`x-*` 头都能自愈。
-   2026-11-14 落地范围：**学习 `usage` 基础路径与 `x-app-version`**，写进 `config_dir()/deepseek-endpoints.json`（`usageBase` / `appVersion` / `learnedAt`）；`usageBase` 取「去掉 `/amount`、`/cost` 之后的前缀」，只接受 `https://platform.deepseek.com/…/usage` 形式，`appVersion` 只接受 24 字符以内的 `[A-Za-z0-9._-]`——值来自远程页面，必须能挡住头注入。学到的基础路径与 `fetch_usage_body` 记住的端点是同一个字段，下次请求直接用它打头。页内只在签名（URL + 版本）变化时才上报，避免 console 自己轮询时反复触发。其余参数名/自定义头暂不学习，等真出现漂移再扩。
+   2026-11-14 落地范围：**学习 `usage` 基础路径与 `x-app-version`**，写进 `shared_dir()/deepseek-endpoints.json`（`usageBase` / `appVersion` / `learnedAt`）；`usageBase` 取「去掉 `/amount`、`/cost` 之后的前缀」，只接受 `https://platform.deepseek.com/…/usage` 形式，`appVersion` 只接受 24 字符以内的 `[A-Za-z0-9._-]`——值来自远程页面，必须能挡住头注入。学到的基础路径与 `fetch_usage_body` 记住的端点是同一个字段，下次请求直接用它打头。页内只在签名（URL + 版本）变化时才上报，避免 console 自己轮询时反复触发。其余参数名/自定义头暂不学习，等真出现漂移再扩。
 4. **兜底提示**：HTTP 200 但每个模型聚合全为 0、而响应体明显有数据时，面板显示"响应格式可能已变化，点此重新同步"。
 
 边界：若上游改为服务端签名/设备指纹/验证码，静态重放无效，只能靠同进程 WebView2 的真实会话，或改抓页面数据。
@@ -271,7 +272,7 @@ PYTHONUTF8=1 python demo/build_ui_demo.py   # 所有窗口的一页快照（从�
 PYTHONUTF8=1 python demo/make_icon.py       # 图标三件套 + 图标评审页
 bash demo/shot.sh demo/panel-demo-e.html out.png "bare=1&theme=dark&tab=ds" 560 900 2
 PYTHONUTF8=1 python demo/crop_panel.py out.png out-crop.png 424 2
-PYTHONUTF8=1 python demo/heights.py        # 四版 × 两 tab × 五状态的高度表
+PYTHONUTF8=1 python demo/heights.py        # 五版 × 两 tab × 五状态的高度表
 PYTHONUTF8=1 python demo/check_contrast.py # token 对的 WCAG 比值
 ```
 
@@ -287,8 +288,9 @@ PYTHONUTF8=1 python demo/check_contrast.py # token 对的 WCAG 比值
 | exe | `quota-tray.exe` |
 | 配置目录 | `%APPDATA%\QuotaTray`（便携模式：exe 同级） |
 | 诊断覆盖变量 | `QUOTA_TRAY_APP_DATA_DIR` |
-| DeepSeek 凭证 | `config_dir()/deepseek-credentials.json`（值 `dpapi:` 加密，键名明文） |
-| DeepSeek 缓存 / 展示名 / 端点 | `config_dir()/deepseek-{cache,models,endpoints}.json` |
-| Kimi 本地用量索引 | `config_dir()/kimi-usage.json`（每个会话文件的已读字节 + 按天小计，只留 30 天） |
+| DeepSeek 凭证 | `shared_dir()/deepseek-credentials.json`（值 `dpapi:` 加密，键名明文） |
+| DeepSeek 缓存（last-good） | `config_dir()/deepseek-cache.json`（时间戳含义是「本应用上次成功」，不共享） |
+| DeepSeek 展示名 / 端点 | `shared_dir()/deepseek-{models,endpoints}.json`（账号侧，两个构建共用） |
+| Kimi 本地用量索引 | `shared_dir()/kimi-usage.json`（每个会话文件的已读字节 + 按天小计，只留 30 天） |
 | 日志 | `config_dir()/webview.log` |
 | Release 资产 | `QuotaTray.exe`（便携）、`QuotaTray-v<ver>.zip`（源码 + 便携 exe）、`SHA256SUMS.txt`（不含安装包，2026-11-14 决定） |

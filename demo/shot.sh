@@ -28,7 +28,7 @@ URL="${URL// /%20}"
 BROWSER=""
 SEARCHED=()
 for cand in \
-  "$LOCALAPPDATA/Google/Chrome/Application/chrome.exe" \
+  "${LOCALAPPDATA:-}/Google/Chrome/Application/chrome.exe" \
   "/c/Program Files/Google/Chrome/Application/chrome.exe" \
   "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" \
   "/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \

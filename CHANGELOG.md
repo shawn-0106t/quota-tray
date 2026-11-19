@@ -5,7 +5,78 @@ All notable changes to Quota Tray are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each section carries
 the English notes first, then the Chinese mirror.
 
+## [Unreleased]
+
+### Fixed
+
+- The settings sheet keeps its title. The whole card used to be the scroll box,
+  so once the window was capped at 90% of the work area — which a short work
+  area reaches as soon as the manual-paste block is opened — `Quota Tray
+  Settings` scrolled out of view and the scrollbar ran up over the title row.
+  The card is a flex column now, like the skills window: the title bar stays
+  put, only the pane below it scrolls, and the scrollbar starts under the
+  title. The height report measures the content (title bar + the pane's
+  `scrollHeight` + the card's borders) instead of `max(offsetHeight,
+  scrollHeight)`, plus one spare pixel, so the physical-pixel rounding at e.g.
+  125% cannot park a scrollbar in a sheet that fits.
+- Clear now sticks while a pasted credential is still being verified. The manual
+  paste field verified first and saved afterwards with nothing invalidating it, so
+  clearing during that window (up to ~30 s across three candidate bases) wrote the
+  value back and the sheet reported the credential as configured again. The save is
+  gated on a clear-only generation counter, checked between the verification and the
+  write; the sign-in window's own epoch is deliberately not used there, because
+  opening or closing that window must not throw away a paste the user is waiting on.
+- The Kimi pane reads the live quota payload again. Both window figures were wrong
+  against the endpoint's current shape (verified 2026-11-19): the Extra Usage
+  wallet is keyed `booster_wallet` at the top level, not `boosterWallet`, so the
+  card said "Not activated" for an active wallet; and the weekly window reported
+  `0` because `usage` carries `limit`/`remaining` instead of `used`, with the real
+  ratio in `usages.limit_7d.used_ratio`. The weekly percentage now prefers that
+  ratio, then `used`/`limit`, then `limit - remaining` (today's 0.13 % still
+  rounds to `0` on screen — the point is that the number can move again); the not-activated defence
+  also covers the live `status` field (only `STATUS_ACTIVE` counts), which the old
+  `isEnabled` check never saw.
+
+### Changed
+
+- The DeepSeek credentials and the network-derived caches moved into
+  `%APPDATA%\QuotaTray\shared`, so a second Quota Tray build sees the account
+  the user configured once instead of asking for it again. What belongs to one
+  app stays in its own directory: `settings.json`, `webview.log` and the
+  last-good `deepseek-cache.json`. An existing credential file is copied to the
+  shared directory on first launch and left where it was, so nothing is lost on
+  upgrade and a build that still reads the old path keeps working.
+
+### 中文
+
+- **修复**：设置窗的标题不再被卷走。整张卡片原来是滚动容器，窗口一被夹到工作区
+  90%（工作区一矮，打开「Paste a credential instead」就会被夹），
+  `Quota Tray Settings` 就跟着内容滚出视野，滚动条也从标题那一行开始。现在卡片
+  是 flex 列（与 Kimi Skills 窗同一结构）：标题栏固定，只有它下面的 pane 滚动，
+  滚动条从标题下方开始。高度上报改成量内容（标题栏 + pane 的 `scrollHeight` +
+  卡片边框），不再用 `max(offsetHeight, scrollHeight)`，并多留 1px 给物理像素
+  取整——否则 125% 缩放下视口可能比内容短 0.4px，会在本来放得下的卡片上常驻一条
+  滚动条。
+- **修复**：手工粘贴的凭证还在验证时按 Clear，现在留得住。那条路径先验证、再写盘，
+  中间没有任何作废机制，所以在这个窗口里（三个候选 base 最长约 30 s）点 Clear，
+  验证返回后会把值写回去，设置窗随即又显示「已配置」。现在写盘前多一道「清空代次」
+  校验，判定点落在验证之后、写盘之前；这里故意不用登录窗自己的 epoch——开窗/关窗
+  不该把用户正在等的粘贴作废。
+- **修复**：Kimi 面板重新读对了线上报文。按 2026-11-19 实测的接口形状，两个窗口数字都是错的：
+  Extra Usage 钱包的顶层键是 `booster_wallet` 而不是 `boosterWallet`，所以明明是开通状态，
+  卡片却一直显示「Not activated」；周窗口恒为 `0`，因为 `usage` 只有整数 `limit`/`remaining`
+  没有 `used`，真正的比例在 `usages.limit_7d.used_ratio`。现在周百分比依次取该比例 →
+  `used`/`limit` → `limit - remaining`（今天 0.13% 在屏上仍四舍五入成 `0`，重点是
+  这个数字重新会动了）；「未开通」的两副形状也都判到了——没有 `isEnabled`
+  时看 `status`，只认 `STATUS_ACTIVE`，旧的 `isEnabled=false` 判据保留。
+- **变更**：DeepSeek 凭证与三个网络缓存挪到 `%APPDATA%\QuotaTray\shared`，这样
+  第二个 Quota Tray 构建能直接看到已经配好的账号，不用再配一遍。属于单个应用自己的
+  东西留在各自目录：`settings.json`、`webview.log`、以及记录「本应用上次成功时间」的
+  `deepseek-cache.json`。已有的凭证文件会在首次启动时复制到共享目录并原地保留，升级
+  不丢配置，仍读旧路径的构建也能继续工作。
+
 ## [1.0.2] — 2026-11-15
+
 
 ### Fixed
 

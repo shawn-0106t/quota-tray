@@ -120,7 +120,9 @@ pub fn parse_usage(amount_json: &str, cost_json: &str) -> Result<UsageInfo, serd
     // last bits (24.279870719999998 instead of 24.27987072), so each aggregate
     // is snapped to that quantum: the pane has to show the number the console
     // and the WPF version show. Models are snapped before the total, so the
-    // total always equals the sum of the cards.
+    // total equals the sum of every model the console reported — the pane draws
+    // only the top four (`visible_models`), so its summary can legitimately be
+    // larger than the cards below it.
     for m in &mut models.list {
         m.month_cost = snap_money(m.month_cost);
         m.today_cost = snap_money(m.today_cost);

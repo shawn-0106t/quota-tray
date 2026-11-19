@@ -82,7 +82,13 @@ pub fn open(app: &AppHandle) {
             // the hop that used to wedge the window blank and unclosable.
             recovery::log("login: sign-in window opened");
         }
-        Err(e) => recovery::log(&format!("login: window build failed: {e}")),
+        Err(e) => {
+            // Nothing was opened, so the sheet must stay: hiding it here would
+            // leave the user with no window at all and no way back to Settings
+            // without the tray.
+            recovery::log(&format!("login: window build failed: {e}"));
+            return;
+        }
     }
     // The console is a real browser window; the settings sheet is a topmost
     // overlay. Leaving it up either covers the page or hides under it, so it
@@ -284,6 +290,17 @@ async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
                     return;
                 }
                 st.login.verifying.store(false, Ordering::SeqCst);
+                // A candidate that landed between the queue check above and this
+                // line saw `verifying == true`, so it is sitting in `pending`.
+                // Taking it AFTER the flag is cleared closes that window: any
+                // later arrival starts a verification of its own instead of
+                // being parked in a queue nobody drains.
+                if let Some(next) = st.login.pending.lock().ok().and_then(|mut p| p.take()) {
+                    st.login.verifying.store(true, Ordering::SeqCst);
+                    token = next;
+                    retried = false;
+                    continue;
+                }
                 set_title(
                     app,
                     &format!("DeepSeek sign-in — {} — keep signing in", explain(&error)),

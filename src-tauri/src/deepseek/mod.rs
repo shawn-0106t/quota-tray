@@ -121,11 +121,21 @@ impl DeepseekResult {
     /// Keep the last-known-good half on failure (PLAN §5.3): the status line
     /// reports the failure, the numbers stay put.
     pub fn fill_missing_from(&mut self, last: &DeepseekResult) {
+        let mut refilled = 0;
         if self.balance.is_none() {
             self.balance = last.balance.clone();
+            refilled += 1;
         }
         if self.usage.is_none() {
             self.usage = last.usage.clone();
+            refilled += 1;
+        }
+        // Nothing fresh arrived, so this result still describes the last good
+        // fetch and must not claim a new timestamp: `save_cache` writes it, and
+        // a restart would then print the old numbers as "Updated <now>"
+        // (PLAN §3.1's cross-session rule depends on this staying put).
+        if refilled == 2 {
+            self.fetched_at = last.fetched_at;
         }
     }
 }
@@ -212,5 +222,47 @@ pub fn save_cache(result: &DeepseekResult) {
     let tmp = dir.join(format!("{CACHE_FILE}.tmp"));
     if std::fs::write(&tmp, json).is_ok() {
         let _ = std::fs::rename(&tmp, dir.join(CACHE_FILE));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn good(at: DateTime<Local>) -> DeepseekResult {
+        DeepseekResult {
+            balance: Some(BalanceInfo::default()),
+            usage: None,
+            balance_error: None,
+            usage_error: None,
+            fetched_at: at,
+        }
+    }
+
+    #[test]
+    fn a_total_failure_keeps_the_last_good_timestamp() {
+        let earlier = Local::now() - chrono::Duration::hours(6);
+        let mut failed = DeepseekResult::default(); // stamps `now`
+        failed.fill_missing_from(&good(earlier));
+        assert!(
+            failed.balance.is_some(),
+            "the last-good half is carried over"
+        );
+        assert_eq!(
+            failed.fetched_at, earlier,
+            "nothing was fetched, so the timestamp must not move"
+        );
+    }
+
+    #[test]
+    fn a_partial_success_keeps_its_own_timestamp() {
+        let earlier = Local::now() - chrono::Duration::hours(6);
+        let mut partial = DeepseekResult {
+            // A fresh balance with a dead usage endpoint.
+            balance: Some(BalanceInfo::default()),
+            ..Default::default()
+        };
+        partial.fill_missing_from(&good(earlier));
+        assert_ne!(partial.fetched_at, earlier, "one half really is new");
     }
 }

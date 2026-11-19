@@ -588,6 +588,10 @@ function reportHeight(): void {
       // reflow the two columns by its width). The backend clamps to the work
       // area, so a genuinely too-short window still shows up here.
       requestAnimationFrame(() => {
+        // A switch that started after this report owns the height: the pinned
+        // `.panes` cell would measure the taller tab and the flag would flicker
+        // off mid-animation. `settleTab()` reports the live height itself.
+        if (tabSwitching) return;
         // Re-measure at frame time: several reports can land in one tick
         // (quota + cache), and a `natural` captured before the IPC round trip
         // would flip the flag onto content that has already changed again.
@@ -631,25 +635,41 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Register listeners BEFORE any other await (including initTheme's) so an
   // early backend event — panel-show, quota-updated, deepseek-updated — can
   // never be missed.
-  await listen<QuotaResult>('quota-updated', (e) => renderQuota(e.payload));
-  await listen<DeepseekResult>('deepseek-updated', (e) => renderDeepseek(e.payload));
-  await listen<KimiUsage>('kimi-usage-updated', (e) => renderKimiUsage(e.payload));
-  await listen<UpdateStatus>('update-status', (e) => renderVersion(e.payload));
-  await listen('panel-show', () => playShow());
-  await listen('panel-hide', () => playHide());
+  // Started together, not awaited one by one: each `listen` is its own IPC round
+  // trip, and an event that lands between two of them would be dropped (skills.ts
+  // registers the same way for the same reason). `panel-hide` is the expensive
+  // one to lose — it never calls `finish_hide_panel`, so the backend's re-entry
+  // guard would keep every later hide a no-op until the next show.
+  const ready = Promise.all([
+    listen<QuotaResult>('quota-updated', (e) => renderQuota(e.payload)),
+    listen<DeepseekResult>('deepseek-updated', (e) => renderDeepseek(e.payload)),
+    listen<KimiUsage>('kimi-usage-updated', (e) => renderKimiUsage(e.payload)),
+    listen<UpdateStatus>('update-status', (e) => renderVersion(e.payload)),
+    listen('panel-show', () => playShow()),
+    listen('panel-hide', () => playHide()),
+  ]);
 
-  let state: AppStateDto;
+  // A failed `get_state` means no theme and no initial data — it must NOT take
+  // the controls down with it. Every button below is wired regardless; without
+  // this the panel renders numbers from the `*-updated` listeners but the tab
+  // and the footer are dead, with no recovery path (PLAN §7).
+  let state: AppStateDto | null = null;
   try {
     state = await initTheme();
   } catch {
-    return;
+    state = null;
   }
-  // The persisted tab decides which pane is on screen before the first
-  // measurement, so the window is never sized for the other provider (PLAN §4).
-  tab = state.settings.activeTab === 'deepseek' ? 'deepseek' : 'kimi';
+  // allSettled semantics: a torn-down webview must not stop the controls below
+  // from being wired just because one subscription rejected.
+  await Promise.allSettled([ready]);
+  if (state) {
+    // The persisted tab decides which pane is on screen before the first
+    // measurement, so the window is never sized for the other provider (PLAN §4).
+    tab = state.settings.activeTab === 'deepseek' ? 'deepseek' : 'kimi';
+    renderQuota(state.quota);
+    renderVersion(state.update);
+  }
   applyTab();
-  renderQuota(state.quota);
-  renderVersion(state.update);
   // Re-report once fonts have settled: the first measurement can precede the
   // final line heights and leave the window a few pixels off.
   window.setTimeout(reportHeight, 120);

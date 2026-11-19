@@ -118,11 +118,17 @@
 2. **同步命令跑在主线程**：任何 `#[tauri::command]` 里都**不要**直接 `WebviewWindowBuilder::build()`——它会跳主线程并等待，结果就是「窗口出现但一片空白、关不掉」。`open_login` / `close_login` 都已交给 `tauri::async_runtime::spawn`。
 3. **reload 与 rebuild 是两条路**：`rebuild` 会等页面加载再调 `show_panel`（所以有 `panel-show`）；`reload` 不会，才需要在 `main.ts` 里按窗口可见性补首帧。以后再动是恢复逻辑，两条路都要想一遍。
 4. **评审页的样式顺序是契约**：`demo/build_ui_demo.py` 把 `#root` 换成 `.root`（`body_of()` 去重复 id、`read().replace("#root", ".root")`），所以舞台覆盖必须写成 **`.win-skills .root`**，与 scoped 版同特异性、靠「排在最后」取胜；写成 `#root` 会一条也匹配不到（这个坑已经踩过一次）。产品 CSS 先注入、舞台规则最后注入，挪回前面评审页就又不能滚、浅色底又丢。
-5. **设置窗高度是「上限 90% + 卡片内滚动」**：`#root` 自己 `max-height` + `overflow-y: auto`，滚动条 4px 内缩细线；上报 `max(offsetHeight, scrollHeight)` 才不会自我缩小。
+5. **设置窗高度是「上限 90% + pane 内滚动、标题固定」**：`#root` 是 flex 列（`max-height: calc(100vh - 56px)`），只有 `.pane` 滚动，滚动条 4px 内缩细线、从标题下方才开始；上报「标题栏 + `pane.scrollHeight` + 2px 边框 + 56 + 1」——报内容高，报被夹过的 `offsetHeight` 会让窗口跟着缩小，多出的 1px 是物理像素取整的余量（125% 下视口可能比内容短 0.4px）。
 6. **阴影必须收在 28px 留白内**：`--shadow: 0 8px 18px`；更大的模糊会被窗口边缘裁成硬边。`PLAN.md` 里那张表已删掉旧的 40px 行。
 7. **发版只发便携 exe**：`bundle.targets = []` + `--no-bundle`，资产三件；`make_release_zip.py` 的 `binaries()` 只有一个 exe。别再往回收安装包。
 8. 原有几条仍然有效：图标是生成物、托盘嵌 48px、Kimi 数字是本机口径、扫描节奏、`ui-demo.html` 是生成物、登录窗没有 IPC 面。
 9. **README 截图有护栏**：`make_readme_shots.py` 的 `CROP` 是按 DOM 实测的固定框，脚本会先断言「裁切外圈是单一背景色」再出图。改舞台 padding、改窗宽、改演示页排版后，它要么自己过、要么直接报错要求重测——不要手工裁图。
+10. **两个应用共用账号、不共用记忆**（2026-11-19）：`shared_dir()` =
+    `%APPDATA%\QuotaTray\shared` 放 DeepSeek 凭证、两个网络缓存（endpoints / models）与扫描索引，`config_dir()` 放
+    `settings.json` / `webview.log` / `deepseek-cache.json`；spike 线
+    （`../quota-tray-slint`）必须实现同一条绝对规则，并用自己的互斥名、自启值名和
+    WebView2 数据目录。拆分前的 `config_dir()/deepseek-credentials.json` 在首次
+    `load()` 时被原样复制到 shared 并保留；`Clear` 两处都写空。
 
 ## 环境现状（2026-11-14 21:05）
 
