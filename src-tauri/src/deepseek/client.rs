@@ -149,7 +149,10 @@ fn candidate_bases() -> Vec<String> {
     for base in USAGE_BASES {
         bases.push((*base).to_string());
     }
-    bases.dedup();
+    // `dedup()` only collapses neighbours, so a remembered base that matches a
+    // compiled-in one costs a duplicate request and can overwrite `last_error`.
+    let mut seen = std::collections::HashSet::new();
+    bases.retain(|base| seen.insert(base.clone()));
     bases
 }
 
@@ -352,14 +355,14 @@ struct Endpoints {
 }
 
 fn load_endpoints() -> Endpoints {
-    std::fs::read_to_string(settings::config_dir().join(ENDPOINTS_FILE))
+    std::fs::read_to_string(settings::shared_dir().join(ENDPOINTS_FILE))
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default()
 }
 
 fn save_endpoints(memo: &Endpoints) {
-    let dir = settings::config_dir();
+    let dir = settings::shared_dir();
     let _ = std::fs::create_dir_all(&dir);
     if let Ok(json) = serde_json::to_string_pretty(memo) {
         let _ = std::fs::write(dir.join(ENDPOINTS_FILE), json);
@@ -443,14 +446,16 @@ fn usage_base_from(url: &str) -> Option<String> {
         url.to_string()
     };
     let rest = absolute.strip_prefix(HOST)?;
-    let idx = rest.find("/usage")?;
-    let base = format!("{HOST}{}", &rest[..idx + "/usage".len()]);
-    // Only a path we could actually fetch: no query, no fragment, no empty base.
-    if base.ends_with("/usage") && !base.contains('?') && !base.contains('#') {
-        Some(base)
-    } else {
-        None
+    // The host must END at `HOST`: `https://platform.deepseek.com.evil.example/…`
+    // also starts with it, and this base is where the user token goes on every
+    // poll (PLAN §6.2).
+    if !rest.starts_with('/') {
+        return None;
     }
+    let idx = rest.find("/usage")?;
+    // Cut at "/usage", so the base cannot carry a query or a fragment: the old
+    // `?`/`#` checks here were dead code (they tested a string already trimmed).
+    Some(format!("{HOST}{}", &rest[..idx + "/usage".len()]))
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -463,14 +468,14 @@ struct ModelsCache {
 }
 
 fn load_models() -> ModelsCache {
-    std::fs::read_to_string(settings::config_dir().join(MODELS_FILE))
+    std::fs::read_to_string(settings::shared_dir().join(MODELS_FILE))
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default()
 }
 
 fn save_models(cache: &ModelsCache) {
-    let dir = settings::config_dir();
+    let dir = settings::shared_dir();
     let _ = std::fs::create_dir_all(&dir);
     if let Ok(json) = serde_json::to_string_pretty(cache) {
         let _ = std::fs::write(dir.join(MODELS_FILE), json);
@@ -595,6 +600,11 @@ mod tests {
         );
         assert_eq!(
             usage_base_from("https://evil.example.com/api/v0/usage/amount"),
+            None
+        );
+        // A prefix test would accept this one and send the token to evil.example.
+        assert_eq!(
+            usage_base_from("https://platform.deepseek.com.evil.example/api/v0/usage/amount"),
             None
         );
         assert_eq!(

@@ -79,7 +79,7 @@ local to this machine. The Kimi quota API carries no token data at all.
 ## Privacy
 
 - The Kimi token is read-only and is sent only to `api.kimi.com`, as a Bearer token.
-- DeepSeek credentials live in `%APPDATA%\QuotaTray\deepseek-credentials.json`
+- DeepSeek credentials live in `%APPDATA%\QuotaTray\shared\deepseek-credentials.json`
   (or beside the exe in portable mode). Values are encrypted with Windows DPAPI
   and sealed behind a `dpapi:` prefix; key names stay readable. A credential set
   captured by another Windows account does not decrypt, which is intended.
@@ -225,7 +225,7 @@ Kimi 的缓存 / 解码是**本机**数字。Kimi 的额度接口本身没有任
 ### 隐私
 
 - Kimi token 只读，只发给 `api.kimi.com`（Bearer）。
-- DeepSeek 凭证存在 `%APPDATA%\QuotaTray\deepseek-credentials.json`（便携模式则在
+- DeepSeek 凭证存在 `%APPDATA%\QuotaTray\shared\deepseek-credentials.json`（便携模式则在
   exe 同级），值用 Windows DPAPI 加密、以 `dpapi:` 前缀标记，键名保持可读。
   换个 Windows 账号拷过去解不开——这是有意的。
 - `Sign in…` 窗加载 `platform.deepseek.com`，是临时窗口，且**不给该页面任何 Tauri

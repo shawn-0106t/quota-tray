@@ -12,7 +12,8 @@
 // The scan is incremental: each file keeps its byte offset, so a poll only reads
 // what was appended since last time. A file that shrank was rewritten, and its
 // contribution is dropped before rescanning it. The index lives in
-// `config_dir()/kimi-usage.json` so a restart does not repay the first full scan.
+// `shared_dir()/kimi-usage.json` (account-side: both Quota Tray builds scan the same
+// tree) so a restart does not repay the first full scan.
 
 use crate::state::AppState;
 use chrono::{DateTime, Local, TimeZone};
@@ -29,8 +30,11 @@ const INDEX_FILE: &str = "kimi-usage.json";
 const KEEP_DAYS: i32 = 30;
 const WEEK_DAYS: i32 = 7;
 
-/// One day's accumulation for one file.
+/// One day's accumulation for one file. `serde(default)` so adding a counter
+/// later degrades to a re-scan instead of failing the whole document and
+/// throwing the incremental path away.
 #[derive(Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(default)]
 struct Bucket {
     /// `inputCacheRead` — prompt tokens served from cache
     hit: u64,
@@ -232,7 +236,7 @@ fn day_key(ms: i64) -> Option<i32> {
 }
 
 fn index_path() -> PathBuf {
-    crate::settings::config_dir().join(INDEX_FILE)
+    crate::settings::shared_dir().join(INDEX_FILE)
 }
 
 fn sessions_root() -> Option<PathBuf> {
@@ -241,14 +245,21 @@ fn sessions_root() -> Option<PathBuf> {
 }
 
 fn load_index() -> Index {
-    fs::read_to_string(index_path())
+    let index: Index = fs::read_to_string(index_path())
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // The version field exists to be read: an unknown schema is discarded
+    // instead of being interpreted with the wrong counter meanings.
+    if index.v == 1 {
+        index
+    } else {
+        Index::default()
+    }
 }
 
 fn save_index(index: &Index, today: i32) {
-    let dir = crate::settings::config_dir();
+    let dir = crate::settings::shared_dir();
     let _ = fs::create_dir_all(&dir);
     let mut pruned = Index {
         v: 1,
@@ -276,8 +287,11 @@ fn save_index(index: &Index, today: i32) {
     let Ok(json) = serde_json::to_string(&pruned) else {
         return;
     };
-    // Temp + rename: a crash must not leave a truncated index behind.
-    let tmp = dir.join(format!("{INDEX_FILE}.tmp"));
+    // Temp + rename: a crash must not leave a truncated index behind. The temp
+    // name is per-process because the other Quota Tray build writes this same
+    // index (shared_dir()), and a shared temp path would let one process
+    // install the other's half-written body.
+    let tmp = dir.join(format!("{INDEX_FILE}.tmp-{}", std::process::id()));
     if fs::write(&tmp, json).is_ok() {
         let _ = fs::rename(&tmp, index_path());
     }

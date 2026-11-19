@@ -22,7 +22,7 @@ get a change merged is to keep it that way.
 
 ## Getting started
 
-Prerequisites: Windows 10/11 with the WebView2 runtime, Node 24+, a stable MSVC Rust
+Prerequisites: Windows 10/11 with the WebView2 runtime, Node 22+, a stable MSVC Rust
 toolchain, and the Kimi Code CLI signed in if you want live Kimi data.
 
 ```sh
@@ -58,6 +58,7 @@ Run the same commands locally before opening a PR:
 | Rust lints | `cargo clippy --all-targets --locked -- -D warnings` (in `src-tauri`) |
 | Rust tests | `cargo test --locked` (in `src-tauri`) |
 | TypeScript | `npx tsc --noEmit` |
+| Release build | `release.yml` repeats the four code gates above between `npm ci` and `tauri build`, because a tag push does not trigger `ci.yml` |
 | Frontend build | `npm ci && npm run build` |
 | Code scanning | automatic — CodeQL default setup runs on PRs and on `main` |
 
@@ -126,7 +127,7 @@ remembering) and `CHANGELOG.md` in the same PR.
 
 ## 上手
 
-前提：Windows 10/11 + WebView2 运行时、Node 24+、stable MSVC Rust 工具链；想要真实的
+前提：Windows 10/11 + WebView2 运行时、Node 22+、stable MSVC Rust 工具链；想要真实的
 Kimi 数据还需要本机已登录 Kimi Code CLI。
 
 ```sh
@@ -162,6 +163,7 @@ CI（`.github/workflows/ci.yml`）必须全绿，branch protection 要求构建 
 | Rust lint | `cargo clippy --all-targets --locked -- -D warnings`（在 `src-tauri`） |
 | Rust 测试 | `cargo test --locked`（在 `src-tauri`） |
 | TypeScript | `npx tsc --noEmit` |
+| 发布构建 | `release.yml` 会在 `npm ci` 与 `tauri build` 之间重跑上面四条代码门禁，因为 tag 推送不触发 `ci.yml` |
 | 前端构建 | `npm ci && npm run build` |
 | 代码扫描 | 自动——CodeQL default setup 在 PR 与 `main` 上运行 |
 

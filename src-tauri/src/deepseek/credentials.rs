@@ -1,6 +1,8 @@
 // DeepSeek credential chain (PLAN §5.2):
 //   DEEPSEEK_API_KEY / DEEPSEEK_USER_TOKEN env
-//   -> config_dir()/deepseek-credentials.json
+//   -> shared_dir()/deepseek-credentials.json (account-side, shared with the
+//      other Quota Tray build; the pre-split config_dir() copy is read as a
+//      fallback so an upgrade keeps the configured account)
 //   -> one-time import of ~/.deepseek-planbar/credentials.json (never written back)
 //   -> not configured.
 // Values are DPAPI-protected behind a `dpapi:` prefix while key names stay
@@ -11,12 +13,33 @@ use crate::settings;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const CRED_FILE: &str = "deepseek-credentials.json";
 /// Where the parent WPF app kept its plaintext credentials. Imported once,
 /// then left alone so the parent app keeps working (PLAN §5.2).
 const OLD_FILE_LABEL: &str = "~/.deepseek-planbar/credentials.json";
+
+/// The account-side file both Quota Tray builds read and write.
+fn shared_file() -> PathBuf {
+    settings::shared_dir().join(CRED_FILE)
+}
+
+/// Where this app kept the file before the shared split (and where the other
+/// build looked before it was mirrored). Read as a fallback; `clear` blanks it
+/// too, because an app still on the old path would otherwise answer with the
+/// values the user just removed.
+fn private_file() -> PathBuf {
+    settings::config_dir().join(CRED_FILE)
+}
+
+/// Is there a credential file at all (shared or pre-split)? Deliberately an
+/// existence test, not a parse test: the one-time parent import is gated on
+/// "we have written our file", so a corrupt or hand-edited file must not make
+/// the import run again and resurrect credentials the user cleared (PLAN §5.2).
+fn exists() -> bool {
+    shared_file().exists() || private_file().exists()
+}
 
 /// Which link of the chain answered. `--test-deepseek --verbose` reports this
 /// and never a value (PLAN §5.2 / AGENTS.md).
@@ -51,6 +74,7 @@ pub struct Credentials {
 /// Resolve both values. A credential is never logged, printed or persisted
 /// outside `credential_file()`.
 pub fn load() -> Credentials {
+    migrate_to_shared();
     let env_key = env_value("DEEPSEEK_API_KEY");
     let env_token = env_value("DEEPSEEK_USER_TOKEN");
     if env_key.is_some() && env_token.is_some() {
@@ -73,19 +97,20 @@ pub fn load() -> Credentials {
     };
     if file_key.is_some() || file_token.is_some() {
         // A half-configured env still gets its missing half from the file,
-        // matching the parent app's LoadCredentials.
-        let from_env = env_key.is_some() || env_token.is_some();
+        // matching the parent app's LoadCredentials. Report `File`: a file was
+        // read to complete the pair, and `--test-deepseek --verbose` must not
+        // claim a value came from the environment when it did not.
         return Credentials {
             api_key: env_key.or(file_key),
             user_token: env_token.or(file_token),
-            source: if from_env { Source::Env } else { Source::File },
+            source: Source::File,
         };
     }
 
     // The legacy import is one-time (PLAN §5.2): the mere existence of our own
     // file — including one emptied by "Clear" — means it already ran. Reading
     // the old file again would resurrect credentials the user just removed.
-    if existing.is_none() {
+    if !exists() {
         let (old_key, old_token) = read_legacy();
         if old_key.is_some() || old_token.is_some() {
             save(
@@ -141,7 +166,17 @@ pub fn clear() {
         user_token: String::new(),
         imported_from,
     };
-    write(&file);
+    // A pre-split copy — or the other build, before it is mirrored onto the
+    // shared path — would otherwise still answer with the old values. When the
+    // shared write itself fails (read-only directory, a file owned by another
+    // account), the private copy is where the cleared state gets recorded: the
+    // `.exists()` gate must keep seeing "we wrote our file", or the one-time
+    // import would bring the credentials straight back on the next poll.
+    let wrote = write(&file);
+    let old = private_file();
+    if old != shared_file() && (old.exists() || !wrote) {
+        let _ = write_to(&old, &file);
+    }
 }
 
 /// Write both values, DPAPI-sealed, preserving fields the caller left alone
@@ -160,19 +195,54 @@ pub fn save(api_key: Option<&str>, user_token: Option<&str>, imported_from: Opti
         },
         imported_from: imported_from.map(str::to_string).or(existing.imported_from),
     };
-    write(&file);
+    if !write(&file) && private_file() != shared_file() {
+        // Keep what the user just verified rather than losing it to a failed
+        // shared write; the read path checks both locations.
+        let _ = write_to(&private_file(), &file);
+    }
 }
 
-fn write(file: &CredFile) {
-    let dir = settings::config_dir();
-    let _ = fs::create_dir_all(&dir);
-    let Ok(json) = serde_json::to_string_pretty(file) else {
-        return;
+fn write(file: &CredFile) -> bool {
+    write_to(&shared_file(), file)
+}
+
+fn write_to(path: &Path, file: &CredFile) -> bool {
+    match serde_json::to_string_pretty(file) {
+        Ok(json) => write_text(path, &json),
+        Err(_) => false,
+    }
+}
+
+fn write_text(path: &Path, text: &str) -> bool {
+    let Some(dir) = path.parent() else {
+        return false;
     };
-    // Temp + rename so a crash cannot leave a truncated credential file.
-    let tmp = dir.join(format!("{CRED_FILE}.tmp"));
-    if fs::write(&tmp, json).is_ok() {
-        let _ = fs::rename(&tmp, dir.join(CRED_FILE));
+    let _ = fs::create_dir_all(dir);
+    // Temp + rename so a crash cannot leave a truncated credential file. The
+    // temp name is per-process: the other Quota Tray build writes this same
+    // file, and a fixed name would let one process rename the other's
+    // half-written copy into place.
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    let tmp = dir.join(format!("{name}.tmp-{}", std::process::id()));
+    if fs::write(&tmp, text).is_err() || fs::rename(&tmp, path).is_err() {
+        let _ = fs::remove_file(&tmp);
+        return false;
+    }
+    true
+}
+
+/// First run after the shared-directory split: copy a configured pre-split file
+/// to the shared path so the other Quota Tray build sees the account too. The
+/// old copy stays untouched — a build that has not been mirrored onto the shared
+/// path yet keeps working. Byte copy: the blobs are already sealed, and
+/// `importedFrom` must survive verbatim.
+fn migrate_to_shared() {
+    let (shared, old) = (shared_file(), private_file());
+    if shared == old || shared.exists() || !old.exists() {
+        return;
+    }
+    if let Ok(text) = fs::read_to_string(&old) {
+        write_text(&shared, &text);
     }
 }
 
@@ -191,7 +261,11 @@ struct CredFile {
 }
 
 fn read_raw() -> Option<CredFile> {
-    let text = fs::read_to_string(settings::config_dir().join(CRED_FILE)).ok()?;
+    read_file(&shared_file()).or_else(|| read_file(&private_file()))
+}
+
+fn read_file(path: &Path) -> Option<CredFile> {
+    let text = fs::read_to_string(path).ok()?;
     serde_json::from_str(&text).ok()
 }
 

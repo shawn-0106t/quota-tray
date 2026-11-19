@@ -77,6 +77,25 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # ci.yml triggers on pushes to main and on pull requests only, so a tag can
+      # name a commit that never ran a code gate. Repeat them here: `cargo build`
+      # is not `cargo check`, and `npm run build` does no type checking, so
+      # without these a type error or a clippy failure reaches the published exe.
+      - name: Type-check the frontend
+        run: npx tsc --noEmit
+
+      - name: Check Rust formatting
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      - name: Lint Rust (deny warnings)
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Test Rust (pure logic)
+        working-directory: src-tauri
+        run: cargo test --locked
+
       # beforeBuildCommand (npm run build) runs as part of tauri build; the app
       # ships as a portable exe only, so no bundler runs here
       - name: Build release exe
@@ -123,8 +142,14 @@ jobs:
           section = "\n".join(out).strip()
           if not section:
               sys.exit(f"CHANGELOG.md has no '## [{version}]' section — finalize the changelog before tagging")
-          if "Unreleased" in section.splitlines()[0]:
-              sys.exit(f"CHANGELOG.md section {version} still says Unreleased — date it before tagging")
+          # `version` comes from the tag, so a section titled `## [Unreleased]`
+          # can never match; the reachable check is that the matched heading
+          # carries a release date. Without one the notes are a work-in-progress
+          # draft, and the tag should not have been cut.
+          import re
+          heading = section.splitlines()[0]
+          if not re.fullmatch(rf"## \[{re.escape(version)}\] — \d{{4}}-\d{{2}}-\d{{2}}", heading):
+              sys.exit(f"CHANGELOG.md heading {heading!r} has no release date — finalize the changelog before tagging")
           print("\n".join([
               section,
               "",
@@ -154,7 +179,11 @@ jobs:
           test -f "SHA256SUMS.txt"
           # gh release create is not idempotent: a failed earlier run may leave
           # a draft behind. Clean only DRAFTS — never touch a published release.
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null | grep -q true; then
+          # Capture, do not pipe into `grep -q`: grep exits on the first match and
+          # the SIGPIPE it gives `gh` (141) becomes the pipeline status under
+          # GitHub's `-o pipefail`, silently skipping the cleanup this step exists for.
+          draft="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [ "$draft" = "true" ]; then
             gh release delete "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --yes
           fi
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \

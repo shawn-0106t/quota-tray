@@ -38,7 +38,7 @@ pub fn config_dir() -> PathBuf {
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()));
     if let Some(dir) = &exe_dir {
-        if dir.join("portable.dat").exists() {
+        if portable_mode() {
             return dir.clone();
         }
     }
@@ -48,6 +48,63 @@ pub fn config_dir() -> PathBuf {
         }
     }
     exe_dir.unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Portable mode: an empty `portable.dat` next to the exe (SPEC 18.1).
+fn portable_mode() -> bool {
+    if crate::app_data_dir_override().is_some() {
+        return false;
+    }
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("portable.dat").exists()))
+        .unwrap_or(false)
+}
+
+/// Account-side state shared with the other Quota Tray build (the Slint spike in
+/// `quota-tray-slint`): the DeepSeek credentials and the network-derived caches.
+///
+/// This is a FIXED location, deliberately not derived from `config_dir()`: the
+/// other app has its own config dir, and both must write the same file or the
+/// user configures the account twice. The rule, implemented identically by both
+/// apps:
+///   - portable mode: `config_dir()` itself — a portable build keeps its state
+///     next to the exe and never shares. (WebView2's own profile still lives in
+///     `%LOCALAPPDATA%`; that is the runtime's cache, not app state.)
+///   - otherwise `%APPDATA%\QuotaTray\shared`.
+///
+/// Everything that is *this app's memory* stays in `config_dir()`:
+/// `settings.json` (theme, interval, `ActiveTab` — different UI per app),
+/// `webview.log`, and `deepseek-cache.json` (its timestamp means "when THIS app
+/// last succeeded", so sharing it would let one app's failure stamp the other's
+/// last-good numbers).
+pub fn shared_dir() -> PathBuf {
+    if portable_mode() {
+        return config_dir();
+    }
+    if let Some(dir) = crate::app_data_dir_override() {
+        return dir.join("shared");
+    }
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        if !appdata.is_empty() {
+            return PathBuf::from(appdata).join("QuotaTray").join("shared");
+        }
+    }
+    // APPDATA is always set for an interactive user, but a stripped environment
+    // must still resolve to the SAME absolute place in both apps. Falling back
+    // to an exe-relative directory would silently un-share the account, so try
+    // the profile first; only a process with no environment at all (which could
+    // not have loaded credentials in the first place) lands on `config_dir()`.
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        if !profile.is_empty() {
+            return PathBuf::from(profile)
+                .join("AppData")
+                .join("Roaming")
+                .join("QuotaTray")
+                .join("shared");
+        }
+    }
+    config_dir().join("shared")
 }
 
 fn file_path() -> PathBuf {
