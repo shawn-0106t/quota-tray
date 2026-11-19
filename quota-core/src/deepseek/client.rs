@@ -149,7 +149,10 @@ fn candidate_bases() -> Vec<String> {
     for base in USAGE_BASES {
         bases.push((*base).to_string());
     }
-    bases.dedup();
+    // `dedup()` only collapses neighbours, so a remembered base that matches a
+    // compiled-in one would cost a duplicate request.
+    let mut seen = std::collections::HashSet::new();
+    bases.retain(|base| seen.insert(base.clone()));
     bases
 }
 
@@ -445,14 +448,14 @@ fn usage_base_from(url: &str) -> Option<String> {
         url.to_string()
     };
     let rest = absolute.strip_prefix(HOST)?;
-    let idx = rest.find("/usage")?;
-    let base = format!("{HOST}{}", &rest[..idx + "/usage".len()]);
-    // Only a path we could actually fetch: no query, no fragment, no empty base.
-    if base.ends_with("/usage") && !base.contains('?') && !base.contains('#') {
-        Some(base)
-    } else {
-        None
+    // The host must END at `HOST`: `https://platform.deepseek.com.evil.example/…`
+    // also starts with it, and this base is where the user token goes.
+    if !rest.starts_with('/') {
+        return None;
     }
+    let idx = rest.find("/usage")?;
+    // Cut at "/usage", so the base cannot carry a query or a fragment.
+    Some(format!("{HOST}{}", &rest[..idx + "/usage".len()]))
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -652,5 +655,23 @@ mod tests {
         assert!(token_accepted("<html><body>proxy</body></html>"));
         assert!(token_accepted(""));
         assert!(token_accepted("{}"));
+    }
+}
+
+#[cfg(test)]
+mod host_check_tests {
+    use super::*;
+
+    #[test]
+    fn a_suffix_domain_is_not_the_console_host() {
+        assert_eq!(
+            usage_base_from("https://platform.deepseek.com.evil.example/api/v0/usage/amount"),
+            None
+        );
+        assert_eq!(
+            usage_base_from("https://platform.deepseek.com/api/v0/usage/amount?month=11")
+                .as_deref(),
+            Some("https://platform.deepseek.com/api/v0/usage")
+        );
     }
 }

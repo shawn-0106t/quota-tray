@@ -24,7 +24,8 @@ The threat model is small on purpose; these are the boundaries worth checking.
 - **Kimi credentials** are read only from `~/.kimi-code/` (`credentials/kimi-code.json` or
   `api_key` in `config.toml`) and sent as a Bearer token to
   `https://api.kimi.com/coding/v1/usages` — nowhere else, never logged.
-- **DeepSeek credentials** live in `config_dir()/deepseek-credentials.json`, values sealed
+- **DeepSeek credentials** live in `shared_dir()/deepseek-credentials.json`
+  (`%APPDATA%\QuotaTray\shared`; portable mode: the exe directory), values sealed
   with Windows DPAPI (`dpapi:` prefix, keys readable). They are sent only to
   `api.deepseek.com` and `platform.deepseek.com`. A DPAPI blob does not decrypt under
   another Windows account — that is intentional.
@@ -78,7 +79,7 @@ visual problems (a normal issue is fine).
 - **Kimi 凭证**只从 `~/.kimi-code/`（`credentials/kimi-code.json` 或 `config.toml` 的
   `api_key`）读取，只作为 Bearer token 发往
   `https://api.kimi.com/coding/v1/usages`，不外发、不写日志。
-- **DeepSeek 凭证**存在 `config_dir()/deepseek-credentials.json`，值经 Windows DPAPI
+- **DeepSeek 凭证**存在 `shared_dir()/deepseek-credentials.json`（`%APPDATA%\QuotaTray\shared`；便携模式则是 exe 目录），值经 Windows DPAPI
   加密（`dpapi:` 前缀，键名明文），只发往 `api.deepseek.com` 与
   `platform.deepseek.com`。DPAPI 密文换一个 Windows 账号解不开——这是有意的。
 - **DeepSeek 登录窗**加载 `platform.deepseek.com`，且**不给**该页面任何 Tauri IPC

@@ -8,17 +8,28 @@ function el<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
 }
 
-/** Report the content height so the backend can size and re-centre the
-    window (PLAN §4). The card is content-sized, so this needs no constant. */
+/** Report the card's content height so the backend can size and re-centre the
+    window (PLAN §4). The card is content-sized, so this needs no constant.
+
+    Measured, not read off the box: the card is capped at the live viewport
+    (`max-height: calc(100vh - 56px)`), so `offsetHeight` would shrink to the
+    cap and the window would follow it down. The pane's `scrollHeight` is its
+    natural content height whether or not it is scrolling, so the parts add up to
+    the height the card wants: the fixed title bar, the pane's content and the
+    card's 1px top+bottom borders (the box minus its client area — `#root` keeps
+    `overflow: hidden`, so that is always 2). */
 function reportHeight(): void {
   const root = document.getElementById('root');
-  if (!root) return;
-  // The card caps itself at the viewport (`max-height`), so `offsetHeight` is
-  // the clamped box while `scrollHeight` still measures the content. Report the
-  // larger one: the backend needs the real content height to decide the window
-  // size, and the card scrolls whatever does not fit.
-  const content = Math.max(root.offsetHeight, root.scrollHeight);
-  invoke('settings_height', { height: content + SHADOW_ROOM }).catch(() => undefined);
+  const hdr = root?.querySelector<HTMLElement>('.hdr');
+  const pane = root?.querySelector<HTMLElement>('.pane');
+  if (!root || !hdr || !pane) return;
+  const content = hdr.offsetHeight + pane.scrollHeight + (root.offsetHeight - root.clientHeight);
+  // +1 on top of the shadow room: the window height is rounded to physical
+  // pixels, so at e.g. 125% the viewport can come out a fraction shorter than
+  // the content and park a scrollbar in a sheet that fits. The settings window
+  // is centred, so the spare pixel costs nothing (unlike the panel, which is
+  // bottom-anchored and therefore decides its cap in JS).
+  invoke('settings_height', { height: content + SHADOW_ROOM + 1 }).catch(() => undefined);
 }
 
 /** Backfill the current settings into the controls (SPEC 13.2: every open). */
@@ -39,10 +50,21 @@ async function backfill(): Promise<void> {
       );
       if (fallback) fallback.checked = true;
     }
+    // Same guard as the theme above: a value written by an older build (the
+    // backend only clamps to 1..30) would leave no radio checked, and Save would
+    // read the `?? '5'` fallback and silently change the user's interval.
     const wanted = String(s.refreshMinutes);
+    let intervalMatched = false;
     document.querySelectorAll<HTMLInputElement>('input[name="interval"]').forEach((i) => {
       i.checked = i.value === wanted;
+      intervalMatched ||= i.checked;
     });
+    if (!intervalMatched) {
+      const fallback = document.querySelector<HTMLInputElement>(
+        'input[name="interval"][value="5"]',
+      );
+      if (fallback) fallback.checked = true;
+    }
     el<HTMLInputElement>('autostart').checked = s.autoStart;
   } catch {
     /* backend unavailable: keep current control state */
@@ -87,7 +109,9 @@ function renderKimi(
   } else if (kimi.expired) {
     setValue(el('kimi-credential'), 'Expired — sign in with the Kimi CLI', true);
   } else {
-    setValue(el('kimi-credential'), 'Not found — sign in with the Kimi CLI', true);
+    // Not configured, not broken: PLAN §4 keeps red for expired/unreadable, and
+    // the DeepSeek block below paints the same state in the muted ink.
+    setValue(el('kimi-credential'), 'Not found — sign in with the Kimi CLI', false);
   }
 }
 
@@ -104,14 +128,24 @@ function renderDeepseek(ds: CredentialStatus['deepseek']): void {
   const [tokenText, tokenBad] = describe(ds.userToken);
   setValue(el('ds-user-token'), tokenText, tokenBad);
 
+  // The note has two possible authors. The env warning is derived state and is
+  // rewritten on every refresh; the Clear explanation is a one-off the backend
+  // event would otherwise wipe ~1 ms after it is shown (the event is emitted
+  // before the command returns, so `refreshStatus` lands last). Keep it until
+  // something is configured again — that is when "cleared" stops being true.
   const note = el('ds-note');
+  const configured = ds.apiKey || ds.userToken;
   if (ds.source === 'env') {
     note.textContent =
       'Values come from DEEPSEEK_API_KEY / DEEPSEEK_USER_TOKEN — Clear does not remove them.';
+    note.dataset.owner = 'env';
+    note.hidden = false;
+  } else if (note.dataset.owner === 'clear' && !configured) {
     note.hidden = false;
   } else {
     note.textContent = '';
     note.hidden = true;
+    delete note.dataset.owner;
   }
 }
 
@@ -142,6 +176,8 @@ function credError(code: string): string {
       return 'DeepSeek server error — not saved';
     case 'empty':
       return 'empty value';
+    case 'cleared':
+      return 'cleared while verifying — not saved';
     default:
       return `verification failed (${code}) — not saved`;
   }
@@ -242,6 +278,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         const note = el('ds-note');
         note.textContent =
           'Cleared. Signing in again stores the usage token the console already has.';
+        note.dataset.owner = 'clear';
         note.hidden = false;
         reportHeight();
       })

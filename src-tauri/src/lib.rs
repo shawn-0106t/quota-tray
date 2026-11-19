@@ -306,16 +306,29 @@ async fn save_credential(app: AppHandle, field: String, value: String) -> Result
     if value.is_empty() {
         return Err("empty".to_string());
     }
-    match field.as_str() {
-        "apiKey" => {
-            deepseek::client::fetch_balance(&value).await?;
-            deepseek::credentials::save(Some(&value), None, None);
-        }
-        "userToken" => {
-            deepseek::client::verify_user_token(&value).await?;
-            deepseek::credentials::save(None, Some(&value), None);
-        }
+    // A verification can take half a minute. Clear during that window must win:
+    // the clear-only counter is checked BETWEEN verify and save, because saving
+    // first and rejecting afterwards would still leave the value on disk.
+    // `epoch` is not used here: it also moves when the sign-in window opens or
+    // closes, and that must not throw the user's paste away.
+    let clears = app.state::<AppState>().login.clears();
+    let is_api_key = match field.as_str() {
+        "apiKey" => true,
+        "userToken" => false,
         _ => return Err("unknown-field".to_string()),
+    };
+    if is_api_key {
+        deepseek::client::fetch_balance(&value).await?;
+    } else {
+        deepseek::client::verify_user_token(&value).await?;
+    }
+    if app.state::<AppState>().login.clears() != clears {
+        return Err("cleared".to_string());
+    }
+    if is_api_key {
+        deepseek::credentials::save(Some(&value), None, None);
+    } else {
+        deepseek::credentials::save(None, Some(&value), None);
     }
     let _ = app.emit("deepseek-credentials-changed", ());
     let handle = app.clone();
@@ -340,6 +353,7 @@ fn clear_credentials(app: AppHandle) {
         // captured just before the clear cannot be stamped with the new epoch
         // and saved afterwards, and `verifying` never outlives its future.
         st.login.new_session();
+        st.login.note_clear();
         let handle = app.clone();
         tauri::async_runtime::spawn(async move { login::close(&handle) });
     }

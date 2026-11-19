@@ -230,7 +230,7 @@ fn day_key(ms: i64) -> Option<i32> {
 }
 
 fn index_path() -> PathBuf {
-    crate::settings::config_dir().join(INDEX_FILE)
+    crate::settings::shared_dir().join(INDEX_FILE)
 }
 
 fn sessions_root() -> Option<PathBuf> {

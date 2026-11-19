@@ -5,6 +5,38 @@ All notable changes to Quota Tray are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each section carries
 the English notes first, then the Chinese mirror.
 
+## [Unreleased]
+
+### Fixed
+
+- Mirrored from `main` (2026-11-19): the Kimi pane reads the live quota payload
+  again — the Extra Usage wallet is keyed `booster_wallet` (not `boosterWallet`),
+  which left an active wallet showing "Not activated", and the weekly window was
+  structurally 0 because `usage` carries `limit`/`remaining` instead of `used`,
+  with the real ratio in `usages.limit_7d.used_ratio`. The not-activated defence
+  also covers the live `status` field. `usage_base_from` now requires the host to
+  end at `platform.deepseek.com`, so a suffix domain can no longer carry the user
+  token, and `candidate_bases` de-duplicates beyond adjacent entries.
+- This build is now a separate app with a shared account: its own state lives in
+  `%APPDATA%\QuotaTray-Slint` with its own autostart value `QuotaTray.Slint`,
+  while the DeepSeek credentials, endpoints, model-name cache and the usage scan
+  index live in `%APPDATA%\QuotaTray\shared` — configured once, used by both
+  builds. A total DeepSeek failure no longer re-stamps the cache's timestamp, and
+  the settings sheet / panel bootstrap fixes from `main` are mirrored as well.
+
+### 中文
+
+- **修复**：镜像 `main` 的 2026-11-19 修复——Kimi 面板重新读对线上报文：Extra
+  Usage 钱包的顶层键是 `booster_wallet`（不是 `boosterWallet`），否则开通状态也显示
+  「Not activated」；周窗口恒为 0，因为 `usage` 只有 `limit`/`remaining`，真正的比例
+  在 `usages.limit_7d.used_ratio`。`usage_base_from` 现在要求主机名在
+  `platform.deepseek.com` 处结束，后缀域名再也拿不到用户 token；`candidate_bases`
+  也改成真正的去重。
+- **变更**：本构建成为独立应用但共用账号——自己的状态在
+  `%APPDATA%\QuotaTray-Slint`、自启值 `QuotaTray.Slint`；DeepSeek 凭证、端点、
+  模型名缓存与用量扫描索引放在 `%APPDATA%\QuotaTray\shared`，配一次两个构建都能用。
+  DeepSeek 全失败不再刷新缓存时间戳；设置窗与面板的初始化修复也一并镜像。
+
 ## [1.0.2] — 2026-11-15
 
 ### Fixed

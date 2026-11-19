@@ -26,10 +26,20 @@ impl Default for SettingsData {
     }
 }
 
-/// Portable mode: a `portable.dat` next to the exe pins the config dir to the
-/// exe directory; otherwise %APPDATA%\QuotaTray (SPEC 18.1).
-/// `QUOTA_TRAY_APP_DATA_DIR` (diagnostic/test override, SPEC 22.5) wins over both so
-/// an isolated instance never touches the user's settings.
+/// Portable mode: a `portable.dat` next to the exe (SPEC 18.1).
+fn portable_mode() -> bool {
+    if crate::app_data_dir_override().is_some() {
+        return false;
+    }
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("portable.dat").exists()))
+        .unwrap_or(false)
+}
+
+/// This app's own state: settings.json, logs, window state. Deliberately NOT the
+/// Tauri build's directory (%APPDATA%\QuotaTray) — two apps, two sets of
+/// preferences. `QUOTA_TRAY_APP_DATA_DIR` (SPEC 22.5) still wins for tests.
 pub fn config_dir() -> PathBuf {
     if let Some(dir) = crate::app_data_dir_override() {
         return dir;
@@ -38,16 +48,43 @@ pub fn config_dir() -> PathBuf {
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()));
     if let Some(dir) = &exe_dir {
-        if dir.join("portable.dat").exists() {
+        if portable_mode() {
             return dir.clone();
         }
     }
     if let Ok(appdata) = std::env::var("APPDATA") {
         if !appdata.is_empty() {
-            return PathBuf::from(appdata).join("QuotaTray");
+            return PathBuf::from(appdata).join("QuotaTray-Slint");
         }
     }
     exe_dir.unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Account-side state shared with the Tauri build: credentials and the
+/// network-derived caches. A FIXED absolute location (the other app's own
+/// directory), because `config_dir()` is per app. Portable mode never shares.
+pub fn shared_dir() -> PathBuf {
+    if portable_mode() {
+        return config_dir();
+    }
+    if let Some(dir) = crate::app_data_dir_override() {
+        return dir.join("shared");
+    }
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        if !appdata.is_empty() {
+            return PathBuf::from(appdata).join("QuotaTray").join("shared");
+        }
+    }
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        if !profile.is_empty() {
+            return PathBuf::from(profile)
+                .join("AppData")
+                .join("Roaming")
+                .join("QuotaTray")
+                .join("shared");
+        }
+    }
+    config_dir().join("shared")
 }
 
 fn file_path() -> PathBuf {
@@ -102,10 +139,13 @@ pub fn apply_auto_start(data: &SettingsData) {
     if data.auto_start {
         if let Ok(exe) = std::env::current_exe() {
             let value = format!("\"{}\"", exe.to_string_lossy());
-            let _ = key.set_value("QuotaTray", &value);
+            // Its own value name: the Tauri build owns `QuotaTray`, and sharing
+            // the name would let whichever saved last redirect the other's
+            // autostart (PLAN §4).
+            let _ = key.set_value("QuotaTray.Slint", &value);
         }
     } else {
-        let _ = key.delete_value("QuotaTray");
+        let _ = key.delete_value("QuotaTray.Slint");
     }
 }
 

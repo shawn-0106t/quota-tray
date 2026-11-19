@@ -156,9 +156,12 @@ export function applyTheme(theme: string): void {
 
 /** Apply current effective theme and subscribe to live changes. */
 export async function initTheme(): Promise<AppStateDto> {
+  // Subscription first: `get_state` is an IPC round trip and a theme change
+  // landing during it would be lost.
+  const subscription = listen<string>('theme-changed', (e) => applyTheme(e.payload));
   const state = await invoke<AppStateDto>('get_state');
   applyTheme(state.theme);
-  await listen<string>('theme-changed', (e) => applyTheme(e.payload));
+  await subscription;
   return state;
 }
 

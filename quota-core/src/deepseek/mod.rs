@@ -121,11 +121,19 @@ impl DeepseekResult {
     /// Keep the last-known-good half on failure (PLAN §5.3): the status line
     /// reports the failure, the numbers stay put.
     pub fn fill_missing_from(&mut self, last: &DeepseekResult) {
+        let mut refilled = 0;
         if self.balance.is_none() {
             self.balance = last.balance.clone();
+            refilled += 1;
         }
         if self.usage.is_none() {
             self.usage = last.usage.clone();
+            refilled += 1;
+        }
+        // Nothing fresh arrived: keep the last good timestamp, or the cache file
+        // would claim old numbers were fetched now (PLAN §3.1).
+        if refilled == 2 {
+            self.fetched_at = last.fetched_at;
         }
     }
 }

@@ -93,6 +93,10 @@ pub struct LoginState {
     /// close). A verification that started before the bump must not save its
     /// token, retitle, or close the window that now exists.
     pub epoch: std::sync::atomic::AtomicU64,
+    /// Bumped by Clear alone. Opening or closing the sign-in window is not a
+    /// clear, so a manual paste the user is waiting on must survive it — which
+    /// is why the paste path cannot use `epoch`.
+    pub clears: std::sync::atomic::AtomicU64,
 }
 
 impl LoginState {
@@ -115,6 +119,16 @@ impl LoginState {
     pub fn new_session(&self) {
         self.reset();
         self.epoch.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// The credentials were cleared: a paste being verified must drop its value.
+    pub fn note_clear(&self) {
+        self.clears.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// Read the clear generation to compare against after an await.
+    pub fn clears(&self) -> u64 {
+        self.clears.load(Ordering::SeqCst)
     }
 }
 
@@ -198,5 +212,24 @@ impl AppState {
             Provider::Kimi => &self.schedule_kimi,
             Provider::Deepseek => &self.schedule_deepseek,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A window boundary and a clear invalidate different things; conflating
+    /// them would cancel a paste every time the sign-in window opens.
+    #[test]
+    fn a_clear_and_a_window_boundary_move_different_counters() {
+        let st = LoginState::default();
+        st.new_session();
+        assert_eq!(st.epoch.load(Ordering::SeqCst), 1);
+        assert_eq!(st.clears(), 0);
+
+        st.note_clear();
+        assert_eq!(st.clears(), 1);
+        assert_eq!(st.epoch.load(Ordering::SeqCst), 1);
     }
 }

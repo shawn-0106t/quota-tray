@@ -32,7 +32,7 @@
 | 托盘 / 应用图标 | 双条配额条（`#8c74b1` 透明底，7u 宽、radius 1.6），由 `demo/make_icon.py` 生成三件套 | 复用面板的进度条语言；四个候选里只有它在 16px 仍读得出形状（2026-11-14 用户选定 A）。图标是品牌标示，不属于 §3.5 对面板强调色的两条职责 |
 | 版本 | 1.0.0 起 | — |
 | DeepSeek 登录捕获 | 进 v1 | 与现版功能对齐；代价是 WebView2 COM 互操作是本项目风险最高的一块 |
-| DeepSeek 凭证存储 | `config_dir()/deepseek-credentials.json`，值用 Windows DPAPI 加密（`dpapi:` 前缀），旧版文件首次运行一次性导入 | API Key 能花钱，不该落明文盘；存储跟着 `config_dir()` 走，便携模式才带得走；旧文件只读不写，旧应用不受影响 |
+| DeepSeek 凭证存储 | `shared_dir()/deepseek-credentials.json`（= `%APPDATA%\QuotaTray\shared`，两个 Quota Tray 构建共用；本构建自己的状态在 `%APPDATA%\QuotaTray-Slint`），值用 Windows DPAPI 加密（`dpapi:` 前缀），旧版文件首次运行一次性导入 | API Key 能花钱，不该落明文盘；存储跟着 `config_dir()` 走，便携模式才带得走；旧文件只读不写，旧应用不受影响 |
 
 ## 3. 设计定稿（E 版）
 
@@ -152,8 +152,8 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 
 - 端点：`GET https://api.kimi.com/coding/v1/usages`（Bearer）。
 - 凭证链：`~/.kimi-code/credentials/kimi-code.json` 的 `access_token`（`expires_at` 须 > now + 30s）→ 回退 `~/.kimi-code/config.toml` 中 `base_url` 含 `api.kimi.com/coding` 的 `[providers.*]` 的 `api_key`；`KIMI_CODE_HOME` 覆盖家目录。
-- **Extra Usage 单位**：`boosterWallet.balance.amountLeft` 是 **1e-8 元**，转分用 `(raw + 500000) / 1000000`；`priceInCents` 已是分；所有 JSON 数字按字符串建模（容忍数字型）。
-- `isEnabled=false` 时 `amountLeft` 是估算值，整张卡显示 `Not activated`。
+- **Extra Usage 单位**：`booster_wallet.balance.amountLeft`（线上是 snake_case 顶层键，旧的 `boosterWallet` 仍兼容） 是 **1e-8 元**，转分用 `(raw + 500000) / 1000000`；`priceInCents` 已是分；所有 JSON 数字按字符串建模（容忍数字型）。
+- 未开通两副形状：`isEnabled=false`，或没有 `isEnabled` 而 `status` 不是 `STATUS_ACTIVE`——两种情况下 `amountLeft` 都是估算值，整张卡显示 `Not activated`。
 - CLI 版本：`kimi --version`；新版徽章来自官方 changelog（GitHub API 兜底）。
 - **缓存命中与解码速度来自本机会话日志**（2026-11-14 落地，`src-tauri/src/kimi_usage.rs`；P1 起扫描逻辑在 `quota-core/src/kimi_usage.rs`，`src-tauri` 那一份只剩驱动循环）：
   - 服务端没有这组数字——`usages` 只有窗口百分比与钱包，官方文档也只有额度与计费口径。CLI 自己的记录里有：`sessions/<workspace>/<session>/agents/<agent>/wire.jsonl` 的 `usage.record`（`usageScope=turn`）带 `inputCacheRead` / `inputCacheCreation` / `inputOther` / `output`。
@@ -169,7 +169,7 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 - 余额：`GET https://api.deepseek.com/user/balance`（Bearer API Key）。
 - 模型元数据（**仅供展示名**，不参与用量口径）：`GET https://api.deepseek.com/models`（Bearer 同一 API Key）；回落顺序与缓存策略见 §6。
 - 用量：`GET https://platform.deepseek.com/api/v0/usage/{amount,cost}?month=&year=`（Bearer userToken + `x-app-version: 1.0.0` + Chrome UA + `Accept: */*`）。
-- 凭证链：`DEEPSEEK_API_KEY` / `DEEPSEEK_USER_TOKEN` 环境变量优先（命中即用，不读也不写文件）→ `config_dir()/deepseek-credentials.json` → 首次运行时从旧版 `~/.deepseek-planbar/credentials.json` **一次性导入**（旧文件只读不写）→ 未配置。
+- 凭证链：`DEEPSEEK_API_KEY` / `DEEPSEEK_USER_TOKEN` 环境变量优先（命中即用，不读也不写文件）→ `shared_dir()/deepseek-credentials.json` → 首次运行时从旧版 `~/.deepseek-planbar/credentials.json` **一次性导入**（旧文件只读不写）→ 未配置。
   文件格式 `{"v":1,"apiKey":"dpapi:<base64>","userToken":"dpapi:<base64>","importedFrom":"~/.deepseek-planbar/credentials.json"}`：**键名明文、值加密**，值用 Windows DPAPI（`CryptProtectData` + `CRYPTPROTECT_UI_FORBIDDEN`）逐字段保护。
   读取按前缀判断：带 `dpapi:` 的解密，不带的按明文接受（手工调试与「退回明文」的逃生口，结构不用改）。解密失败按「未配置」处理，`--test-deepseek --verbose` 必须区分 `credential source: env | file | imported | none | undecryptable`，且**永不打印密钥**。
   **一次性导入的判据是「我们的文件是否存在」，不是「值是否为空」**：`Clear` 会把文件写成空值而不是删除它，否则下一次轮询就会从旧文件把刚清掉的凭证又导回来。手工 `Clear` 对 `env` 来源无效——设置窗因此显式写出这一行。
@@ -287,7 +287,7 @@ PYTHONUTF8=1 python demo/check_contrast.py # token 对的 WCAG 比值
 | exe | `quota-tray.exe` |
 | 配置目录 | `%APPDATA%\QuotaTray`（便携模式：exe 同级） |
 | 诊断覆盖变量 | `QUOTA_TRAY_APP_DATA_DIR` |
-| DeepSeek 凭证 | `config_dir()/deepseek-credentials.json`（值 `dpapi:` 加密，键名明文） |
+| DeepSeek 凭证 | `shared_dir()/deepseek-credentials.json`（值 `dpapi:` 加密，键名明文） |
 | DeepSeek 缓存 / 展示名 / 端点 | `config_dir()/deepseek-{cache,models,endpoints}.json` |
 | Kimi 本地用量索引 | `config_dir()/kimi-usage.json`（每个会话文件的已读字节 + 按天小计，只留 30 天） |
 | 日志 | `config_dir()/webview.log` |

@@ -135,23 +135,61 @@ pub async fn fetch() -> QuotaResult {
     {
         r.five_hour = Some(parse_segment(detail));
     }
-    // Week segment: root.usage
-    if let Some(u) = root.get("usage") {
-        if u.is_object() {
-            r.week = Some(parse_segment(u));
-        }
-    }
-    r.extra = Some(parse_extra(root.get("boosterWallet")));
+    r.week = parse_week(&root);
+    r.extra = Some(parse_extra_from_root(&root));
     r
+}
+
+/// Weekly window. Three sources, in order of authority (PLAN §5.1; payload
+/// shape verified 2026-11-19): `usages.limit_7d.used_ratio` (a fraction), then
+/// `usage.used`/`usage.limit`, then `usage.limit - usage.remaining` (the live
+/// shape is integers, so it cannot show sub-1 % detail). `usage` carries
+/// `resetTime`; a payload with only the ratio still yields a segment.
+fn parse_week(root: &Value) -> Option<QuotaSegment> {
+    let ratio = root
+        .get("usages")
+        .and_then(|v| v.get("limit_7d"))
+        .and_then(|v| v.get("used_ratio"))
+        .and_then(number)
+        .filter(|r| r.is_finite())
+        .map(|r| r * 100.0);
+    match (root.get("usage").filter(|u| u.is_object()), ratio) {
+        (Some(usage), ratio) => {
+            let mut seg = parse_segment(usage);
+            if let Some(percent) = ratio {
+                seg.percent = percent;
+            }
+            Some(seg)
+        }
+        (None, Some(percent)) => Some(QuotaSegment {
+            percent,
+            reset_at: None,
+        }),
+        (None, None) => None,
+    }
+}
+
+/// The live payload keys the wallet `booster_wallet` (proto snake_case at the
+/// top level); `boosterWallet` is the older shape and stays accepted.
+fn parse_extra_from_root(root: &Value) -> ExtraInfo {
+    let wallet = root
+        .get("booster_wallet")
+        .or_else(|| root.get("boosterWallet"));
+    parse_extra(wallet)
+}
+
+/// JSON number-or-string -> f64, `None` when the value is absent or unusable.
+fn number(v: &Value) -> Option<f64> {
+    match v {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => s.trim().parse::<f64>().ok(),
+        _ => None,
+    }
 }
 
 /// JSON number-or-string -> f64, missing -> 0.
 fn get_f64(v: &Value, key: &str) -> f64 {
-    match v.get(key) {
-        Some(Value::Number(n)) => n.as_f64().unwrap_or(0.0),
-        Some(Value::String(s)) => s.trim().parse::<f64>().unwrap_or(0.0),
-        _ => 0.0,
-    }
+    v.get(key).and_then(number).unwrap_or(0.0)
 }
 
 /// JSON number-or-string -> i64.
@@ -190,7 +228,12 @@ fn parse_reset_time(s: &str) -> Option<DateTime<Local>> {
 }
 
 fn parse_segment(v: &Value) -> QuotaSegment {
-    let used = get_f64(v, "used");
+    // `used` when the payload has it; otherwise the live shape's integer pair.
+    let used = if v.get("used").is_some() {
+        get_f64(v, "used")
+    } else {
+        (get_f64(v, "limit") - get_f64(v, "remaining")).max(0.0)
+    };
     let mut limit = get_f64(v, "limit");
     if limit <= 0.0 {
         limit = 1.0; // guard against division by zero
@@ -227,10 +270,17 @@ fn parse_extra(wallet: Option<&Value>) -> ExtraInfo {
         return info; // not an object -> NotActivated
     };
 
-    // isEnabled defense: when the booster is disabled, amountLeft is an estimate
-    // (monthly limit minus used), NOT the real balance -> must read as NotActivated.
-    if w.get("isEnabled").and_then(|v| v.as_bool()) == Some(false) {
-        return info;
+    // Not-activated defence, two shapes: the documented `isEnabled: false`
+    // (amountLeft is then an estimate) and the live wallet, which has no
+    // `isEnabled` and carries `status` instead — only STATUS_ACTIVE is open.
+    if let Some(enabled) = w.get("isEnabled").and_then(|v| v.as_bool()) {
+        if !enabled {
+            return info;
+        }
+    } else if let Some(status) = w.get("status").and_then(|v| v.as_str()) {
+        if !status.eq_ignore_ascii_case("STATUS_ACTIVE") {
+            return info;
+        }
     }
 
     if let Some(raw) = w
@@ -329,5 +379,66 @@ mod tests {
         assert!(extra.monthly_enabled);
         assert_eq!(extra.monthly_used_cents, Some(1234));
         assert_eq!(extra.monthly_limit_cents, Some(50000));
+    }
+}
+
+#[cfg(test)]
+mod payload_shape_tests {
+    use super::*;
+    use serde_json::json;
+
+    // Shape of the live payload (2026-11-19) with placeholder numbers.
+    #[test]
+    fn extra_reads_the_live_snake_case_wallet() {
+        let root = json!({
+            "booster_wallet": {
+                "status": "STATUS_ACTIVE",
+                "balance": { "amountLeft": "14821300" },
+                "monthlyChargeLimitEnabled": true,
+                "monthlyUsed": { "priceInCents": "0" },
+                "monthlyChargeLimit": { "priceInCents": "10000" }
+            }
+        });
+        let extra = parse_extra_from_root(&root);
+        assert!(matches!(extra.state, ExtraState::Ready));
+        assert_eq!(extra.balance_cents, Some(15));
+        assert!(extra.monthly_enabled);
+        assert_eq!(extra.monthly_limit_cents, Some(10000));
+    }
+
+    #[test]
+    fn extra_is_not_activated_unless_the_wallet_is_active() {
+        let paused = json!({
+            "booster_wallet": { "status": "STATUS_PAUSED", "balance": { "amountLeft": "1" } }
+        });
+        assert!(matches!(
+            parse_extra_from_root(&paused).state,
+            ExtraState::NotActivated
+        ));
+        let disabled = json!({
+            "boosterWallet": { "isEnabled": false, "balance": { "amountLeft": "1" } }
+        });
+        assert!(matches!(
+            parse_extra_from_root(&disabled).state,
+            ExtraState::NotActivated
+        ));
+    }
+
+    #[test]
+    fn week_percent_prefers_the_used_ratio() {
+        let root = json!({
+            "usage": { "limit": "100", "remaining": "100", "resetTime": "2026-11-26T20:11:15+08:00" },
+            "usages": { "limit_7d": { "used_ratio": "0.0013" } }
+        });
+        let week = parse_week(&root).expect("week");
+        assert!((week.percent - 0.13).abs() < 1e-9, "got {}", week.percent);
+        assert!(week.reset_at.is_some());
+    }
+
+    #[test]
+    fn week_falls_back_to_limit_minus_remaining() {
+        let root = json!({ "usage": { "limit": "40", "remaining": "30" } });
+        let week = parse_week(&root).expect("week");
+        assert!((week.percent - 25.0).abs() < 1e-9);
     }
 }

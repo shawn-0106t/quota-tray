@@ -1,6 +1,7 @@
 // DeepSeek credential chain (PLAN §5.2):
 //   DEEPSEEK_API_KEY / DEEPSEEK_USER_TOKEN env
-//   -> config_dir()/deepseek-credentials.json
+//   -> shared_dir()/deepseek-credentials.json (account-side, shared with the
+//      Tauri build; its pre-split config_dir() copy is read as a fallback)
 //   -> one-time import of ~/.deepseek-planbar/credentials.json (never written back)
 //   -> not configured.
 // Values are DPAPI-protected behind a `dpapi:` prefix while key names stay
@@ -11,7 +12,24 @@ use crate::settings;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// The account-side file both Quota Tray builds read and write.
+fn shared_file() -> PathBuf {
+    settings::shared_dir().join(CRED_FILE)
+}
+
+/// This app's own location (pre-split). Read as a fallback; `clear` blanks it
+/// too, because an app still on that path would answer with removed values.
+fn private_file() -> PathBuf {
+    settings::config_dir().join(CRED_FILE)
+}
+
+/// Existence, not parseability: the one-time parent import is gated on "we have
+/// written our file", so a corrupt file must not let it run again (PLAN §5.2).
+fn exists() -> bool {
+    shared_file().exists() || private_file().exists()
+}
 
 const CRED_FILE: &str = "deepseek-credentials.json";
 /// Where the parent WPF app kept its plaintext credentials. Imported once,
@@ -51,6 +69,7 @@ pub struct Credentials {
 /// Resolve both values. A credential is never logged, printed or persisted
 /// outside `credential_file()`.
 pub fn load() -> Credentials {
+    migrate_to_shared();
     let env_key = env_value("DEEPSEEK_API_KEY");
     let env_token = env_value("DEEPSEEK_USER_TOKEN");
     if env_key.is_some() && env_token.is_some() {
@@ -74,18 +93,19 @@ pub fn load() -> Credentials {
     if file_key.is_some() || file_token.is_some() {
         // A half-configured env still gets its missing half from the file,
         // matching the parent app's LoadCredentials.
-        let from_env = env_key.is_some() || env_token.is_some();
+        // A file completed the pair, so report `File`: the verbose line must
+        // not claim a value came from the environment when it did not.
         return Credentials {
             api_key: env_key.or(file_key),
             user_token: env_token.or(file_token),
-            source: if from_env { Source::Env } else { Source::File },
+            source: Source::File,
         };
     }
 
     // The legacy import is one-time (PLAN §5.2): the mere existence of our own
     // file — including one emptied by "Clear" — means it already ran. Reading
     // the old file again would resurrect credentials the user just removed.
-    if existing.is_none() {
+    if !exists() {
         let (old_key, old_token) = read_legacy();
         if old_key.is_some() || old_token.is_some() {
             save(
@@ -141,7 +161,13 @@ pub fn clear() {
         user_token: String::new(),
         imported_from,
     };
-    write(&file);
+    // Blank every readable copy; keep the "we wrote our file" invariant even
+    // when the shared write fails, or the one-time import would resurrect them.
+    let wrote = write(&file);
+    let old = private_file();
+    if old != shared_file() && (old.exists() || !wrote) {
+        let _ = write_to(&old, &file);
+    }
 }
 
 /// Write both values, DPAPI-sealed, preserving fields the caller left alone
@@ -163,19 +189,49 @@ pub fn save(api_key: Option<&str>, user_token: Option<&str>, imported_from: Opti
     write(&file);
 }
 
-fn write(file: &CredFile) {
-    let dir = settings::config_dir();
-    let _ = fs::create_dir_all(&dir);
+fn write(file: &CredFile) -> bool {
+    write_to(&shared_file(), file)
+}
+
+fn write_to(path: &Path, file: &CredFile) -> bool {
+    let Some(dir) = path.parent() else {
+        return false;
+    };
+    let _ = fs::create_dir_all(dir);
     let Ok(json) = serde_json::to_string_pretty(file) else {
-        return;
+        return false;
     };
     // Temp + rename so a crash cannot leave a truncated credential file. The
-    // temp name carries the pid because there are two writers now: the shell
-    // (Clear / a pasted credential) and the sign-in child process. A shared
-    // temp name lets one rename the other's half-written file into place.
+    // temp name carries the pid because there are two writers: the shell
+    // (Clear / a pasted credential) and the sign-in child process.
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    let tmp = dir.join(format!("{name}.{}.tmp", std::process::id()));
+    if fs::write(&tmp, json).is_err() || fs::rename(&tmp, path).is_err() {
+        let _ = fs::remove_file(&tmp);
+        return false;
+    }
+    true
+}
+
+/// First run on this side: adopt a file that still lives in this app's own
+/// directory, so the account is configured once for both builds. Byte copy —
+/// the blobs are already sealed.
+fn migrate_to_shared() {
+    let shared = shared_file();
+    let old = private_file();
+    if shared == old || shared.exists() || !old.exists() {
+        return;
+    }
+    let Ok(text) = fs::read_to_string(&old) else {
+        return;
+    };
+    let Some(dir) = shared.parent() else {
+        return;
+    };
+    let _ = fs::create_dir_all(dir);
     let tmp = dir.join(format!("{CRED_FILE}.{}.tmp", std::process::id()));
-    if fs::write(&tmp, json).is_ok() {
-        let _ = fs::rename(&tmp, dir.join(CRED_FILE));
+    if fs::write(&tmp, text).is_err() || fs::rename(&tmp, &shared).is_err() {
+        let _ = fs::remove_file(&tmp);
     }
 }
 
@@ -194,7 +250,11 @@ struct CredFile {
 }
 
 fn read_raw() -> Option<CredFile> {
-    let text = fs::read_to_string(settings::config_dir().join(CRED_FILE)).ok()?;
+    read_file(&shared_file()).or_else(|| read_file(&private_file()))
+}
+
+fn read_file(path: &Path) -> Option<CredFile> {
+    let text = fs::read_to_string(path).ok()?;
     serde_json::from_str(&text).ok()
 }
 
