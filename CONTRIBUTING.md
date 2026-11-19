@@ -61,6 +61,7 @@ Run the same commands locally before opening a PR:
 | Release build | `release.yml` repeats the four code gates above between `npm ci` and `tauri build`, because a tag push does not trigger `ci.yml` |
 | Frontend build | `npm ci && npm run build` |
 | Code scanning | automatic — CodeQL default setup runs on PRs and on `main` |
+| Landing a change | branch → pull request → the four gates above run on the PR → squash merge; `main` is PR-only and admins cannot bypass it since 2026-11-19 |
 
 GitHub's secret-scanning **push protection** is enabled: a push whose diff contains a
 detected credential is rejected before it lands. If it is a genuine false positive, allow
@@ -166,6 +167,7 @@ CI（`.github/workflows/ci.yml`）必须全绿，branch protection 要求构建 
 | 发布构建 | `release.yml` 会在 `npm ci` 与 `tauri build` 之间重跑上面四条代码门禁，因为 tag 推送不触发 `ci.yml` |
 | 前端构建 | `npm ci && npm run build` |
 | 代码扫描 | 自动——CodeQL default setup 在 PR 与 `main` 上运行 |
+| 合入方式 | 建分支 → 开 PR → 上面四条门禁在 PR 上跑 → squash 合并；`main` 自 2026-11-19 起只接受 PR，管理员也不能绕过 |
 
 GitHub 的 secret scanning **push protection** 是开着的：diff 里带被识别出的凭证时，推送
 在落地前就被拒。确认是误报可以从推送对话框里放行；否则请轮换凭证并改写那次提交。
