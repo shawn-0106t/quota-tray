@@ -1,15 +1,15 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-15 23:07（**v1.0.2 已定版并推送，tag 未打**；`main` = `35308af`；v1.0.1 仍是 Latest）。
-> 2026-11-19 更新：1.0.2 至今**没有打过 tag**，所以未发布的改动都并进了这一版——除了 DeepSeek
+> 快照：2026-11-20 00:10（**v1.0.2 已发布并标为 Latest**，2026-11-19 16:07 UTC；tag `v1.0.2` 已推；`main` = `9adc153`；三件资产在发布前下载并 `sha256sum -c` 两条 OK）。
+> 2026-11-19 更新：1.0.2 原本只含「验证后保存」一条；因为一直没打 tag，未发布的改动都并进了这一版——除了 DeepSeek
 > 的「验证后保存」，还包括设置窗标题固定、共享账号目录（`%APPDATA%\QuotaTray\shared`）、
 > Kimi 报文解析修复（`booster_wallet` / 周窗口百分比）以及一批审查 Minor；`[Unreleased]` 已折进
 > `[1.0.2] — 2026-11-19`，`check_versions.py` 六项仍 ok。
 > 「验证后保存」这一条在五轮独立只读审查里被磨了五遍（表格见下）：
 > `verify_user_token` 不再把 200 + `{"code":40003}` 的错误信封当成通过（PR #4 → squash `5d95f1f`）；临时性失败对同一个候选重试一次；被拒的 token 优先于其他 base 的错误；epoch 只在真正的窗口边界（`new_session`：建窗 / 关窗 / Clear）移动；重试循环的闸门排在一切副作用之前（被取代的 future 不写标题、不偷队列、不清别人的 `verifying`）。
 > 五载体 1.0.2、`CHANGELOG` 的 `[1.0.2] — 2026-11-19`、`check_versions.py` 六项 ok；`tsc` / `vite build` / `cargo fmt+clippy+test --locked`（31 passed）全绿；`--test-login` 在真机跑过（`verify=ok` + 四窗 OK + 两项捕获 OK）；`main` 的 CI 在 `2d06418`（2m3s）与 `35308af`（2m14s）上 success，CodeQL 仍在结算。
-> **下一步（唯一动作）**：① 真人登录验收一次——登录过程中关窗再重开、并在 Settings 里再点一次「Sign in…」，确认不会卡在「verifying…」、也不会把完成态 token 丢掉；② 通过后打 `v1.0.2` tag → 核对草稿 Release 的三件资产与 `SHA256SUMS.txt` → 手动 publish。
-> 已知未修（不阻塞发版，留给 P5）：`candidate_bases()` 的 `Vec::dedup()` 只折叠相邻重复（记住的第二个 base 每次 walk 多一次 404 请求）；Clear 之后到窗口销毁前毫秒级到达的候选仍会被盖上新 epoch。
+> **下一步（没有发版动作了）**：① spike 线做 P5——产品身份/资产名、`slint` 与 `quota-core` 进版本门禁、独立发布路径、CI 覆盖 Slint 构建；② main 上三件工具/硬化小事（`heights.py` 量产品页、`check_contrast.py` 读 `theme.css`、`expires_at` 秒/毫秒归一）攒到下一次有真实用户可见改动时一起发 1.0.3。
+> **已知未修**（不阻塞发布，见上一条的 ①②）：`demo/heights.py` 只量 A–E 冻结 demo，量不到产品页；`demo/check_contrast.py` 硬编码色值、改 `theme.css` 不会失败；`expires_at` 一律按秒读（毫秒会被当成几千年后到期）；`limits[0]` 恒被当作 5h 窗口是假设（今天报文对得上）；`MODELS_REFETCHED` 每进程一次是 PLAN 的设计，不是缺陷。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
 
@@ -29,7 +29,7 @@
 
 ## 一句话
 
-**v1.0.1 已在 `https://github.com/shawn-0106t/quota-tray` 发布**（2026-11-15 07:30 UTC，Latest）：tab 切换按 Windows 原生 motion 重做（§3.6），并新增「五个版本载体必须一致」的发版门禁。上一次是 v1.0.0（2026-11-14 13:02 UTC），行为与 0.1.0 一致——那一版表达的是「发布门禁到位 + 依赖当前」。
+**v1.0.2 已在 `https://github.com/shawn-0106t/quota-tray` 发布**（2026-11-19 16:07 UTC，Latest）：「验证后保存」读信封（1.0.1 对坏 token 照样通过）、设置窗标题固定、DeepSeek 凭证与网络缓存移入共享的 `%APPDATA%\QuotaTray\shared`、Kimi 报文解析修好（`booster_wallet` 与周窗口百分比）、Clear 在手工粘贴验证途中也留得住；另有一批审查 Minor 与发版门禁（`release.yml` 在构建前重跑 tsc/fmt/clippy/test）。上一版是 v1.0.1（2026-11-15）。
 
 ## 2026-11-15 tab 切换动效重做（按 Windows 原生 motion）
 
@@ -134,19 +134,19 @@
     WebView2 数据目录。拆分前的 `config_dir()/deepseek-credentials.json` 在首次
     `load()` 时被原样复制到 shared 并保留；`Clear` 两处都写空。
 
-## 环境现状（2026-11-14 21:05）
+## 环境现状（2026-11-20 00:10）
 
-- **Kimi**：**token 已过期**（20:50），需在 CLI 重新登录；`--test-fetch` 目前报 `no-token`，面板显示过期提示。
+- **Kimi**：token 可用（2026-11-19 23:57 `--test-fetch` 通过：`fiveHour 1%` / `week 0.13%` / `extra Ready ¥0.15`）。中途 23:55 曾报 `no-token`，两分钟内被刷新，属凭证轮换。
 - **DeepSeek**：API key 与 usage token 都已配置（`--test-login` 报 `credentialSource=file`、`apiKeyConfigured=true`、`verify=ok`）；余额 ¥34.64。
 - `%APPDATA%\QuotaTray`：credentials / endpoints / models / cache / kimi-usage / `settings.json`（`Theme=system`、`RefreshMinutes=5`、`AutoStart=false`、`ActiveTab=kimi`）/ `webview.log`。
 - 仓库根留三件本地构建的产物（gitignored）：`QuotaTray.exe`（1.0.0）、`QuotaTray-v1.0.0.zip`、`SHA256SUMS.txt`；哈希与 Release 里 runner 构建的那份不同（正常，两台机器/两次构建）。
-- **仓库根那个 `QuotaTray.exe` 进程被关掉了**（它锁着产物文件，`make_release_zip.py` 会 `PermissionError`）。要再跑就双击根目录的 exe；再次打包前先退出它。
+- 本机已无常驻托盘进程：为验证关掉了 `trae_projects\kimi\quota-tray.exe`（旧副本，会抢 `QuotaTray.SingleInstance`）。要用就双击 `src-tauri/target/release/quota-tray.exe`（1.0.2 本地构建）或下载 Release 里的 `QuotaTray.exe`；那个旧副本建议删掉，否则还会抢单实例。
 - git：`main` 干净并与 `origin/main` 同步；两个 tag `v0.1.0`（`39f691d`）与 `v1.0.0`（`e984c61`）。
 
 ## 新对话开场建议
 
 > 接手 Quota Tray（`https://github.com/shawn-0106t/quota-tray`，本地目录同名仓库，工作区干净）。按顺序读 `STATUS.md` → `AGENTS.md` → `PLAN.md`；UI 看 `demo/ui-demo.html`（生成物，别手改），README 截图由 `demo/make_readme_shots.py` 生成。
 >
-> 状态：**v1.0.0 已发布**（2026-11-14 13:02 UTC，Latest；v0.1.0 留在同一页），三件资产下载校验过、发布 exe 自检通过；CodeQL 与依赖告警清零；Dependabot 三个升级已合并。当前没有待办动作；唯一的环境事项是本机 Kimi CLI token 在 20:50 过期，需要重新登录一次。
+> 状态：**v1.0.2 已发布并标为 Latest**（2026-11-19 16:07 UTC）：三件资产下载校验过、发布 exe 自检通过、CI 与 CodeQL 全绿；`main` 现为 PR-only（管理员也不能直推）。没有发版动作；剩下的是 spike 线 P5 与三件工具/硬化小事。
 >
-> 用户已拍板：只发便携 exe（无安装包）；托盘图标保持纯紫双条；设置窗高度维持「工作区 90% 上限 + 卡片内滚动」。
+> 用户已拍板：只发便携 exe（无安装包）；托盘图标保持纯紫双条；设置窗维持「工作区 90% 上限 + 标题固定、只有 pane 内滚动」；`main` 只接受 PR。
