@@ -5,10 +5,29 @@ All notable changes to Quota Tray are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each section carries
 the English notes first, then the Chinese mirror.
 
-## [Unreleased]
+## [1.0.2] — 2026-11-19
 
 ### Fixed
 
+- "Verify before save" now actually verifies. The DeepSeek platform answers
+  **HTTP 200** for a bad usage token and puts the failure in the body
+  (`{"code":40003,"msg":"Authorization Failed (invalid token)","data":null}`), so
+  the sign-in window and the manual paste field both accepted every candidate
+  they were handed — a wrong or half-finished token replaced a working one, and
+  `--test-login` printed `verify=ok` for any string longer than 20 characters.
+  Verification reads the envelope now, and a base that rejects the candidate is
+  skipped instead of ending the walk: a remembered dead endpoint could otherwise
+  lock a valid token out. A candidate that fails *transiently* (`network-error`,
+  `rate-limited`, `server-error`, a 5xx) is re-tried once before the window gives
+  up — the page never resends a token it already reported, so a blip on the
+  finished one used to cost a whole sign-in. A refused token is reported as
+  `token-expired` even when the walk continues past it — unless the base it lands
+  on fails at the transport level, where the one re-try above wins and the
+  refusal is reported on the next pass. The paste field keeps saying "invalid or
+  expired — not saved" instead of blaming whichever endpoint came last. Closing the sign-in window while a token is being verified now
+  discards that token; 1.0.1 saved it in the background after the window was
+  gone. (Reproduced against the live endpoint 2026-11-15; the balance endpoint is
+  not affected — `api.deepseek.com` answers 401 for a bad key.)
 - The settings sheet keeps its title. The whole card used to be the scroll box,
   so once the window was capped at 90% of the work area — which a short work
   area reaches as soon as the manual-paste block is opened — `Quota Tray
@@ -49,6 +68,20 @@ the English notes first, then the Chinese mirror.
 
 ### 中文
 
+- **修复**：「验证后保存」现在真的会验证。DeepSeek 平台对无效的 usage token 回
+  **HTTP 200**，失败写在 body 里（`{"code":40003,…,"data":null}`），只判状态码等于
+  任何候选都算通过——登录窗与手工粘贴兜底都可能把错的或没完成的 token 顶掉原本
+  正常的那个，`--test-login` 也会对任何超过 20 个字符的串打印 `verify=ok`。
+  现在会读信封里非零的 `code`，并且某个候选 base 被判拒时继续试下一个：记住的坏
+  base 否则会让有效 token 永远登不进去。候选 token 遇到**临时性**失败
+  （`network-error` / `rate-limited` / `server-error` / 5xx）会在窗口放弃前重试一次；
+  页面对已经上报过的 token 不再重发，所以完成态 token 上的一次抖动以前等于白登一次。
+  被拒的 token 现在统一报 `token-expired`（不再跟着 walk 的最后一条错误走），除非它落
+  到的那个 base 是**传输层**失败——那种情况让上面的一次重试优先，下一轮再报拒绝。
+  手工粘贴的文案稳定为「invalid or expired — not saved」，不会因为某个 base 的
+  5xx/404 而变成「server error / verification failed」。**行为变化**：在验证途中
+  关闭登录窗，这次验证的结果会被丢弃——1.0.1 会在窗口消失后仍在后台把 token 存下。
+  （2026-11-15 对真实接口复现；余额接口不受影响，`api.deepseek.com` 对坏 key 回 401。）
 - **修复**：设置窗的标题不再被卷走。整张卡片原来是滚动容器，窗口一被夹到工作区
   90%（工作区一矮，打开「Paste a credential instead」就会被夹），
   `Quota Tray Settings` 就跟着内容滚出视野，滚动条也从标题那一行开始。现在卡片
@@ -74,48 +107,6 @@ the English notes first, then the Chinese mirror.
   东西留在各自目录：`settings.json`、`webview.log`、以及记录「本应用上次成功时间」的
   `deepseek-cache.json`。已有的凭证文件会在首次启动时复制到共享目录并原地保留，升级
   不丢配置，仍读旧路径的构建也能继续工作。
-
-## [1.0.2] — 2026-11-15
-
-
-### Fixed
-
-- "Verify before save" now actually verifies. The DeepSeek platform answers
-  **HTTP 200** for a bad usage token and puts the failure in the body
-  (`{"code":40003,"msg":"Authorization Failed (invalid token)","data":null}`), so
-  the sign-in window and the manual paste field both accepted every candidate
-  they were handed — a wrong or half-finished token replaced a working one, and
-  `--test-login` printed `verify=ok` for any string longer than 20 characters.
-  Verification reads the envelope now, and a base that rejects the candidate is
-  skipped instead of ending the walk: a remembered dead endpoint could otherwise
-  lock a valid token out. A candidate that fails *transiently* (`network-error`,
-  `rate-limited`, `server-error`, a 5xx) is re-tried once before the window gives
-  up — the page never resends a token it already reported, so a blip on the
-  finished one used to cost a whole sign-in. A refused token is reported as
-  `token-expired` even when the walk continues past it — unless the base it lands
-  on fails at the transport level, where the one re-try above wins and the
-  refusal is reported on the next pass. The paste field keeps saying "invalid or
-  expired — not saved" instead of blaming whichever endpoint came last. Closing the sign-in window while a token is being verified now
-  discards that token; 1.0.1 saved it in the background after the window was
-  gone. (Reproduced against the live endpoint 2026-11-15; the balance endpoint is
-  not affected — `api.deepseek.com` answers 401 for a bad key.)
-
-### 中文
-
-- **修复**：「验证后保存」现在真的会验证。DeepSeek 平台对无效的 usage token 回
-  **HTTP 200**，失败写在 body 里（`{"code":40003,…,"data":null}`），只判状态码等于
-  任何候选都算通过——登录窗与手工粘贴兜底都可能把错的或没完成的 token 顶掉原本
-  正常的那个，`--test-login` 也会对任何超过 20 个字符的串打印 `verify=ok`。
-  现在会读信封里非零的 `code`，并且某个候选 base 被判拒时继续试下一个：记住的坏
-  base 否则会让有效 token 永远登不进去。候选 token 遇到**临时性**失败
-  （`network-error` / `rate-limited` / `server-error` / 5xx）会在窗口放弃前重试一次；
-  页面对已经上报过的 token 不再重发，所以完成态 token 上的一次抖动以前等于白登一次。
-  被拒的 token 现在统一报 `token-expired`（不再跟着 walk 的最后一条错误走），除非它落
-  到的那个 base 是**传输层**失败——那种情况让上面的一次重试优先，下一轮再报拒绝。
-  手工粘贴的文案稳定为「invalid or expired — not saved」，不会因为某个 base 的
-  5xx/404 而变成「server error / verification failed」。**行为变化**：在验证途中
-  关闭登录窗，这次验证的结果会被丢弃——1.0.1 会在窗口消失后仍在后台把 token 存下。
-  （2026-11-15 对真实接口复现；余额接口不受影响，`api.deepseek.com` 对坏 key 回 401。）
 
 ## [1.0.1] — 2026-11-15
 
