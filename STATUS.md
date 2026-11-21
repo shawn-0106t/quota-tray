@@ -1,6 +1,6 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-21 21:36（**v1.0.3 已 publish 并标记 Latest**，`main` = `6f10e6f`；发布时刻三件资产下载后 `sha256sum -c` 两条 OK、exe `FileVersion=1.0.3`、zip 93 项且关键文件与 tag 逐字节一致）。
+> 快照：2026-11-21 23:20（**v1.0.4 已 publish 并标记 Latest**，`main` = `5a51f09`；三件资产下载后 `sha256sum -c` 两条 OK、exe `FileVersion=1.0.4`、zip 93 项且关键文件与 tag 逐字节一致）。1.0.4 是审查里的那条 major：两个 provider 的抓取改为**单飞、不排队**（抓取进行中到达的调用返回 last-good），规则写进 `PLAN.md` §5.3。
 > 2026-11-19 更新：1.0.2 原本只含「验证后保存」一条；因为一直没打 tag，未发布的改动都并进了这一版——除了 DeepSeek
 > 的「验证后保存」，还包括设置窗标题固定、共享账号目录（`%APPDATA%\QuotaTray\shared`）、
 > Kimi 报文解析修复（`booster_wallet` / 周窗口百分比）以及一批审查 Minor；`[Unreleased]` 已折进
@@ -40,7 +40,7 @@
 
 **已知未修（按风险排序，需要单独决定）**：下面每条都标了归属——这些是**对 Tauri 构建做全量审查**时发现的（`【仅 Tauri】`），`【两壳】` 表示 Slint 壳通过同一份 `quota-core` 代码共享同一个缺口。
 
-1. 【仅 Tauri】**两个 fetch 没有 single-flight**：悬停预取与手动 Refresh 可并发，后到的旧样本会覆盖新的，且失败可能被成功样本吞掉（`polling.rs`）。要修得加每个 provider 的互斥或队列。
+1. 【仅 Tauri】**两个 fetch 没有 single-flight**（**已于 v1.0.4 修复**：单飞 + 跳过不排队）：悬停预取与手动 Refresh 可并发，后到的旧样本会覆盖新的，且失败可能被成功样本吞掉（`polling.rs`）。要修得加每个 provider 的互斥或队列。
 2. 【仅 Tauri】**rebuild 批次期间到达的 `ProcessFailed` 被丢弃**，SPEC 22.4 要求排队合并（`recovery.rs:664`）。只有当两个窗口在同一秒内崩才触发。
 3. 【仅 Tauri】**`ProcessFailedKind()` 读失败 → `LogOnly` 且不标 dead**：真崩会被当成已知良性项，白屏窗口照常 show。
 4. 【仅 Tauri】**`verifying` 有一条 µs 级保持 true 的路径**（`login.rs` 的 pending 分支在 epoch 检查之后又置 true）；命中后本次会话的候选只进队列不校验。
@@ -181,7 +181,7 @@
 - `%APPDATA%\QuotaTray`：credentials / endpoints / models / cache / kimi-usage / `settings.json`（`Theme=system`、`RefreshMinutes=5`、`AutoStart=false`、`ActiveTab=kimi`）/ `webview.log`。
 - 仓库根留三件本地构建的产物（gitignored）：`QuotaTray.exe`（1.0.0）、`QuotaTray-v1.0.0.zip`、`SHA256SUMS.txt`；哈希与 Release 里 runner 构建的那份不同（正常，两台机器/两次构建）。
 - 本机已无常驻托盘进程：为验证关掉了 `trae_projects\kimi\quota-tray.exe`（旧副本，会抢 `QuotaTray.SingleInstance`）。要用就双击 `src-tauri/target/release/quota-tray.exe`（1.0.3 本地构建）或下载 Release 里的 `QuotaTray.exe`；那个旧副本建议删掉，否则还会抢单实例。
-- git：`main` 干净并与 `origin/main` 同步（`6f10e6f`）；tag `v0.1.0` / `v1.0.0` / `v1.0.1` / `v1.0.2` / `v1.0.3`；**v1.0.3 已发布并标记 Latest**（2026-11-21 13:33:33 UTC）。
+- git：`main` 干净并与 `origin/main` 同步（`5a51f09`）；tag `v0.1.0` / `v1.0.0` / `v1.0.1` / `v1.0.2` / `v1.0.3` / `v1.0.4`；**v1.0.4 已发布并标记 Latest**（2026-11-21 15:19:10 UTC）。
 
 ## 新对话开场建议
 
