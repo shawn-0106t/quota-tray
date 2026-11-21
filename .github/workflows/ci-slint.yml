@@ -55,6 +55,9 @@ jobs:
           # silently fall back to a source build that needs LLVM. Pin what the
           # local prebuilt build was verified with.
           toolchain: 1.97.1
+          # An exact toolchain is installed with the default profile, which does
+          # not carry rustfmt/clippy; the three gates below need both.
+          components: rustfmt, clippy
           # the action denies cargo warnings by default; this is a build check, not a lint gate
           build-warnings: warn
           cache: false
