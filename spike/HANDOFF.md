@@ -346,8 +346,8 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 | 从每次 `v*` 发布起跟着挂一个资产，或单独一次手动构建后上传 | 不是默认下载，不替换 `QuotaTray.exe`，不做自动更新 |
 | 版本号跟自己的 crate（现在是 `0.1.0`），资产名里写清 | 不承诺 settings 迁移、不自称稳定 |
 
-实现方式（下一步，二选一）：① 在 `ci-slint.yml` 加一个手动触发的 job，产出 exe 并以 `gh release upload` 挂到指定 tag；② 本机构建一次（`SKIA_BINARIES_URL` 必须设）、人工上传。② 就是第一次 beta 的最小路径；① 值得在第一次之后补上，免得每次发版都要手动构建。无论哪种，**beta 资产的构建必须来自打 tag 的那棵树**，否则用户拿到的不是对应版本。
+实现方式（**2026-11-21 已执行**）：**pre-release `slint-beta-0.1.0` 已发布**（tag 打在 `3b4ae06`），资产 `QuotaTray-Slint-0.1.0-beta.exe`（25,030,144 B）+ `SHA256SUMS.txt`，正文写明「预览、不替代主版本」与 `PARITY.md` §12 的已知缺口。`gh release list` 里 `v1.0.3` 仍是 **Latest**——pre-release 不抢这个标记，这正是要的语义。下一次 beta 仍走「本机构建 + 人工上传」（`SKIA_BINARIES_URL` 必须设）；**beta 资产的构建必须来自打 tag 的那棵树**，否则用户拿到的不是对应版本。要不要把这一步做成 `ci-slint.yml` 的手动触发 job，等第一次现场反馈之后再说。
 
-**beta 的前置条件（2026-11-21 全量审查之后新增）**：`main` 这两轮修掉的问题里，有 **9 条在共享数据层也有同一份实现**，本分支的副本**尚未镜像**——余额路径的形状校验（Critical）、非 JSON 的 2xx 不被记成 usage 端点（抓取与校验两条路径）、Kimi 空报文算失败、`used_ratio` 溢出、`/models` 的刷新守卫、未配置 ≠ 失败、CLI token 过期与「未配置」分开报、`parse_balance` 的同类问题。另外登录窗的 origin 门在本分支是**另一份实现**（`slint/src/login_host.rs` 的注入钩子），需要单独加。Beta 对外发布之前必须先把这几条落到 `quota-core/` 与 `login_host.rs`，否则 beta 会带着已知的凭证/余额缺陷出去。`main` 的 `CHANGELOG.md` `[1.0.3]` 段是这批修复的清单，照它逐条对照即可。
+**beta 的前置条件（2026-11-21 已满足）**：`main` 两轮修掉的 9 条数据层问题 + 登录钩子的 origin 门，已在 `3b4ae06` 镜像到 `quota-core/` 与 `slint/src/login_host.rs`：余额形状校验、非 JSON 的 2xx 不记 base（抓取与校验两条路径）、envelope 拒绝时走完候选、Kimi 空报文算失败、`used_ratio` 溢出、`/models` 的尝试领取、未配置 ≠ 失败（托盘/重试/表头）、过期 token 单独报、`amountLeft` 越界。验证：`quota-core` 57 tests、`slint` 6 tests、两个 crate 的 fmt/clippy 全绿，release exe 用 Skia 构建后 `--test-login` PASS（冷 profile 在 WebView2 初始化里花了 107 s）、`--test-signin` PASS、`--test-heights` 未变。
 
 **什么会让我改主意**：若目标是「彻底摆脱 WebView2」，那 Slint 只在登录窗里仍依赖它，收益不完整；若目标是体积/内存，当前数据是负收益。这两条任一条被实测推翻（比如启动与内存明显更优），切点可以提前。
