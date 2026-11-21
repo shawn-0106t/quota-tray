@@ -161,6 +161,14 @@ pub struct AppState {
     /// `finish_hide` compares it, so a stale watchdog cannot clear the latch of
     /// a hide that started after it (that would leave the panel on screen).
     pub panel_hide_gen: AtomicU64,
+    /// One fetch per provider at a time. The poll loop, the tray's hover
+    /// prefetch, the manual Refresh, the clear/paste credential paths and the
+    /// post-sign-in refresh all land here; without the gate a slower fetch that
+    /// started earlier can finish after a newer one and overwrite it, and its
+    /// success can mask the newer failure so nothing reaches the status line
+    /// (PLAN §5.3). Callers never queue: `try_lock` + the last-good result.
+    pub quota_gate: tokio::sync::Mutex<()>,
+    pub deepseek_gate: tokio::sync::Mutex<()>,
     /// While the settings window is open, panel focus-loss hide is suppressed
     pub settings_open: AtomicBool,
     /// While the skills window is open, panel focus-loss hide is suppressed
@@ -201,6 +209,8 @@ impl AppState {
             last_manual_refresh: Mutex::new(None),
             panel_hiding: AtomicBool::new(false),
             panel_hide_gen: AtomicU64::new(0),
+            quota_gate: tokio::sync::Mutex::new(()),
+            deepseek_gate: tokio::sync::Mutex::new(()),
             settings_open: AtomicBool::new(false),
             skills_open: AtomicBool::new(false),
             skills_cache: RwLock::new(None),

@@ -60,6 +60,20 @@ impl QuotaResult {
         }
     }
 
+    /// No fetch happened and there is nothing to report: a refresh arrived while
+    /// another one was already in flight. Deliberately not a failure — the
+    /// caller must not retime the schedule from it, because the in-flight fetch
+    /// will do that itself when it lands.
+    pub fn idle() -> Self {
+        QuotaResult {
+            five_hour: None,
+            week: None,
+            extra: None,
+            fetched_at: Local::now(),
+            error: None,
+        }
+    }
+
     /// Is this a *failure* (retry in 30 s, red status) rather than a state the
     /// user has to fix (`no-token`)? Conflating the two paints "(fetch failed)"
     /// on a provider that was simply never configured, and re-polls it every
