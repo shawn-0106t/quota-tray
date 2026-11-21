@@ -31,7 +31,14 @@ The threat model is small on purpose; these are the boundaries worth checking.
   another Windows account — that is intentional.
 - **The DeepSeek sign-in window** loads `platform.deepseek.com` and is given **no** Tauri
   IPC surface: the only thing that leaves that page is a cancelled navigation carrying a
-  candidate token, verified with a real request before it replaces the stored one.
+  candidate token, and the hook only accepts a token from `platform.deepseek.com` itself
+  (an SSO or help page's own `Bearer` header is ignored). The token is verified with a
+  real request before it replaces the stored one.
+- **The four app windows** (panel, settings, skills, tray menu) are local pages and share
+  the application-command surface: Tauri's ACL gates plugin commands, not the app's own,
+  and the capability list covers `core:default` only. The boundary that matters is the one
+  above — remote content never gets a command surface — so anything that would let
+  untrusted text reach those pages as markup would be a real finding.
 - **No telemetry, no auto-update check of its own.** The app also calls the GitHub API to
   compare the local Kimi CLI version with the latest release; nothing about the user is
   sent.

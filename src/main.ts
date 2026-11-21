@@ -168,6 +168,10 @@ function renderVersion(u: UpdateStatus): void {
 /** Without an API key nothing can work, so that one reads as configuration
     rather than as a failed fetch; every other code is a failure. */
 const NO_API_KEY = 'no-api-key';
+/** The DeepSeek usage token's counterpart, and the Kimi credential's: an
+    unconfigured provider must not read as broken (PLAN §5.3). */
+const NO_USER_TOKEN = 'no-user-token';
+const NO_TOKEN = 'no-token';
 
 function balanceStatusText(code: string | null | undefined): string {
   switch (code) {
@@ -313,13 +317,22 @@ function renderDeepseek(r: DeepseekResult | null): void {
 
 // ---- Header stamp: it belongs to whichever provider tab is on screen ----
 
-function renderStamp(): void {
+function renderStamp(force = false): void {
+  // A data event can land mid-switch: `tab` already points at the incoming
+  // provider while the outgoing pane is still on screen, so rendering here
+  // would put the new provider's stamp over the old body — the mismatch this
+  // used to have. `playTabSwitch` forces the flip at the cross-fade, and
+  // `settleTab` catches up on anything that arrived during it.
+  if (tabSwitching && !force) return;
   const stamp = el('last-updated');
   let text = '';
   let bad = false;
   if (tab === 'kimi') {
     if (quota) {
-      if (quota.error) {
+      if (quota.error === NO_TOKEN) {
+        text = 'Not configured';
+        bad = true;
+      } else if (quota.error) {
         // "Fetch failed", not "Update failed": this is the quota fetch. The CLI
         // version check is a separate path (PLAN §5.3).
         text = 'Fetch failed';
@@ -330,9 +343,16 @@ function renderStamp(): void {
     }
   } else if (deepseek) {
     if (deepseek.balanceError === NO_API_KEY) {
+      // Nothing can work without a key, so this is configuration, not a fault.
       text = 'Not configured';
       bad = true;
-    } else if (deepseek.balanceError || deepseek.usageError) {
+    } else if (deepseek.balanceError) {
+      text = 'Fetch failed';
+      bad = true;
+    } else if (deepseek.usageError && deepseek.usageError !== NO_USER_TOKEN) {
+      // A missing usage token is configuration: the balance above is live, so
+      // the stamp keeps the honest `Updated HH:MM` and the usage block carries
+      // its own "Usage token not configured" hint.
       text = 'Fetch failed';
       bad = true;
     } else {
@@ -424,6 +444,9 @@ function settleTab(): void {
   if (!tabSwitching) return;
   resetTabMotion();
   applyPanes();
+  // Data that landed during the switch was held back by the stamp guard; the
+  // pane is now the incoming one, so this is the first moment it is true.
+  renderStamp();
   reportHeight();
 }
 
@@ -530,8 +553,9 @@ async function playTabSwitch(
   const end = incoming.offsetHeight;
   const grow = end > p0;
   // The header stamp belongs to the pane on screen, so it flips with it — not
-  // with the radio, which moved the moment the user clicked.
-  renderStamp();
+  // with the radio, which moved the moment the user clicked. Forced: the guard
+  // in `renderStamp` holds every other call until the switch settles.
+  renderStamp(true);
   tabStarted = true;
   const card = panes.animate([{ height: `${p0}px` }, { height: `${end}px` }], {
     duration: grow ? MOTION.grow : MOTION.shrink,
@@ -663,13 +687,16 @@ window.addEventListener('DOMContentLoaded', async () => {
   // from being wired just because one subscription rejected.
   await Promise.allSettled([ready]);
   if (state) {
-    // The persisted tab decides which pane is on screen before the first
-    // measurement, so the window is never sized for the other provider (PLAN §4).
+    // The persisted tab decides which pane is on screen BEFORE the first
+    // measurement, so the window is never sized for the other provider
+    // (PLAN §4) — `renderQuota` reports a height as its last act.
     tab = state.settings.activeTab === 'deepseek' ? 'deepseek' : 'kimi';
+  }
+  applyTab();
+  if (state) {
     renderQuota(state.quota);
     renderVersion(state.update);
   }
-  applyTab();
   // Re-report once fonts have settled: the first measurement can precede the
   // final line heights and leave the window a few pixels off.
   window.setTimeout(reportHeight, 120);

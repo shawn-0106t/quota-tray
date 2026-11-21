@@ -105,6 +105,12 @@
   background: var(--hair);
   border-radius: 3px;
 }
+/* The hovered thumb is the only affordance saying the list scrolls, and `--hair`
+   is ~1.35:1 on paper; the panel and settings panes step up to `--ink-3` for
+   the 3:1 WCAG 1.4.11 asks for, and this is the longest scroll area in the app. */
+.list:hover::-webkit-scrollbar-thumb {
+  background: var(--ink-3);
+}
 .list::-webkit-scrollbar-track {
   background: transparent;
 }

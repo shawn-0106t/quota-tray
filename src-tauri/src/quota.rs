@@ -60,6 +60,14 @@ impl QuotaResult {
         }
     }
 
+    /// Is this a *failure* (retry in 30 s, red status) rather than a state the
+    /// user has to fix (`no-token`)? Conflating the two paints "(fetch failed)"
+    /// on a provider that was simply never configured, and re-polls it every
+    /// 30 seconds forever (PLAN §5.3).
+    pub fn is_failure(&self) -> bool {
+        self.error.as_deref().is_some_and(|e| e != "no-token")
+    }
+
     /// On failure keep last-known-good data: fill null fields from `last`
     /// (SPEC 16.5 step 2; the UI only shows the failure hint in the status line).
     pub fn fill_missing_from(&mut self, last: &QuotaResult) {
@@ -129,10 +137,40 @@ pub async fn fetch() -> QuotaResult {
         Err(_) => return QuotaResult::failed("JsonException"),
     };
 
+    quota_from_root(&root)
+}
+
+/// The payload -> card model. A 200 whose keys nothing recognised is a *failed
+/// fetch*, not an empty account: returning an empty success here would print
+/// `--` on both cards and "Not activated" on Extra while the header says
+/// `Updated HH:MM`, and `safe_refresh` would overwrite the last-good numbers
+/// with it (PLAN §5.3).
+fn quota_from_root(root: &Value) -> QuotaResult {
+    let five_hour = parse_five_hour(root);
+    let week = parse_week(root);
+    // A body whose keys nothing recognised is a *failed fetch*, not an empty
+    // account: returning an empty success here would print `--` on both cards
+    // and "Not activated" on Extra while the header says `Updated HH:MM`, and
+    // `safe_refresh` would overwrite the last-good numbers with it (PLAN §5.3).
+    //
+    // Presence, not parse success: a brand-new account can legitimately answer
+    // with an empty `limits` array, and that is still a real answer.
+    let recognised = [
+        "limits",
+        "usage",
+        "usages",
+        "booster_wallet",
+        "boosterWallet",
+    ]
+    .iter()
+    .any(|key| root.get(*key).is_some());
+    if !recognised {
+        return QuotaResult::failed("parse-error");
+    }
     QuotaResult {
-        five_hour: parse_five_hour(&root),
-        week: parse_week(&root),
-        extra: Some(parse_extra_from_root(&root)),
+        five_hour,
+        week,
+        extra: Some(parse_extra_from_root(root)),
         fetched_at: Local::now(),
         error: None,
     }
@@ -165,7 +203,11 @@ fn parse_week(root: &Value) -> Option<QuotaSegment> {
         .and_then(|v| v.get("used_ratio"))
         .and_then(number)
         .filter(|r| r.is_finite())
-        .map(|r| r * 100.0);
+        // `r` finite is not enough: `r * 100.0` can still overflow to infinity,
+        // which serialises as `null` (a 0-width bar) and saturates to
+        // i64::MAX in the tray tooltip. Filter the product, not the input.
+        .map(|r| r * 100.0)
+        .filter(|percent| percent.is_finite());
     match (root.get("usage").filter(|u| u.is_object()), ratio) {
         (Some(usage), ratio) => {
             let mut seg = parse_segment(usage);
@@ -487,5 +529,45 @@ mod tests {
         let root = json!({ "usage": { "used": "1e999", "limit": "1" } });
         let week = parse_week(&root).expect("week");
         assert!(week.percent.is_finite(), "got {}", week.percent);
+    }
+
+    #[test]
+    fn an_overflowing_used_ratio_is_dropped_not_infinite() {
+        // 1e307 is finite, so the input filter passes it; the product is not.
+        // An infinite percent serialises as null (a 0-width bar) and the tray
+        // saturates it to i64::MAX, so the ratio has to be dropped and the
+        // integer pair left in charge.
+        let root = json!({
+            "usages": { "limit_7d": { "used_ratio": 1e307 } },
+            "usage": { "used": "10", "limit": "20" }
+        });
+        let week = parse_week(&root).expect("week");
+        assert!(week.percent.is_finite(), "got {}", week.percent);
+        assert!((week.percent - 50.0).abs() < 1e-9, "got {}", week.percent);
+    }
+
+    #[test]
+    fn a_payload_that_parses_to_nothing_is_a_failed_fetch() {
+        // A renamed key must not look like an empty account: that printed `--`
+        // on both cards and "Not activated" on Extra while claiming a fresh
+        // timestamp, and it overwrote the last-good numbers.
+        let result = quota_from_root(&json!({ "unexpected": true }));
+        assert_eq!(result.error.as_deref(), Some("parse-error"));
+        assert!(result.is_failure());
+        assert!(result.five_hour.is_none() && result.week.is_none());
+        // An empty but recognised payload is still an answer: a new account
+        // can carry `limits: []`, and that must not read as a broken fetch.
+        let empty = quota_from_root(&json!({ "limits": [] }));
+        assert!(empty.error.is_none());
+        assert!(empty.five_hour.is_none());
+    }
+
+    #[test]
+    fn unconfigured_is_not_a_failure() {
+        // `no-token` is a state the user fixes by signing in, not a fetch
+        // failure: it must not paint "(fetch failed)" or retry every 30 s.
+        assert!(!QuotaResult::failed("no-token").is_failure());
+        assert!(QuotaResult::failed("HttpRequestException").is_failure());
+        assert!(QuotaResult::failed("parse-error").is_failure());
     }
 }

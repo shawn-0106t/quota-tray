@@ -28,6 +28,29 @@
 - **CHANGELOG 缺口**：PR #8（2026-11-20）的三条用户可见修复从来没进过 CHANGELOG——`--ink-3` 对比度、毫秒 `expires_at`、`limits[0]`（最后这条其实 v1.0.2 就是 `first()`，只是补了测试，所以不算用户可见）。前两条已补进 1.0.3，否则 Release notes 会漏报。
 - **已知残余（不修，记录在案）**：Clear 与捕获之间有一个很窄的窗口——`submit_token` 在捕获时读 epoch，Clear bump 之后、`login::close` 再次 bump 之前落地的候选会采用新 epoch 并通过校验。实际要靠网络往返快过窗口销毁才可能命中，且 CloseRequested 的 `new_session()` 是第二道闸；Slint 壳用「kill + wait 再清」从根上避免。改状态机风险高于收益，留到两壳收敛时统一。
 
+## 2026-11-21 全量审查（六域）
+
+用户要求「保证质量，对 tauri 做一次全量 review」。做法：按域派六个只读 `explore`（加载 code-review skill）——Kimi 数据层、DeepSeek 数据层、运行时/命令、recovery+登录窗、前端、发布链路与文档契约——每条结论我自己回代码复核后才动手。
+
+**已修（13 条，全部在 1.0.3 里）**：余额响应的形状校验（Critical：错误信封会被解析成 ¥0.00 并覆盖缓存，还让被拒的 API key 通过「验证后保存」）、捕获钩子的 origin 门（Critical：任何文档的 Bearer 头都会被送去 DeepSeek 校验）、非 JSON 的 2xx 不被记成 usage 端点、Kimi 空报文不再算成功、`used_ratio` 溢出、`/models` 的「每进程一次」守卫、未配置 ≠ 失败（托盘文案 + 30 秒重试）、Alt+F4 关设置窗的收起判定、`panel_hiding` 锁死、表头在 pane 之前翻、持久化 tab 的测量顺序、主题快照覆盖事件、skills 滚动条对比度。细节见 `CHANGELOG.md` 的 `[1.0.3]`。新增 4 个测试，其中 3 个验证过「去掉修复就变红」（53 tests）。
+
+**两条判为不改**：① skills 窗关闭不跑收起判定——PLAN §7 要的就是「关 skills 后焦点回面板、面板保持可见且前台」，设置窗才需要补判定；② `fmtTokens` 在 999950–999999 会打印 `1000K`——只影响 50 个取值，仓库没有 JS 测试框架，改动收益低于回归风险。
+
+**已知未修（按风险排序，需要单独决定）**：
+
+1. **两个 fetch 没有 single-flight**：悬停预取与手动 Refresh 可并发，后到的旧样本会覆盖新的，且失败可能被成功样本吞掉（`polling.rs`）。要修得加每个 provider 的互斥或队列。
+2. **rebuild 批次期间到达的 `ProcessFailed` 被丢弃**，SPEC 22.4 要求排队合并（`recovery.rs:664`）。只有当两个窗口在同一秒内崩才触发。
+3. **`ProcessFailedKind()` 读失败 → `LogOnly` 且不标 dead**：真崩会被当成已知良性项，白屏窗口照常 show。
+4. **`verifying` 有一条 µs 级保持 true 的路径**（`login.rs` 的 pending 分支在 epoch 检查之后又置 true）；命中后本次会话的候选只进队列不校验。
+5. **`kimi_usage` 的增量索引只认「文件变小」**：被重写成**更大**的同一路径会从旧偏移续读并重复计数。
+6. **`line.time` 没有量纲校验**：秒级时间戳会落进 1970 桶并被索引永久剪掉。
+7. **`credentials.rs` 只有 1 个测试**：30 秒余量、TOML 正则、`describe()` 与 `resolve()` 的一致性全靠 `--test-fetch` 现场验证。
+8. **`home_dir()?` 挡在 `KIMI_CODE_HOME` 之前**：服务/计划任务上下文里没有 `USERPROFILE` 时会误报未配置。
+9. **`work_area_phys` 忽略 `SystemParametersInfoW` 的返回值**：失败时整个 `RECT` 为 0，窗口会算到屏幕外。
+10. **自启只在 Settings 保存时对账**：settings 说开、注册表值丢了，只能靠用户再点一次 Save。
+11. **capability 只覆盖 `core:default`**：应用自身命令不受 ACL 约束（四个本地窗口共享命令面），且 `core:default` 含 `tray:allow-remove-by-id` 等前端用不到的权限。已在 `SECURITY.md` 写清实际边界。
+12. **打包脚本在两次 rename 之间被杀**会留下新 checksum 配旧 zip（`release.yml` 的 timeout 或 runner 取消）；`fmtTokens` 见上。
+
 ## v1.0.2 的四轮审查与处置（2026-11-15）
 
 发版的是一条修复，但它被独立只读审查磨了四遍；每一轮都抓到真东西，记录在此以免重复劳动：

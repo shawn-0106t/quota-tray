@@ -173,7 +173,25 @@ pub fn start_hide(app: &AppHandle) {
     if st.panel_hiding.swap(true, Ordering::SeqCst) {
         return;
     }
-    let _ = app.emit("panel-hide", ());
+    if app.emit("panel-hide", ()).is_err() {
+        // No listener (the webview is between documents): reset instead of
+        // latching, or every later hide would be a no-op for the rest of the
+        // session — the panel would ignore both blur and the tray click.
+        st.panel_hiding.store(false, Ordering::SeqCst);
+        return;
+    }
+    // Watchdog: `finish_hide` is a frontend callback, and a webview rebuild
+    // between the emit and the end of the animation loses it. Without this the
+    // guard stays set and the panel can never be hidden again.
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        let st = handle.state::<AppState>();
+        if st.panel_hiding.load(Ordering::SeqCst) {
+            crate::recovery::log("panel: hide never finished, clearing the guard");
+            st.panel_hiding.store(false, Ordering::SeqCst);
+        }
+    });
 }
 
 /// Called by the frontend after the fade-out finished: actually hide + stamp

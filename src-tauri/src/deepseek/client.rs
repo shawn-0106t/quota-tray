@@ -15,7 +15,6 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 const BALANCE_URL: &str = "https://api.deepseek.com/user/balance";
@@ -38,9 +37,34 @@ const ENDPOINTS_FILE: &str = "deepseek-endpoints.json";
 const MODELS_FILE: &str = "deepseek-models.json";
 const MODELS_TTL_HOURS: i64 = 24;
 
-/// At most one refreshing `/models` request per process: an id the endpoint
-/// does not know must not trigger a request on every poll (PLAN §6.1).
-static MODELS_REFETCHED: AtomicBool = AtomicBool::new(false);
+/// When `/models` was last attempted and whether it landed. A successful
+/// refresh is good for the cache TTL; a failed one is retried after an hour —
+/// the old "once per process" flag either froze the official names for the
+/// session (a startup blip) or, after the first 24 h, for good (PLAN §6.1
+/// promises a vendor rename reaches the panel within a day).
+static MODELS_ATTEMPT: std::sync::Mutex<Option<(std::time::Instant, bool)>> =
+    std::sync::Mutex::new(None);
+
+fn models_attempt_due() -> bool {
+    let guard = MODELS_ATTEMPT.lock().expect("models attempt lock");
+    match *guard {
+        None => true,
+        Some((at, landed)) => {
+            let wait = if landed {
+                std::time::Duration::from_secs(MODELS_TTL_HOURS as u64 * 3600)
+            } else {
+                std::time::Duration::from_secs(3600)
+            };
+            at.elapsed() >= wait
+        }
+    }
+}
+
+fn note_models_attempt(landed: bool) {
+    if let Ok(mut guard) = MODELS_ATTEMPT.lock() {
+        *guard = Some((std::time::Instant::now(), landed));
+    }
+}
 
 fn client() -> Option<&'static Client> {
     static CLIENT: OnceLock<Option<Client>> = OnceLock::new();
@@ -133,6 +157,17 @@ async fn fetch_usage_body(
             return Err(error);
         }
         let body = resp.text().await.map_err(|_| "network-error".to_string())?;
+        // A 2xx body that is not JSON at all (a proxy page, a truncated
+        // response) is useless, and remembering it as this month's endpoint
+        // would pin the app to it: `parse_usage` fails, the next poll hits the
+        // same remembered base, and only deleting the file recovers.
+        if serde_json::from_str::<Value>(&body).is_err() {
+            diag.log(format!(
+                "usage/{kind} {url} -> 200 that is not JSON, next candidate"
+            ));
+            last_error = "parse-error".to_string();
+            continue;
+        }
         // A 2xx is not a success: the platform answers 200 with
         // `{"code":40003,…,"data":null}` for a dead token, which parses as an
         // all-zero month if accepted. Reject it before this base is remembered
@@ -526,11 +561,16 @@ pub async fn apply_display_names(usage: &mut UsageInfo, api_key: Option<&str>, d
     ));
     if want {
         if let Some(key) = api_key {
-            if !MODELS_REFETCHED.swap(true, Ordering::SeqCst) {
+            if models_attempt_due() {
+                // Stamp the attempt before awaiting: a panic or an early return
+                // must still count, or a broken call would be retried on every
+                // poll.
+                note_models_attempt(false);
                 if let Some(names) = fetch_models(key, diag).await {
                     cache.names = names;
                     cache.fetched_at = Some(Local::now());
                     save_models(&cache);
+                    note_models_attempt(true);
                 }
             }
         }

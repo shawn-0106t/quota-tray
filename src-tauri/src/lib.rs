@@ -690,6 +690,14 @@ fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             recovery::set_last_visible(window.app_handle(), window.label(), false);
             let _ = window.hide();
             recovery::note_ui_event(window.app_handle(), window.label(), "hide");
+            // Alt+F4 / WM_CLOSE is a close like any other: the panel's blur was
+            // suppressed while the sheet was up, so the collapse check has to
+            // run here too, or an always-on-top panel stays parked on screen
+            // (PLAN §7). Skills is deliberately different — Windows hands focus
+            // back to the panel, which stays visible and focused.
+            if window.label() == "settings" {
+                panel::collapse_after_settings_close(window.app_handle());
+            }
         }
         tauri::WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
             recovery::note_ui_event(
