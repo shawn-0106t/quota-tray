@@ -65,7 +65,9 @@ the English notes first, then the Chinese mirror.
 - An unconfigured provider reads as `Not configured` instead of `(fetch failed)`
   and no longer re-polls every 30 s: `no-token` / `no-api-key` / `no-user-token`
   are states the user fixes, not failures. The stamp also keeps `Updated HH:MM`
-  while the balance is live and only the usage token is missing.
+  while the balance is live and only the usage token is missing. A Kimi CLI
+  token that has merely *expired* is still a failure — it leaves yesterday's
+  percentages on screen, so it keeps the marker and the fast retry.
 - Closing the settings sheet with Alt+F4 now runs the panel's collapse check,
   like the in-page X does. Before, the panel's blur had been suppressed while
   the sheet was open and no new one arrived, so an always-on-top panel stayed
@@ -130,7 +132,8 @@ the English notes first, then the Chinese mirror.
   PLAN §6.1 承诺的正是「厂商改名 24 小时内到面板、不需要发版」。
 - **修复**：未配置的 provider 显示 `Not configured` 而不是 `(fetch failed)`，也不再每 30 秒
   重轮询：`no-token` / `no-api-key` / `no-user-token` 是需要用户处理的状态，不是失败。余额
-  正常、只缺 usage token 时，表头保持 `Updated HH:MM`。
+  正常、只缺 usage token 时，表头保持 `Updated HH:MM`。Kimi CLI 的 token **只是过期**仍算
+  失败——它会把昨天的百分比留在屏上，所以保留失败标记与快重试。
 - **修复**：用 Alt+F4 关闭设置窗现在也会跑面板的收起判定，和页面内的 X 一致。以前设置窗
   在时面板的失焦被抑制，关窗又不会产生新的 blur，于是一个 always-on-top 面板会一直停在
   托盘角，直到用户去点别的窗口。

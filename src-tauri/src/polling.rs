@@ -124,8 +124,8 @@ async fn run_loop(app: AppHandle, provider: Provider) {
             }
         }
         let errored = match provider {
-            Provider::Kimi => safe_refresh(&app).await.error.is_some(),
-            Provider::Deepseek => safe_refresh_deepseek(&app).await.has_error(),
+            Provider::Kimi => safe_refresh(&app).await.is_failure(),
+            Provider::Deepseek => safe_refresh_deepseek(&app).await.is_failure(),
         };
         next = if errored {
             Duration::from_secs(30) // fast retry after failure

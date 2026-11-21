@@ -193,12 +193,12 @@ header 右上角的时间戳属于**当前 tab 的 provider**：切 tab 时一�
 - 错误码 → 文案（配合 §5.3：数字保留、状态行说明）：
   - 余额：`no-api-key` → `Not configured` + 说明行 `API key not set`；`key-invalid` → `Key invalid`；`rate-limited` → `Rate limited`；其余（含 `http-N` / `network-error` / `parse-error`）→ `Fetch failed`。
   - 用量（整块换成一行提示）：`no-user-token` → `Usage token not configured`（不写「仅余额可用」——余额块自己会说，两个凭证都缺时那句还会自相矛盾）；`token-expired` → `Usage token expired — sign in again to sync`；`rate-limited` → `Usage was rate limited — retrying in 30s`；其余 → `Usage fetch failed — retrying in 30s`。本月没有用量（模型列表为空）→ `No usage data this month`，不着红。
-  - header 时间戳跟当前 tab：`no-api-key` → `Not configured`；其他错误 → `Fetch failed`；正常 → `Updated HH:MM`，非当天 → `Updated M/D HH:MM`（DeepSeek 会跨会话复用缓存，只写时刻会把昨天读成今天）。
+  - header 时间戳跟当前 tab：`no-api-key` / `no-token`（从未配置）→ `Not configured`，**中性色**（红只留给失败）；只有 `no-user-token` 时余额仍实时，表头保持 `Updated HH:MM`，usage 区块自带 `Usage token not configured`；其余错误（含 Kimi 的 `token-expired`）→ `Fetch failed`（红）；正常 → `Updated HH:MM`，非当天 → `Updated M/D HH:MM`（DeepSeek 会跨会话复用缓存，只写时刻会把昨天读成今天）。
 
 ### 5.3 轮询与失败语义
 
 - 启动 2s 后首次拉取；正常间隔 1/5/10/30 分钟（默认 5）。
-- 失败：保留上次成功数据 + 状态行提示，30s 后快速重试；成功后回正常周期。失败文案统一为 **`Fetch failed`**（面板 header 红字）与 **` (fetch failed)`**（托盘 tooltip）—— 原来的 `Update failed` 容易被误读成 CLI 版本检查失败，而那是一条独立的路。
+- 失败：保留上次成功数据 + 状态行提示，30s 后快速重试；成功后回正常周期。失败文案统一为 **`Fetch failed`**（面板 header 红字）与 **` (fetch failed)`**（托盘 tooltip）—— 原来的 `Update failed` 容易被误读成 CLI 版本检查失败，而那是一条独立的路。**「未配置」不是失败**：`no-token` / `no-api-key` / `no-user-token` 不写这两个标记、不走 30s 快重试（按正常周期即可），因为用户要做的不是等重试而是去配置；Kimi CLI token 过期（`token-expired`）仍是失败——它会把旧数字留在屏上，必须带标记。
 - 托盘 tooltip 合并两个 provider（2026-11-14 定稿，三行）：
 
   ```
