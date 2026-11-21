@@ -137,12 +137,17 @@ pub fn parse_usage(amount_json: &str, cost_json: &str) -> Result<UsageInfo, serd
         today_cost_units = today_cost_units.saturating_add(money_units(m.today_cost));
     }
 
+    // `as f64` divides a pair of saturated counters, so the sum itself must
+    // saturate too: `i64::MAX + i64::MAX` wraps negative in release and the
+    // rate would read as "no data" on exactly the hostile input the saturation
+    // above exists for.
+    let calls_all = hit_all.saturating_add(miss_all);
     Ok(UsageInfo {
         month_tokens,
         month_requests,
         month_cost: month_cost_units as f64 / 1e8,
-        cache_hit_rate: if hit_all + miss_all > 0 {
-            Some(hit_all as f64 * 100.0 / (hit_all + miss_all) as f64)
+        cache_hit_rate: if calls_all > 0 {
+            Some(hit_all as f64 * 100.0 / calls_all as f64)
         } else {
             None
         },
@@ -525,6 +530,25 @@ mod tests {
         let u = parse_usage(payload, payload).expect("hostile payload parses");
         assert_eq!(u.month_tokens, 0);
         assert!(u.month_cost.is_finite());
+    }
+
+    #[test]
+    fn saturated_counters_cannot_wrap_the_hit_rate_into_no_data() {
+        // `tokens()` saturates a finite but out-of-range amount ("1e19", past
+        // i64::MAX) to i64::MAX, so two models add up to more than an i64 can
+        // hold. An unsaturated sum wraps negative in release and the rate reads
+        // as `None` — the pane would say "no data" on exactly the input the
+        // saturation exists for.
+        let payload = r#"{"data":{"biz_data":{"total":[
+            {"model":"a","usage":[{"type":"PROMPT_CACHE_HIT_TOKEN","amount":"1e19"}]},
+            {"model":"b","usage":[{"type":"PROMPT_CACHE_MISS_TOKEN","amount":"1e19"}]}
+        ]}}}"#;
+        let u = parse_usage(payload, payload).expect("hostile payload parses");
+        let rate = u
+            .cache_hit_rate
+            .expect("both halves of the ratio are present");
+        assert!(rate.is_finite(), "got {rate}");
+        assert!((0.0..=100.0).contains(&rate), "got {rate}");
     }
 
     #[test]
