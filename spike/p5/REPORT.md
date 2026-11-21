@@ -122,7 +122,7 @@ P4 的 `--test-login` / `--test-signin` 本轮没有重跑：登录链路代码�
 
 ## 7. 没证明的
 
-- **`ci-slint.yml` 没在 GitHub runner 上跑过**：本机没有 push 权限动作，第一次推送才会看到真实结果。本地已按 workflow 里的原命令（含 `--locked`）跑过。
+- **`ci-slint.yml` 首跑已过**：第一次在 runner 上因 pinned 1.97.1 toolchain 缺 `rustfmt` 失败；补 `components: rustfmt, clippy` 后 5m10s 全绿（run `44897311480`）。Skia 预编译包直连下载可用。
 - `PARITY.md` §12 的 7 条现场缺口仍然成立：100/150/200% DPI、混合 DPI/多屏、键盘/IME、成功登录（exit 0）的 settle、三种网络失败文案、父进程退出时子进程卡在 WebView2 初始化、托盘 tooltip 悬停视觉。
 
 ## 8. 复现
@@ -157,7 +157,7 @@ PYTHONUTF8=1 python scripts/parity/check_tokens.py
 | tie 舍入与 `toFixed` 不一致 | 无（面板/托盘）；**本分支的 Tauri exe 有** | `main` 的托盘先按分取整、面板用 TS；本分支两壳共用 `quota-core::format`，因此也受影响 |
 | `--test-*` / token 门禁 / CI | 不适用 | 这些是 Slint 分支的测试与门禁 |
 
-结论：共享数据层的 7 个问题已移植到 `main`：[PR #11](https://github.com/shawn-0106t/quota-tray/pull/11)（`fix/usage-envelope`）；Slint 壳独有的问题已在分支内修掉。`ci-slint.yml` 仍待下一次 push 首跑。
+结论：共享数据层的 7 个问题已由 [PR #11](https://github.com/shawn-0106t/quota-tray/pull/11) 合并进 `main`（`183a686`）；Slint 壳独有的问题已在分支内修掉。`ci-slint.yml` 首跑先因 pinned toolchain 缺 `rustfmt` 失败，补 `components: rustfmt, clippy` 后 **5m10s 全绿**（run `44897311480`）。
 
 ## 10. 文件
 
