@@ -330,8 +330,9 @@ function renderStamp(force = false): void {
   if (tab === 'kimi') {
     if (quota) {
       if (quota.error === NO_TOKEN) {
+        // Configuration, not a fault: `Not configured` is not red, because red
+        // means "the fetch broke" (the plan's colour rule).
         text = 'Not configured';
-        bad = true;
       } else if (quota.error) {
         // "Fetch failed", not "Update failed": this is the quota fetch. The CLI
         // version check is a separate path (PLAN §5.3).
@@ -343,9 +344,9 @@ function renderStamp(force = false): void {
     }
   } else if (deepseek) {
     if (deepseek.balanceError === NO_API_KEY) {
-      // Nothing can work without a key, so this is configuration, not a fault.
+      // Nothing can work without a key, so this is configuration, not a fault
+      // — and red is reserved for failures.
       text = 'Not configured';
-      bad = true;
     } else if (deepseek.balanceError) {
       text = 'Fetch failed';
       bad = true;

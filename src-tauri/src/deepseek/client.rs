@@ -37,32 +37,41 @@ const ENDPOINTS_FILE: &str = "deepseek-endpoints.json";
 const MODELS_FILE: &str = "deepseek-models.json";
 const MODELS_TTL_HOURS: i64 = 24;
 
-/// When `/models` was last attempted and whether it landed. A successful
-/// refresh is good for the cache TTL; a failed one is retried after an hour —
-/// the old "once per process" flag either froze the official names for the
-/// session (a startup blip) or, after the first 24 h, for good (PLAN §6.1
-/// promises a vendor rename reaches the panel within a day).
+/// Claim the next `/models` attempt, atomically: a successful refresh is good
+/// for the cache TTL, a failed one retries after an hour, and two concurrent
+/// fetches (a scheduled poll and a hover prefetch) cannot both issue it. The
+/// old "once per process" flag either froze the official names for the session
+/// (a startup blip) or, after the first 24 h, for good — PLAN §6.1 promises a
+/// vendor rename reaches the panel within a day.
 static MODELS_ATTEMPT: std::sync::Mutex<Option<(std::time::Instant, bool)>> =
     std::sync::Mutex::new(None);
 
-fn models_attempt_due() -> bool {
-    let guard = MODELS_ATTEMPT.lock().expect("models attempt lock");
-    match *guard {
-        None => true,
-        Some((at, landed)) => {
-            let wait = if landed {
-                std::time::Duration::from_secs(MODELS_TTL_HOURS as u64 * 3600)
-            } else {
-                std::time::Duration::from_secs(3600)
-            };
-            at.elapsed() >= wait
+fn claim_models_attempt() -> bool {
+    // A poisoned lock would mean a panic inside the critical section, which
+    // cannot happen here (no panicking calls); recover instead of taking the
+    // poller down with it.
+    let mut guard = match MODELS_ATTEMPT.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some((at, landed)) = *guard {
+        let wait = if landed {
+            std::time::Duration::from_secs(MODELS_TTL_HOURS as u64 * 3600)
+        } else {
+            std::time::Duration::from_secs(3600)
+        };
+        if at.elapsed() < wait {
+            return false;
         }
     }
+    // Pessimistic stamp: a panic or an early return still counts as an attempt.
+    *guard = Some((std::time::Instant::now(), false));
+    true
 }
 
-fn note_models_attempt(landed: bool) {
+fn note_models_landed() {
     if let Ok(mut guard) = MODELS_ATTEMPT.lock() {
-        *guard = Some((std::time::Instant::now(), landed));
+        *guard = Some((std::time::Instant::now(), true));
     }
 }
 
@@ -261,6 +270,15 @@ pub async fn verify_user_token(token: &str) -> Result<(), String> {
             // a token the pane then cannot use shows up as `Fetch failed`, and
             // the next sign-in overwrites it.
             let body = resp.text().await.map_err(|_| "network-error".to_string())?;
+            // A non-empty body that is not JSON is not the platform answering —
+            // a proxy or an interstitial returned 200. That says nothing about
+            // the candidate, so walk on, and do not remember this base: doing so
+            // is what pinned the app to a page it could never parse.
+            let trimmed = body.trim();
+            if !trimmed.is_empty() && serde_json::from_str::<Value>(trimmed).is_err() {
+                last_error = "parse-error".to_string();
+                continue;
+            }
             if !token_accepted(&body) {
                 // This base answers 200 with an error envelope, but the token
                 // may still be fine on the next candidate (a dead base can be
@@ -561,16 +579,12 @@ pub async fn apply_display_names(usage: &mut UsageInfo, api_key: Option<&str>, d
     ));
     if want {
         if let Some(key) = api_key {
-            if models_attempt_due() {
-                // Stamp the attempt before awaiting: a panic or an early return
-                // must still count, or a broken call would be retried on every
-                // poll.
-                note_models_attempt(false);
+            if claim_models_attempt() {
                 if let Some(names) = fetch_models(key, diag).await {
                     cache.names = names;
                     cache.fetched_at = Some(Local::now());
                     save_models(&cache);
-                    note_models_attempt(true);
+                    note_models_landed();
                 }
             }
         }

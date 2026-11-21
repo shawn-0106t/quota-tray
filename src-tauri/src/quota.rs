@@ -107,7 +107,11 @@ fn http_client() -> Option<&'static Client> {
 
 pub async fn fetch() -> QuotaResult {
     let Some(token) = credentials::load_token() else {
-        return QuotaResult::failed("no-token");
+        // Two different states land here: nothing configured, and a CLI token
+        // that lapsed. `describe()` knows which, and an expired token must read
+        // as a failure — otherwise the tray keeps printing the last good
+        // percentages with no marker and the poll drops to the slow interval.
+        return QuotaResult::failed(no_token_error(credentials::describe().expired));
     };
     let Some(client) = http_client() else {
         return QuotaResult::failed("HttpRequestException");
@@ -138,6 +142,17 @@ pub async fn fetch() -> QuotaResult {
     };
 
     quota_from_root(&root)
+}
+
+/// Wire code for "the fetch had no credential". Kept as one function so the
+/// `no-token` / `token-expired` split is testable without HTTP, and pinned by a
+/// test because `src/main.ts` matches these strings.
+fn no_token_error(expired: bool) -> &'static str {
+    if expired {
+        "token-expired"
+    } else {
+        "no-token"
+    }
 }
 
 /// The payload -> card model. A 200 whose keys nothing recognised is a *failed
@@ -569,5 +584,27 @@ mod tests {
         assert!(!QuotaResult::failed("no-token").is_failure());
         assert!(QuotaResult::failed("HttpRequestException").is_failure());
         assert!(QuotaResult::failed("parse-error").is_failure());
+    }
+
+    #[test]
+    fn an_expired_cli_token_is_a_failure_not_an_unconfigured_provider() {
+        // Both reach `fetch` as "no token in hand". The tray and the retry
+        // schedule must tell them apart: an expired token leaves stale numbers
+        // on screen, so it has to carry the failure marker.
+        assert_eq!(no_token_error(false), "no-token");
+        assert_eq!(no_token_error(true), "token-expired");
+        assert!(!QuotaResult::failed(no_token_error(false)).is_failure());
+        assert!(QuotaResult::failed(no_token_error(true)).is_failure());
+    }
+
+    #[test]
+    fn the_wire_codes_the_frontend_matches_on_are_pinned() {
+        // `src/main.ts` switches on these exact strings (`NO_TOKEN`,
+        // `NO_USER_TOKEN`, `NO_API_KEY`); a rename here would silently turn a
+        // "not configured" branch into "Fetch failed" with no test failing.
+        assert_eq!(no_token_error(false), "no-token");
+        assert_eq!(no_token_error(true), "token-expired");
+        let failed = QuotaResult::failed("no-token");
+        assert_eq!(failed.error.as_deref(), Some("no-token"));
     }
 }

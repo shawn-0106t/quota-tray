@@ -5,7 +5,7 @@ use crate::recovery::RecoveryState;
 use crate::settings::SettingsData;
 use crate::skills::SkillInfo;
 use crate::update::UpdateStatus;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
@@ -157,6 +157,10 @@ pub struct AppState {
     /// Timestamp of the last manual "Refresh" command (2s debounce)
     pub last_manual_refresh: Mutex<Option<Instant>>,
     pub panel_hiding: AtomicBool,
+    /// Bumped by every `start_hide`. The watchdog that rescues a lost
+    /// `finish_hide` compares it, so a stale watchdog cannot clear the latch of
+    /// a hide that started after it (that would leave the panel on screen).
+    pub panel_hide_gen: AtomicU64,
     /// While the settings window is open, panel focus-loss hide is suppressed
     pub settings_open: AtomicBool,
     /// While the skills window is open, panel focus-loss hide is suppressed
@@ -196,6 +200,7 @@ impl AppState {
             last_hover: Mutex::new(None),
             last_manual_refresh: Mutex::new(None),
             panel_hiding: AtomicBool::new(false),
+            panel_hide_gen: AtomicU64::new(0),
             settings_open: AtomicBool::new(false),
             skills_open: AtomicBool::new(false),
             skills_cache: RwLock::new(None),
