@@ -181,7 +181,7 @@ pub fn clear() {
 
 /// Write both values, DPAPI-sealed, preserving fields the caller left alone
 /// (including a blob that failed to decrypt and the import provenance).
-pub fn save(api_key: Option<&str>, user_token: Option<&str>, imported_from: Option<&str>) {
+pub fn save(api_key: Option<&str>, user_token: Option<&str>, imported_from: Option<&str>) -> bool {
     let existing = read_raw().unwrap_or_default();
     let file = CredFile {
         v: 1,
@@ -195,11 +195,13 @@ pub fn save(api_key: Option<&str>, user_token: Option<&str>, imported_from: Opti
         },
         imported_from: imported_from.map(str::to_string).or(existing.imported_from),
     };
-    if !write(&file) && private_file() != shared_file() {
+    let mut wrote = write(&file);
+    if !wrote && private_file() != shared_file() {
         // Keep what the user just verified rather than losing it to a failed
         // shared write; the read path checks both locations.
-        let _ = write_to(&private_file(), &file);
+        wrote = write_to(&private_file(), &file);
     }
+    wrote
 }
 
 fn write(file: &CredFile) -> bool {

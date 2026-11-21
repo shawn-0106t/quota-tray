@@ -178,6 +178,8 @@ function credError(code: string): string {
       return 'empty value';
     case 'cleared':
       return 'cleared while verifying — not saved';
+    case 'save-failed':
+      return 'could not write the credential — not saved';
     default:
       return `verification failed (${code}) — not saved`;
   }

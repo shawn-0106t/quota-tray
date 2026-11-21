@@ -325,10 +325,13 @@ async fn save_credential(app: AppHandle, field: String, value: String) -> Result
         // credential the user just removed.
         return Err("cleared".to_string());
     }
-    if is_api_key {
-        deepseek::credentials::save(Some(&value), None, None);
+    let saved = if is_api_key {
+        deepseek::credentials::save(Some(&value), None, None)
     } else {
-        deepseek::credentials::save(None, Some(&value), None);
+        deepseek::credentials::save(None, Some(&value), None)
+    };
+    if !saved {
+        return Err("save-failed".to_string());
     }
     let _ = app.emit("deepseek-credentials-changed", ());
     let handle = app.clone();
@@ -342,11 +345,9 @@ async fn save_credential(app: AppHandle, field: String, value: String) -> Result
 /// one-time legacy import cannot bring them back (PLAN §5.2).
 #[tauri::command]
 fn clear_credentials(app: AppHandle) {
-    deepseek::credentials::clear();
-    // A sign-in window that is still open holds the console's own session: its
-    // hook would capture the token again on the next request and the Clear
-    // would look like it did nothing. Close it, and make any verification that
-    // is already in flight drop its result.
+    // Bump the generations BEFORE the file is wiped: a verification that
+    // finishes between the wipe and the bump would pass its epoch/clear check
+    // and write the token straight back.
     {
         let st = app.state::<AppState>();
         // A real boundary: bump the epoch AND clear the flags, so a candidate
@@ -357,9 +358,13 @@ fn clear_credentials(app: AppHandle) {
         // its value too, and that path must not be cancelled by a window
         // boundary (see `save_credential`).
         st.login.note_clear();
-        let handle = app.clone();
-        tauri::async_runtime::spawn(async move { login::close(&handle) });
     }
+    deepseek::credentials::clear();
+    // A sign-in window that is still open holds the console's own session: its
+    // hook would capture the token again on the next request and the Clear
+    // would look like it did nothing. Close it after the wipe.
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move { login::close(&handle) });
     recovery::log("credentials: cleared (apiKey=false userToken=false)");
     let _ = app.emit("deepseek-credentials-changed", ());
     let handle = app.clone();
