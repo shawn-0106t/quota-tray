@@ -373,6 +373,7 @@ fn cred_error(code: &str) -> String {
         "network-error" => "network error — not saved".to_string(),
         "server-error" => "DeepSeek server error — not saved".to_string(),
         "empty" => "empty value".to_string(),
+        "save-failed" => "could not write the credential — not saved".to_string(),
         other => format!("verification failed ({other}) — not saved"),
     }
 }
@@ -414,8 +415,12 @@ pub fn save_credentials(shell: &Rc<RefCell<Shell>>, api_key: String, user_token:
             match deepseek::client::fetch_balance(&api_key).await {
                 Ok(_) => {
                     if guard.load(Ordering::SeqCst) == epoch {
-                        deepseek::credentials::save(Some(&api_key), None, None);
-                        saved_api = true;
+                        saved_api = deepseek::credentials::save(Some(&api_key), None, None);
+                        if !saved_api {
+                            problems.push(
+                                "API key: could not write the credential — not saved".to_string(),
+                            );
+                        }
                     }
                 }
                 Err(code) => problems.push(format!("API key: {}", cred_error(&code))),
@@ -425,8 +430,13 @@ pub fn save_credentials(shell: &Rc<RefCell<Shell>>, api_key: String, user_token:
             match deepseek::client::verify_user_token(&user_token).await {
                 Ok(()) => {
                     if guard.load(Ordering::SeqCst) == epoch {
-                        deepseek::credentials::save(None, Some(&user_token), None);
-                        saved_token = true;
+                        saved_token = deepseek::credentials::save(None, Some(&user_token), None);
+                        if !saved_token {
+                            problems.push(
+                                "Usage token: could not write the credential — not saved"
+                                    .to_string(),
+                            );
+                        }
                     }
                 }
                 Err(code) => problems.push(format!("Usage token: {}", cred_error(&code))),

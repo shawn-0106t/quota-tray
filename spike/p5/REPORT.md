@@ -157,7 +157,7 @@ PYTHONUTF8=1 python scripts/parity/check_tokens.py
 | tie 舍入与 `toFixed` 不一致 | 无（面板/托盘）；**本分支的 Tauri exe 有** | `main` 的托盘先按分取整、面板用 TS；本分支两壳共用 `quota-core::format`，因此也受影响 |
 | `--test-*` / token 门禁 / CI | 不适用 | 这些是 Slint 分支的测试与门禁 |
 
-结论：共享数据层的 7 个问题需要在 `main` 上同步修（最好按 P4 的 PR 模式单独切分支）；Slint 壳独有的问题已在分支内修掉。`ci-slint.yml` 仍待下一次 push 首跑。
+结论：共享数据层的 7 个问题已移植到 `main`：[PR #11](https://github.com/shawn-0106t/quota-tray/pull/11)（`fix/usage-envelope`）；Slint 壳独有的问题已在分支内修掉。`ci-slint.yml` 仍待下一次 push 首跑。
 
 ## 10. 文件
 

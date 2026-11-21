@@ -208,4 +208,4 @@ PYTHONUTF8=1 python demo/check_contrast.py
 4. 系统关闭（Alt+F4）走 Slint 默认的「隐藏」，但 `visible`/`settings_open`/`skills_open` 不更新——托盘开合与两个弹窗的重开会永久错位。现在四个窗口都接了 `on_close_requested`。
 5. 上述关闭与拖动位置行为没有自检；新增 `--test-close` 逐项证明。
 
-**2026-11-21 全量 code review** 又修了 1 个 Critical（usage 抓取把 200 错误信封当全零、覆盖 last-good）与一批 Major/Minor：设置窗标题栏移出滚动区、登录窗 4xx 文案、`--test-login` 哈希两份凭证、`--test-settings` 备份/还原与重跑可重复、token 门禁剥注释并计数、`--test-dialogs` 断言真的观察到 blur、`quota-core` 的 tie 舍入/浮点回退/原子写/索引目录等。共享数据层的 Critical 与 6 条同类问题 `main` 也有，需要单独 PR 移植；Slint 壳独有的问题已在本分支修掉。明细见 `CHANGELOG.md` 与 `spike/p5/REPORT.md` §9。
+**2026-11-21 全量 code review** 又修了 1 个 Critical（usage 抓取把 200 错误信封当全零、覆盖 last-good）与一批 Major/Minor：设置窗标题栏移出滚动区、登录窗 4xx 文案、`--test-login` 哈希两份凭证、`--test-settings` 备份/还原与重跑可重复、token 门禁剥注释并计数、`--test-dialogs` 断言真的观察到 blur、`quota-core` 的 tie 舍入/浮点回退/原子写/索引目录等。共享数据层的 Critical 与 6 条同类问题 `main` 也有，已移植为 [PR #11](https://github.com/shawn-0106t/quota-tray/pull/11)；Slint 壳独有的问题已在本分支修掉。明细见 `CHANGELOG.md` 与 `spike/p5/REPORT.md` §9。

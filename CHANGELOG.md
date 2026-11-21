@@ -45,7 +45,7 @@ the English notes first, then the Chinese mirror.
   `token-expired`. The settings sheet keeps its title bar out of the scrolling
   pane; the sign-in window says "verification failed" for a moved endpoint
   instead of "token not accepted"; Clear bumps the credential epoch before the
-  wipe; a saved token is reported only when the write succeeded; page-controlled
+  wipe; a saved token is reported only when the write succeeded (the sign-in window and the manual paste field both report `save-failed`); page-controlled
   strings are sanitised before they reach `slint.log`; the transient retry drops
   itself when a newer candidate arrives; and the probe child carries
   `--parent-pid`. `quota-core` now accepts float / decimal-string numbers, falls
@@ -112,7 +112,7 @@ the English notes first, then the Chinese mirror.
   `{"code":40003}` 的 200 错误信封解析成「全零月份」，覆盖 last-good 缓存并把失败 base
   记住；现在走 `token_accepted` 并报 `token-expired`。设置窗标题栏移出滚动区；登录窗对
   端点搬家显示「verification failed」而不是「token not accepted」；Clear 先 bump epoch
-  再清文件；token 只在真正写盘成功后报 saved；页面可控字符串进 `slint.log` 前先净化；
+  再清文件；token 只在真正写盘成功后报 saved（登录窗与手工粘贴都会报 `save-failed`）；页面可控字符串进 `slint.log` 前先净化；
   瞬时重试遇到更新的候选会让位；probe 子进程带 `--parent-pid`。`quota-core` 接受浮点/
   十进制字符串数字、`used:null` 会回退、计数器用饱和加法、settings 与 usage 索引改为
   原子写（索引临时文件与目标同目录）、精确 tie 按 `toFixed` 的「远离零」舍入。刷新改为
