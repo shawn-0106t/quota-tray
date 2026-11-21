@@ -353,7 +353,11 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 1. **启动弹出终端窗口**：`slint/src/main.rs` 缺 `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`（`src-tauri/src/main.rs` 有），release 产物因此是 console 子系统。`--test-*` 的输出不受影响（管道里 stdout 照传）。
 2. **界面是黑底**：四个窗口在 `.slint` 里写的是 `background: transparent`，但 `slint/src/*.rs` **没有任何 `with_transparent(true)`**——spike 里设置过，搬进 `slint/` 时丢了。窗口表面不透明，透明背景就落在黑底上。
 
-撤回动作：GitHub pre-release `slint-beta-0.1.0` 与同名 tag 均已删除（本地 `kimi\` 目录仍留着 exe，供调试）。**重新实验版之前先修这两条**，再按 `PARITY.md` §12 的验收单走一遍；`v2.0.0` 的七条切点不变。
+撤回动作：GitHub pre-release `slint-beta-0.1.0` 与同名 tag 均已删除（本地 `kimi\` 目录仍留 exe 供调试）。
+
+**两条都已在 `7d73b37` 修掉并验证**：① `main.rs` 补 `windows_subsystem` —— PE 子系统读出来是 `WindowsGui`，与正式版一致；② `shell.rs::select_backend` 的 winit attributes hook 补 `.with_transparent(true)` —— 根因是 Slint 1.18 只在 **macOS** 上运行时切换透明（`winitwindowadapter.rs` 里那段被 `#[cfg(target_os = "macos")]` 包着），Windows 的表面由创建时的 attributes 决定，而我们没设，于是 28px 阴影留白合成成黑色。DPI-aware 截屏确认卡片四周能透出任务栏、没有黑框；`--test-login` / `--test-signin` 仍 PASS。
+
+**仍然不发版**（用户 2026-11-21 决定）：修完只是让下一次实验版可用。重新发之前按 `PARITY.md` §12 的验收单走一遍——那张单子现在有真机截屏的方法可依（见下）。`v2.0.0` 的七条切点不变。
 
 **beta 的前置条件（2026-11-21 已满足）**：`main` 两轮修掉的 9 条数据层问题 + 登录钩子的 origin 门，已在 `3b4ae06` 镜像到 `quota-core/` 与 `slint/src/login_host.rs`：余额形状校验、非 JSON 的 2xx 不记 base（抓取与校验两条路径）、envelope 拒绝时走完候选、Kimi 空报文算失败、`used_ratio` 溢出、`/models` 的尝试领取、未配置 ≠ 失败（托盘/重试/表头）、过期 token 单独报、`amountLeft` 越界。验证：`quota-core` 57 tests、`slint` 6 tests、两个 crate 的 fmt/clippy 全绿，release exe 用 Skia 构建后 `--test-login` PASS（冷 profile 在 WebView2 初始化里花了 107 s）、`--test-signin` PASS、`--test-heights` 未变。
 
