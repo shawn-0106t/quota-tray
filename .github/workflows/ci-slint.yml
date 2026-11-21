@@ -28,6 +28,15 @@ on:
       - "src-tauri/icons/**"
       - "scripts/parity/**"
       - ".github/workflows/ci-slint.yml"
+  # Manual: cut a beta. The 0.1.0 beta was built by hand; this job is the
+  # repeatable path. `tag` is optional — with it the exe is attached to that
+  # release, without it the exe is only a workflow artifact.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the beta to (leave empty for an artifact only)"
+        required: false
+        default: ""
 
 concurrency:
   group: ci-slint-${{ github.ref }}
@@ -90,3 +99,75 @@ jobs:
       - name: Cargo test
         working-directory: slint
         run: cargo test --locked
+
+  # `workflow_dispatch` only. The exe is built with the same pinned toolchain as
+  # the gates above; the Skia prebuilts come straight from GitHub, which a
+  # hosted runner reaches (the SKIA_BINARIES_URL mirror is a local workaround).
+  beta:
+    name: Beta exe
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    # Only this job may write: the artifact upload needs nothing, the release
+    # upload needs a token, and the scan/gates above stay read-only.
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Rust (pinned)
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
+        with:
+          toolchain: 1.97.1
+          build-warnings: warn
+          cache: false
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            slint
+            quota-core
+
+      # The version comes from the crate, never from the release tag: an asset
+      # whose name disagrees with the binary is how a beta gets shipped twice.
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          version=$(python -c "import pathlib,tomllib;print(tomllib.loads(pathlib.Path('slint/Cargo.toml').read_text(encoding='utf-8'))['package']['version'])")
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "asset=QuotaTray-Slint-$version-beta.exe" >> "$GITHUB_OUTPUT"
+
+      - name: Build release exe
+        working-directory: slint
+        run: cargo build --release --locked
+
+      - name: Stage the asset
+        shell: bash
+        run: |
+          cp slint/target/release/quota-tray-slint.exe "${{ steps.version.outputs.asset }}"
+          sha256sum "${{ steps.version.outputs.asset }}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # Always published as an artifact, so a build can be inspected without
+      # touching a release.
+      - name: Upload artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: slint-beta-${{ steps.version.outputs.value }}
+          path: |
+            ${{ steps.version.outputs.asset }}
+            SHA256SUMS.txt
+
+      # No --clobber: a published beta is not silently overwritten by a re-run.
+      # Delete the asset first (or bump the crate version) if that is intended.
+      - name: Attach to the release
+        if: inputs.tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ inputs.tag }}" \
+            "${{ steps.version.outputs.asset }}" SHA256SUMS.txt
