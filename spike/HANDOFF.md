@@ -348,6 +348,6 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 
 实现方式（下一步，二选一）：① 在 `ci-slint.yml` 加一个手动触发的 job，产出 exe 并以 `gh release upload` 挂到指定 tag；② 本机构建一次（`SKIA_BINARIES_URL` 必须设）、人工上传。② 就是第一次 beta 的最小路径；① 值得在第一次之后补上，免得每次发版都要手动构建。无论哪种，**beta 资产的构建必须来自打 tag 的那棵树**，否则用户拿到的不是对应版本。
 
-**beta 的前置条件（2026-11-21 全量审查之后新增）**：`main` 这次修掉的问题里，有 7 条在共享数据层也有同一份实现，本分支的副本**尚未镜像**——余额路径的形状校验（Critical）、非 JSON 的 2xx 不被记成 usage 端点、Kimi 空报文算失败、`used_ratio` 溢出、`/models` 的刷新守卫、未配置 ≠ 失败、`unix_seconds` 的同族问题。另外登录窗的 origin 门在本分支是**另一份实现**（`slint/src/login_host.rs` 的注入钩子），需要单独加。Beta 对外发布之前必须先把这几条落到 `quota-core/` 与 `login_host.rs`，否则 beta 会带着已知的凭证/余额缺陷出去。`main` 的 `CHANGELOG.md` `[1.0.3]` 段是这批修复的清单，照它逐条对照即可。
+**beta 的前置条件（2026-11-21 全量审查之后新增）**：`main` 这两轮修掉的问题里，有 **9 条在共享数据层也有同一份实现**，本分支的副本**尚未镜像**——余额路径的形状校验（Critical）、非 JSON 的 2xx 不被记成 usage 端点（抓取与校验两条路径）、Kimi 空报文算失败、`used_ratio` 溢出、`/models` 的刷新守卫、未配置 ≠ 失败、CLI token 过期与「未配置」分开报、`parse_balance` 的同类问题。另外登录窗的 origin 门在本分支是**另一份实现**（`slint/src/login_host.rs` 的注入钩子），需要单独加。Beta 对外发布之前必须先把这几条落到 `quota-core/` 与 `login_host.rs`，否则 beta 会带着已知的凭证/余额缺陷出去。`main` 的 `CHANGELOG.md` `[1.0.3]` 段是这批修复的清单，照它逐条对照即可。
 
 **什么会让我改主意**：若目标是「彻底摆脱 WebView2」，那 Slint 只在登录窗里仍依赖它，收益不完整；若目标是体积/内存，当前数据是负收益。这两条任一条被实测推翻（比如启动与内存明显更优），切点可以提前。
