@@ -1,0 +1,85 @@
+name: CI (Slint shell)
+
+# The Slint shell is built from the same repository but is not part of the
+# release line yet (HANDOFF §9), so it gets its own workflow: a Slint or
+# quota-core change runs these gates, and an unrelated frontend change does
+# not pay for a 20-minute Skia build. Branch protection does not require this
+# job until the shell becomes the shipped product; `ci.yml` keeps the release
+# gates for main.
+#
+# The paths mirror the shell's inputs: its sources, the shared data layer it
+# links, the two token sources the check_tokens gate compares, and the icons
+# `slint/src/shell.rs` embeds. `spike/` evidence is not an input.
+on:
+  push:
+    branches: [main, spike/slint-demo]
+    paths:
+      - "slint/**"
+      - "quota-core/**"
+      - "src/theme.css"
+      - "src-tauri/icons/**"
+      - "scripts/parity/**"
+      - ".github/workflows/ci-slint.yml"
+  pull_request:
+    paths:
+      - "slint/**"
+      - "quota-core/**"
+      - "src/theme.css"
+      - "src-tauri/icons/**"
+      - "scripts/parity/**"
+      - ".github/workflows/ci-slint.yml"
+
+concurrency:
+  group: ci-slint-${{ github.ref }}
+  # keep in-progress runs on main alive for bisect integrity; cancel superseded PR runs
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  slint:
+    name: Slint shell (windows-latest)
+    runs-on: windows-latest
+    # First run compiles Skia + Slint from scratch (~15 min); the rust-cache
+    # below makes later runs much shorter.
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Rust (stable)
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
+        with:
+          # the action denies cargo warnings by default; this is a build check, not a lint gate
+          build-warnings: warn
+          cache: false
+
+      # The Skia build script downloads its prebuilt binaries from GitHub, which
+      # a hosted runner reaches directly (the SKIA_BINARIES_URL mirror documented
+      # in AGENTS.md is a local-network workaround, not a CI requirement).
+      - name: Rust cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            slint
+            quota-core
+
+      # The Slint shell cannot read CSS custom properties, so this file must
+      # move together with src/theme.css (see PARITY.md §10).
+      - name: Design tokens agree
+        run: python scripts/parity/check_tokens.py
+
+      - name: Cargo fmt
+        working-directory: slint
+        run: cargo fmt --check
+
+      - name: Cargo clippy
+        working-directory: slint
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      # Unit tests only: the --test-* self-checks need an interactive desktop
+      # and this machine's account, so they stay local (PARITY.md §13).
+      - name: Cargo test
+        working-directory: slint
+        run: cargo test --locked

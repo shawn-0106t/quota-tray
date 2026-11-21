@@ -49,6 +49,11 @@ the English notes first, then the Chinese mirror.
 - `--test-close`: posts `WM_CLOSE` to the panel, settings, skills and menu,
   proves each one hides rather than dying, reopens the dialogs, and checks that
   the skills window keeps a dragged position across the reopen.
+- `ci-slint.yml`: the shell's own CI workflow runs the token gate plus
+  `fmt`/`clippy`/`test` for `slint/` when a push or PR touches the shell, the
+  shared data layer, `src/theme.css`, the embedded icons or `scripts/parity/`.
+  It is path-filtered (a Skia build must not run for an unrelated frontend
+  change) and branch protection does not require it until the shell ships.
 - `scripts/parity/check_tokens.py`: the Slint shell cannot read CSS custom
   properties, so `slint/ui/tokens.slint` re-declares every colour token. The
   gate compares all 15 tokens in both themes plus every `drop-shadow-*`
@@ -83,6 +88,10 @@ the English notes first, then the Chinese mirror.
   抓出上面四处偏差与缺失的关闭自检。
 - **新增**：`--test-close`——向面板/设置/skills/菜单逐个投递 `WM_CLOSE`，证明只隐藏
   不销毁、设置与 skills 能重开，并断言 skills 拖动后的位置跨重开不变。
+- **新增**：`ci-slint.yml`——壳自己的 CI：推送或 PR 触及 `slint/`、共享数据层、
+  `src/theme.css`、内嵌图标或 `scripts/parity/` 时跑 token 门禁 + `fmt`/`clippy`/
+  `test`。它按路径过滤（无关的前端改动不必付一次 Skia 构建），在壳进入发布线之前
+  不被 branch protection 强制。
 - **新增**：`scripts/parity/check_tokens.py`——Slint 读不到 CSS 自定义属性，
   `slint/ui/tokens.slint` 只能复刻全部颜色 token。门禁按两种主题逐个比对 15 个
   token 与所有 `drop-shadow-*` 声明，任一不一致 CI 直接失败；`--ink-3` 只改了一边

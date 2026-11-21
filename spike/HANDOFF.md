@@ -1,6 +1,6 @@
 # HANDOFF — 不依赖 Tauri 的 Quota Tray（Slint + Skia）
 
-> 新对话从这里接手。一句话现状：**静态视觉、P0 交互、P1 `quota-core` 抽取、P2 真实面板、P3 三个窗口与 P4 登录链路都已完成并量化（`spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md`、`spike/p3/REPORT.md`、`spike/p4/REPORT.md`）；新壳代码在 `slint/`，四个窗口全部可用、设置落盘重启生效、skills 懒加载、托盘菜单在光标处、DeepSeek 登录窗作为子进程跑通（捕获 / 拦截 / 拒收 / Clear 都有自动证据）；下一步 P5 对齐门禁。**
+> 新对话从这里接手。一句话现状：**静态视觉、P0 交互、P1 `quota-core` 抽取、P2 真实面板、P3 三个窗口、P4 登录链路与 P5 对齐门禁都已完成并量化（`spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md`、`spike/p3/REPORT.md`、`spike/p4/REPORT.md`、`spike/p5/REPORT.md`）；新壳代码在 `slint/`，四个窗口全部可用、设置落盘重启生效、skills 懒加载、托盘菜单在光标处、DeepSeek 登录窗作为子进程跑通（捕获 / 拦截 / 拒收 / Clear 都有自动证据），`PARITY.md` 的 66 行矩阵没有 ❌，token 漂移与壳的 fmt/clippy/test 已接进 CI。**
 
 ## 0. 位置与前提
 
@@ -123,7 +123,7 @@ spike/p0/              # P0 交互 spike：壳的骨架（Anchor / tray-icon / �
 | **P2 面板（已完成 2026-11-15）** | 新壳 `slint/`：`quota-core` 真实数据、1–4 模型行、`ActiveTab` 持久化、夹取滚动；结果见 `spike/p2/REPORT.md` | 17 个变体高度 Δ=0；8 个变体文本带 ≤1.00 css px；225% 下漂移 0 px（10 次切换 469 采样）；连点 30 次 drift 0；`ActiveTab` 5 项断言；夹取滚动 PASS |
 | **P3 设置 / skills / menu（已完成 2026-11-15）** | 三窗 + 凭证状态 + 手工粘贴 + 自启动/便携/单实例/主题；结果见 `spike/p3/REPORT.md` | 落盘 → 子进程重启读回 PASS；8 组文本带 ≤1.00 css px；显隐语义 `--test-dialogs` PASS |
 | **P4 登录完整链路（已完成 2026-11-15）** | 子进程 `--login-host` + `--test-login` + `--test-signin`；接上设置窗的「Sign in…」与 Clear 的 cancel/epoch；结果见 `spike/p4/REPORT.md` | 四项探针全 PASS；用户关窗后设置窗还原；Clear 杀子进程且不被回写；`quota-core` 41 测试 |
-| P5 对齐矩阵与门禁（3–4 天） | `PARITY.md`、token 漂移门禁、截图重生成、CI job | 矩阵无 ❌（`quota-core` 的 fmt/clippy/test 已在 P1 接入 CI，且不阻塞现版） |
+| **P5 对齐矩阵与门禁（已完成 2026-11-21）** | `PARITY.md`、token 漂移门禁、截图重生成、CI job；结果见 `spike/p5/REPORT.md` | 66 行矩阵无 ❌；`check_tokens.py` 抓到真实漂移后归零；`ci-slint.yml` 路径过滤门禁（fmt/clippy/test `--locked`）；截图与 `main` 逐字节一致 |
 
 **P5 进行中（2026-11-21）**：先做了「镜像漂移 + token 门禁」这一刀。
 
@@ -140,7 +140,8 @@ spike/p0/              # P0 交互 spike：壳的骨架（Anchor / tray-icon / �
 4. **系统关闭（Alt+F4 / `WM_CLOSE`）的状态同步**：Slint 默认只把窗口隐藏，`visible` / `settings_open` / `skills_open` 不更新——托盘开合会「点一次没反应」，两个弹窗会永远拒绝重开。四个窗口现在都接 `on_close_requested`（`wire_close_requests`）。
 5. 新增 `--test-close`：面板/设置/skills/菜单逐个 `WM_CLOSE` → 隐藏 → 重开，并断言 skills 拖动后的位置跨重开不变。七行 `ok` + `verdict=PASS`。
 
-- 仍待做：`slint` 的 CI job（fmt 便宜；clippy/test 要下 Skia 预编译包，需要拍板）、截图/证据的整轮重跑、P5 REPORT 汇总。
+- CI：新增 `.github/workflows/ci-slint.yml`——按路径触发（`slint/**`、`quota-core/**`、`src/theme.css`、`src-tauri/icons/**`、`scripts/parity/**`），跑 token 门禁 + `cargo fmt --check` + `clippy --locked -D warnings` + `test --locked`。单独的 workflow 而不是塞进 `ci.yml`，理由是不让无关的前端改动付一次 Skia 构建；壳进入发布线前 branch protection 不强制它。Skia 预编译包在 runner 上直连 GitHub 下载，`SKIA_BINARIES_URL` 镜像仍只是本机网络的办法。
+- 汇总：`spike/p5/REPORT.md`（验收、数字、4 处发现、陷阱、回归、未证明项）。P5 的四项全部完成；`ci-slint.yml` 尚未在 GitHub runner 上跑过，下一次 push 是它的首跑。
 
 ## 6. 陷阱清单（都踩过）
 
@@ -289,7 +290,7 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 
 ## 8. 给新对话的第一句（可直接粘贴）
 
-> 接手 `..\quota-tray-slint`（分支 `spike/slint-demo`）。先读 `spike/HANDOFF.md`，再读 `spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md`、`spike/p3/REPORT.md` 与 `spike/p4/REPORT.md`。P0–P4 都已完成，新壳代码在 `slint/`（crate `quota-tray-slint`）：面板接 `quota-core` 真实数据、`ActiveTab` 持久化、夹取滚动；设置窗落盘重启生效；skills 懒加载；托盘右键光标处菜单；DeepSeek 登录窗是子进程（`--login-host`，tao + wry），捕获 / fetch 拦截 / 拒收 / Clear 都有自动证据，并且顺带修好了 `quota-core` 的 `verify_user_token`（平台对坏 token 回 200）。下一步按 HANDOFF §5 做 P5：`PARITY.md`、token 漂移门禁、截图重生成、CI job。
+> 接手 `..\quota-tray-slint`（分支 `spike/slint-demo`）。先读 `spike/HANDOFF.md`，再读 `spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md`、`spike/p3/REPORT.md`、`spike/p4/REPORT.md` 与 `spike/p5/REPORT.md`。P0–P5 都已完成，新壳代码在 `slint/`（crate `quota-tray-slint`）：面板接 `quota-core` 真实数据、`ActiveTab` 持久化、夹取滚动；设置窗落盘重启生效；skills 懒加载；托盘右键光标处菜单；DeepSeek 登录窗是子进程（`--login-host`，tao + wry），捕获 / fetch 拦截 / 拒收 / Clear 都有自动证据；`PARITY.md` 的 66 行矩阵没有 ❌；token 漂移门禁与 `ci-slint.yml`（fmt/clippy/test `--locked`）已接进 CI。下一步是按 §9 拍板：是否以 Slint 版替代 Tauri 版、发布线怎么切。
 
 ## 9. 待拍板
 
