@@ -38,7 +38,13 @@ pub fn open(shell: &Rc<RefCell<Shell>>) {
         s.skills_ui
             .window()
             .set_size(LogicalSize::new(SKILLS_W, SKILLS_H));
-        centre(&s.skills_ui);
+        // Centre on the first open only: the sheet is draggable, and the Tauri
+        // shell keeps a dragged position across reopens (a same-size apply just
+        // re-pins the size, PLAN §4).
+        if !s.skills_placed {
+            centre(&s.skills_ui);
+            s.skills_placed = true;
+        }
         if s.skills_cache.is_none() {
             s.skills_ui.set_summary("LOADING…".into());
         }

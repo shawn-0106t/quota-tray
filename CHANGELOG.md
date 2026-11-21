@@ -31,9 +31,24 @@ the English notes first, then the Chinese mirror.
   `limits[0]` with a test; `demo/heights.py` measures the shipped windows by
   default (`--demos` keeps the frozen history) and `demo/check_contrast.py`
   parses `src/theme.css` instead of a transcribed table.
+- The Slint shell now matches the Tauri shell on four behaviours the P5 matrix
+  found: the panel's Console link carries the same `?from=` attribution; every
+  window sets its OS title; the skills sheet is centred only on its first open,
+  so a dragged position survives a reopen; and a system close (Alt+F4 /
+  `WM_CLOSE`) updates the shell's `visible`/`settings_open`/`skills_open` flags
+  — without that the tray toggle hid instead of showing and both dialogs
+  refused to reopen for the rest of the session.
 
 ### Added
 
+- `PARITY.md`: the P5 matrix compares the Tauri and Slint shells feature by
+  feature (data, panel, windows, tray, settings, skills, sign-in, storage,
+  recovery, gates). Every row carries a check or a reason; ❌ is not allowed.
+  Writing it found the four mismatches above plus the missing close-request
+  coverage.
+- `--test-close`: posts `WM_CLOSE` to the panel, settings, skills and menu,
+  proves each one hides rather than dying, reopens the dialogs, and checks that
+  the skills window keeps a dragged position across the reopen.
 - `scripts/parity/check_tokens.py`: the Slint shell cannot read CSS custom
   properties, so `slint/ui/tokens.slint` re-declares every colour token. The
   gate compares all 15 tokens in both themes plus every `drop-shadow-*`
@@ -59,6 +74,15 @@ the English notes first, then the Chinese mirror.
   `Expired` 而不是 `Fetch failed`；5 小时窗口固定取 `limits[0]` 并有单测；
   `demo/heights.py` 默认量发布产物（`--demos` 保留冻结历史），
   `demo/check_contrast.py` 改为直接解析 `src/theme.css`。
+- **修复**：P5 对齐矩阵抓出的四处 Slint 偏差——面板 Console 链接补上与现版相同的
+  `?from=` 归因；四个窗口设置 OS 标题；skills 窗只在首次打开居中，拖动后的位置
+  重开仍在；系统关闭（Alt+F4 / `WM_CLOSE`）同步 `visible`/`settings_open`/
+  `skills_open`，否则托盘开合会「点一次没反应」、两个弹窗整场会话拒绝重开。
+- **新增**：`PARITY.md`——Tauri 壳与 Slint 壳的逐项矩阵（数据、面板、窗口、托盘、
+  设置、skills、登录、存储、恢复、门禁），每行带证据或理由，不允许 ❌；写矩阵的过程
+  抓出上面四处偏差与缺失的关闭自检。
+- **新增**：`--test-close`——向面板/设置/skills/菜单逐个投递 `WM_CLOSE`，证明只隐藏
+  不销毁、设置与 skills 能重开，并断言 skills 拖动后的位置跨重开不变。
 - **新增**：`scripts/parity/check_tokens.py`——Slint 读不到 CSS 自定义属性，
   `slint/ui/tokens.slint` 只能复刻全部颜色 token。门禁按两种主题逐个比对 15 个
   token 与所有 `drop-shadow-*` 声明，任一不一致 CI 直接失败；`--ink-3` 只改了一边

@@ -35,6 +35,7 @@ This branch is a parallel investigation into a non-Tauri shell (Slint 1.18 + Ski
 | Behaviour (polling, credentials, failure semantics, traps) | `PLAN.md` §5, §7 |
 | Inherited Kimi behaviour (credential chain, parsing, tray/window lifecycle, WebView2 recovery) | `docs/SPEC.md` (Chinese) / `docs/SPEC_EN.md` — read the scope table at the top first; `PLAN.md` wins where they differ |
 | Phases and their acceptance criteria | `PLAN.md` §8 |
+| Which features the Slint shell shares with the Tauri shell | `PARITY.md` — the P5 matrix; every row carries a check or a reason, and ❌ is not allowed |
 
 If code and plan disagree, the plan wins until it is deliberately amended — change `PLAN.md` in the same commit as the behaviour change.
 
@@ -100,6 +101,7 @@ demo/                 # frozen design demos + review tooling (self-contained, ze
   make_readme_shots.py  # crops docs/screenshot-{light,dark}.png out of ui-demo.html
 README.md             # bilingual: English half, then 中文
 PLAN.md               # design + behaviour contract
+PARITY.md             # Tauri shell vs Slint shell: the P5 matrix (no ❌ allowed)
 STATUS.md             # progress snapshot / handoff — read this first when resuming work
 CHANGELOG.md          # Keep a Changelog, English + Chinese per release
 AGENTS.md             # this file
@@ -187,6 +189,8 @@ $EXE --test-settings --no-poll --config-dir "$ABS/cfg-settings" --max-settings-h
 $EXE --test-skills   --no-poll --config-dir "$ABS/cfg-skills"    # lazy scan, row model, scroll, refresh
 $EXE --test-menu     --no-poll --config-dir "$ABS/cfg-menu"      # cursor placement, row actions, blur-hide
 $EXE --test-dialogs  --no-poll --config-dir "$ABS/cfg-dialogs"   # panel blur suppressed, collapse on close
+$EXE --test-close    --no-poll --config-dir "$ABS/cfg-close"     # WM_CLOSE (Alt+F4) hides, flags stay in step,
+                                                     # panel/settings/skills reopen, skills keeps its dragged position
 $EXE --shots --no-poll --theme light --out .shots/p3/light --config-dir "$ABS/cfg-shots"   # evidence: fixed skills list
 PYTHONUTF8=1 python spike/p3/ref_windows.py                      # reference pages + rect baseline
 PYTHONUTF8=1 python spike/p3/compare_windows.py --shot .shots/p3/light/settings.png --window settings --theme light
@@ -277,6 +281,7 @@ New in this project:
 - **Colour semantics**: the accent (a quiet violet as of 2026-11-14: `#8c74b1` light / `#9d88bc` dark) has exactly two roles — usage (bars, chip) and "this cell is selected" (`--seg-ring` on a segmented control's active cell). Nothing else may take it: no switch tint, no button fill. Red = failure only; never colour a high-usage percentage; `Available` stays neutral. The rule is "the accent means usage or selection", not "the accent is blue" — the hue is a brand decision, the mapping is not.
 - **The card shadow has to fit the 28px shadow margin** (`--shadow: 0 8px 18px`): the window is transparent and only 28px of padding is reserved for the shadow, so anything blurrier is cut by the window edge and reads as a hard dark ring around the card instead of a shadow. Enlarging the blur means enlarging the margin in `tauri.conf.json` *and* `SHADOW_ROOM` in `common.ts` together.
 - **A colour token lives in two files**: a Slint global is per-component and cannot read CSS custom properties, so `src/theme.css` (both theme blocks) and `slint/ui/tokens.slint` (one `dark ? … : …` pair per token) must move together. `scripts/parity/check_tokens.py` compares all 15 tokens plus every `drop-shadow-*` declaration and fails CI on a mismatch; the `--ink-3` contrast raise (2026-11-20) is the drift it was written for. Never add a token to one side only — the gate treats extras as failures too.
+- **Alt+F4 reaches a Slint window as `CloseRequested`, and the default is "hide"**: hiding is what we want (windows are never destroyed), but Slint does not touch Rust state. Without `on_close_requested`, the panel's `visible` stays true (the tray toggle then hides instead of shows) and `settings_open`/`skills_open` stay true (those sheets then refuse to reopen forever). `wire_close_requests()` handles all four windows; `--test-close` proves close → reopen → dragged position. Any new window needs the same hook.
 
 ## Security considerations
 

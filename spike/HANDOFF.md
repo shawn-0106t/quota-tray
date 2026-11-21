@@ -131,7 +131,16 @@ spike/p0/              # P0 交互 spike：壳的骨架（Anchor / tray-icon / �
 - 门禁：`scripts/parity/check_tokens.py` 逐个比对 `src/theme.css` 的 15 个颜色 token（两主题）与 `slint/ui/tokens.slint`，并检查所有 `drop-shadow-*` 的 `0/8/18/0` 几何；多余 token、缺 token、单边改动一律失败。已验证能抓到旧的 `--ink-3`（`#0000004d` vs `#00000070`）和 blur 20px，修好后 0 mismatch。CI 在 `Version carriers agree` 之后新增 `Design tokens agree` 一步。
 - 同时删掉了 `Tokens.stage`：它在 Slint 侧无任何引用（demo 舞台色只在 `panel-demo-e.html`），门禁把多余 token 记为失败，留着会挡住第一轮。
 - 回归：`quota-core` 48 tests、`slint` 6 tests、两 crate 的 fmt/clippy 全绿；`heights_ref.py --compare` 17 个变体仍 Δ=0.00；`check_contrast.py` 18/18；`fmt_parity.py` 45 例 TS==Rust；README 截图重生成后字节未变。
-- 仍待做：`PARITY.md` 矩阵、`slint` 的 CI job（fmt 便宜；clippy/test 要下 Skia 预编译包，需要拍板）、截图/证据的整轮重跑放到矩阵之后。
+
+**P5 第二刀（2026-11-21）：`PARITY.md` 已落地。** 66 行矩阵按数据/面板/窗口/托盘/设置/skills/登录/存储/恢复/门禁分组，每行带证据，状态只有 ✅ / ⚠️ / N/A，**没有 ❌**。矩阵写完后当场抓出并修掉 4 处真实偏差，并补了 1 处覆盖缺口：
+
+1. 面板 Console 链接补上 `?from=kfc_overview_topbar`，与 `lib.rs::CONSOLE_URL` 一致。
+2. 四个窗口补上 OS 标题（`Quota Tray` / `Quota Tray Settings` / `Kimi Skills` / `Quota Tray Menu`），与 `tauri.conf.json` 一致。
+3. skills 窗只在首次打开居中：新增 `Shell::skills_placed`，重开保留用户拖动的位置（现版 `show_skills_window` 的规则）。
+4. **系统关闭（Alt+F4 / `WM_CLOSE`）的状态同步**：Slint 默认只把窗口隐藏，`visible` / `settings_open` / `skills_open` 不更新——托盘开合会「点一次没反应」，两个弹窗会永远拒绝重开。四个窗口现在都接 `on_close_requested`（`wire_close_requests`）。
+5. 新增 `--test-close`：面板/设置/skills/菜单逐个 `WM_CLOSE` → 隐藏 → 重开，并断言 skills 拖动后的位置跨重开不变。七行 `ok` + `verdict=PASS`。
+
+- 仍待做：`slint` 的 CI job（fmt 便宜；clippy/test 要下 Skia 预编译包，需要拍板）、截图/证据的整轮重跑、P5 REPORT 汇总。
 
 ## 6. 陷阱清单（都踩过）
 

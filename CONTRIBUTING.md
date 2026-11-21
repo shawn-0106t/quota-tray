@@ -90,10 +90,12 @@ This project keeps both languages in one file rather than a `.zh-CN` companion:
 - `README.md` — English first, then 中文. The English half is authoritative.
 - `CHANGELOG.md` — one section per release, English notes then the 中文 mirror.
 - `PLAN.md` / `STATUS.md` are in Chinese; `AGENTS.md` is in English; `docs/SPEC.md` is the
-  inherited Chinese spec with an English mirror in `docs/SPEC_EN.md`.
+  inherited Chinese spec with an English mirror in `docs/SPEC_EN.md`. `PARITY.md` (the
+  Tauri-vs-Slint matrix) is in Chinese and carries a check or a reason per row.
 
 A behaviour change updates `PLAN.md` (the contract), `AGENTS.md` (the traps worth
-remembering) and `CHANGELOG.md` in the same PR.
+remembering) and `CHANGELOG.md` in the same PR. A change that reaches the Slint shell also
+updates its `PARITY.md` row and evidence.
 
 ## Submitting changes
 
@@ -194,10 +196,11 @@ PYTHONUTF8=1 python scripts/parity/check_tokens.py  # theme.css 与 slint/ui/tok
 - `README.md` —— 英文在前、中文在后，英文为权威版本。
 - `CHANGELOG.md` —— 每个 release 一节，英文在前、中文镜像在后。
 - `PLAN.md` / `STATUS.md` 为中文，`AGENTS.md` 为英文；`docs/SPEC.md` 是继承来的中文
-  规格，英文镜像在 `docs/SPEC_EN.md`。
+  规格，英文镜像在 `docs/SPEC_EN.md`；`PARITY.md`（Tauri 与 Slint 的对齐矩阵）为中文，
+  每行都带证据或理由。
 
 行为变更要在同一个 PR 里同时更新 `PLAN.md`（契约）、`AGENTS.md`（值得记的坑）与
-`CHANGELOG.md`。
+`CHANGELOG.md`。触及 Slint 壳的行为还要同步它的 `PARITY.md` 行与证据。
 
 ## 提交变更
 

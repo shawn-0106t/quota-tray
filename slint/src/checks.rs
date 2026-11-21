@@ -7,6 +7,7 @@
 //   --test-tab-anim    30 clicks, bottom-edge drift
 //   --test-blur        focus loss -> hidden latency
 //   --test-tray-click  posted tray callback messages
+//   --test-close       WM_CLOSE (Alt+F4) hides, flags stay in step, windows reopen
 //   --hold             keep the panel on screen (screenshots)
 use crate::app::{Data, Msg};
 use crate::height::{GAP, MARGIN, PANEL_W};
@@ -1700,6 +1701,181 @@ pub fn start_dialogs(shell: &Rc<RefCell<Shell>>) {
         );
         let _ = slint::quit_event_loop();
     });
+}
+
+/// `--test-close`: a system close (Alt+F4 arrives as `WM_CLOSE`) hides a
+/// window instead of destroying it, and the shell's flags follow. Without that
+/// the tray toggle fought a stale `visible`, and the two dialogs could never
+/// reopen because `settings_open`/`skills_open` stayed true.
+pub fn start_close(shell: &Rc<RefCell<Shell>>) {
+    shell::show_panel(shell);
+    let failures = Rc::new(std::cell::Cell::new(0u32));
+    let state = Rc::new(std::cell::Cell::new(0u8));
+    let wait = Rc::new(std::cell::Cell::new(0u8));
+    let moved_pos = Rc::new(std::cell::Cell::new((0i32, 0i32)));
+    let weak = Rc::downgrade(shell);
+    let timer = Rc::new(Timer::default());
+    let stopper = timer.clone();
+    let f = failures.clone();
+    let s = state.clone();
+    let w = wait.clone();
+    let m = moved_pos.clone();
+    timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_millis(100),
+        move || {
+            let Some(shell) = weak.upgrade() else { return };
+            w.set(w.get() + 1);
+            let ready = match s.get() {
+                0 | 1 => w.get() >= 5,
+                2 => w.get() >= 6,
+                3 | 5 => w.get() >= 7,
+                4 => w.get() >= 6,
+                6 => w.get() >= 9,
+                7 => w.get() >= 7,
+                8 => w.get() >= 8,
+                9 => w.get() >= 7,
+                _ => w.get() >= 6,
+            };
+            if !ready {
+                return;
+            }
+            w.set(0);
+            match s.get() {
+                0 => {
+                    match shell.borrow().hwnd {
+                        Some(hwnd) => post_close(hwnd),
+                        None => {
+                            f.set(f.get() + 1);
+                            println!("close: no panel hwnd FAIL");
+                        }
+                    }
+                    s.set(1);
+                }
+                1 => {
+                    let visible = shell.borrow().visible;
+                    if visible {
+                        f.set(f.get() + 1);
+                    }
+                    println!("close: panel hidden after WM_CLOSE ok={}", ok_str(!visible));
+                    shell::show_panel(&shell);
+                    s.set(2);
+                }
+                2 => {
+                    let visible = shell.borrow().visible;
+                    let on_screen = shell.borrow().hwnd.map(shell::is_visible).unwrap_or(false);
+                    let ok = visible && on_screen;
+                    if !ok {
+                        f.set(f.get() + 1);
+                    }
+                    println!("close: panel shows again ok={}", ok_str(ok));
+                    crate::win::settings::open(&shell);
+                    s.set(3);
+                }
+                3 => {
+                    match shell::hwnd_of(shell.borrow().settings_ui.window()) {
+                        Some(hwnd) => post_close(hwnd),
+                        None => {
+                            f.set(f.get() + 1);
+                            println!("close: no settings hwnd FAIL");
+                        }
+                    }
+                    s.set(4);
+                }
+                4 => {
+                    let open = shell.borrow().settings_open;
+                    if open {
+                        f.set(f.get() + 1);
+                    }
+                    println!("close: settings closed by WM_CLOSE ok={}", ok_str(!open));
+                    crate::win::settings::open(&shell);
+                    s.set(5);
+                }
+                5 => {
+                    let open = shell.borrow().settings_open;
+                    if !open {
+                        f.set(f.get() + 1);
+                    }
+                    println!("close: settings reopens ok={}", ok_str(open));
+                    crate::win::skills::open(&shell);
+                    s.set(6);
+                }
+                6 => {
+                    match shell::hwnd_of(shell.borrow().skills_ui.window()) {
+                        Some(hwnd) => post_close(hwnd),
+                        None => {
+                            f.set(f.get() + 1);
+                            println!("close: no skills hwnd FAIL");
+                        }
+                    }
+                    s.set(7);
+                }
+                7 => {
+                    let open = shell.borrow().skills_open;
+                    if open {
+                        f.set(f.get() + 1);
+                    }
+                    println!("close: skills closed by WM_CLOSE ok={}", ok_str(!open));
+                    // A dragged position must survive the reopen: move the
+                    // window, open it again and compare. `skills_placed` stops
+                    // the second open from re-centring (Tauri's rule).
+                    let target = {
+                        let s = shell.borrow();
+                        let pos = s.skills_ui.window().position();
+                        let target = (pos.x + 40, pos.y + 40);
+                        s.skills_ui
+                            .window()
+                            .set_position(slint::PhysicalPosition::new(target.0, target.1));
+                        target
+                    };
+                    m.set(target);
+                    crate::win::skills::open(&shell);
+                    s.set(8);
+                }
+                8 => {
+                    let open = shell.borrow().skills_open;
+                    let pos = shell.borrow().skills_ui.window().position();
+                    let target = m.get();
+                    let kept =
+                        (pos.x - target.0).abs() <= 2 && (pos.y - target.1).abs() <= 2;
+                    let ok = open && kept;
+                    if !ok {
+                        f.set(f.get() + 1);
+                    }
+                    println!(
+                        "close: skills reopens at the dragged position ok={} (pos={pos:?} want={target:?})",
+                        ok_str(ok)
+                    );
+                    let (_, _, wa_right, wa_bottom) = shell::work_area_phys();
+                    crate::win::menu::show_at(&shell, wa_right - 40.0, wa_bottom - 40.0);
+                    s.set(9);
+                }
+                9 => {
+                    match shell::hwnd_of(shell.borrow().menu_ui.window()) {
+                        Some(hwnd) => post_close(hwnd),
+                        None => {
+                            f.set(f.get() + 1);
+                            println!("close: no menu hwnd FAIL");
+                        }
+                    }
+                    s.set(10);
+                }
+                _ => {
+                    let open = shell.borrow().menu_open;
+                    if open {
+                        f.set(f.get() + 1);
+                    }
+                    println!("close: menu closed by WM_CLOSE ok={}", ok_str(!open));
+                    println!(
+                        "close: verdict={}",
+                        if f.get() == 0 { "PASS" } else { "FAIL" }
+                    );
+                    stopper.stop();
+                    let _ = slint::quit_event_loop();
+                }
+            }
+        },
+    );
 }
 
 /// `--test-signin` (P4): the settings sheet's "Sign in…" and Clear wiring,

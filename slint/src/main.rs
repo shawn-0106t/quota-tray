@@ -162,6 +162,8 @@ fn main() {
         shell::Mode::PrintSkills
     } else if flag(&args, "--test-dialogs") {
         shell::Mode::Dialogs
+    } else if flag(&args, "--test-close") {
+        shell::Mode::Close
     } else if flag(&args, "--test-signin") {
         shell::Mode::SignIn
     } else {

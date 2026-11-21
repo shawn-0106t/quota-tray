@@ -86,6 +86,10 @@ pub enum Mode {
     /// panel's blur auto-hide is suspended while a dialog is open, and closing
     /// the dialog collapses the panel (SPEC 20 / 21).
     Dialogs,
+    /// A system close (`WM_CLOSE`, i.e. Alt+F4) hides each window and keeps the
+    /// shell's open/visible flags in step, so the tray toggle and the dialog
+    /// reopen guards still work afterwards.
+    Close,
     /// The settings sheet's Sign in / Clear wiring against the real child
     /// process (`--test-signin`, P4).
     SignIn,
@@ -162,10 +166,12 @@ pub struct Shell {
     pub settings_open: bool,
     pub settings_h: f32,
     pub settings_max_override: Option<f32>,
-    /// Skills window: open flag, cached scan and the in-flight marker.
+    /// Skills window: open flag, cached scan, the in-flight marker and whether
+    /// it has been centred once (a dragged position survives a reopen).
     pub skills_open: bool,
     pub skills_cache: Option<Vec<quota_core::skills::SkillInfo>>,
     pub skills_scanning: bool,
+    pub skills_placed: bool,
     /// Tray menu: open flag and its one-time focus hook.
     pub menu_open: bool,
     pub menu_hooked: bool,
@@ -286,6 +292,7 @@ pub fn run(opts: Options) -> Result<(), Box<dyn std::error::Error>> {
         skills_open: false,
         skills_cache: None,
         skills_scanning: false,
+        skills_placed: false,
         menu_open: false,
         menu_hooked: false,
         cred_epoch: Arc::new(AtomicU64::new(0)),
@@ -357,7 +364,12 @@ fn wire_callbacks(shell: &Rc<RefCell<Shell>>) {
             match name.as_str() {
                 "console" => {
                     let _ = std::process::Command::new("cmd")
-                        .args(["/C", "start", "", "https://www.kimi.com/code/console"])
+                        .args([
+                            "/C",
+                            "start",
+                            "",
+                            "https://www.kimi.com/code/console?from=kfc_overview_topbar",
+                        ])
                         .spawn();
                 }
                 "refresh" => shell_action.borrow().workers.refresh.notify_waiters(),
@@ -433,6 +445,66 @@ fn wire_callbacks(shell: &Rc<RefCell<Shell>>) {
         let shell_ = shell.clone();
         s.menu_ui.on_action(move |name| {
             menu::on_action(&shell_, &name);
+        });
+    }
+    wire_close_requests(shell);
+}
+
+/// A system close (Alt+F4) reaches every window as `CloseRequested`. Leave the
+/// default "hide, never destroy" and put the shell's flags back in step: a
+/// stale `visible` makes the tray toggle hide instead of show, and a stale
+/// `settings_open`/`skills_open` makes those windows refuse to reopen forever.
+/// The Tauri shell does the same in `on_window_event`.
+fn wire_close_requests(shell: &Rc<RefCell<Shell>>) {
+    use slint::CloseRequestResponse;
+
+    {
+        let weak = Rc::downgrade(shell);
+        shell.borrow().ui.window().on_close_requested(move || {
+            if let Some(shell) = weak.upgrade() {
+                let mut s = shell.borrow_mut();
+                s.visible = false;
+                s.hiding = false;
+                s.hide_run += 1;
+                s.ui.set_shown(false);
+                crate::logf("panel: closed by the window manager");
+            }
+            CloseRequestResponse::HideWindow
+        });
+    }
+    {
+        let weak = Rc::downgrade(shell);
+        shell
+            .borrow()
+            .settings_ui
+            .window()
+            .on_close_requested(move || {
+                if let Some(shell) = weak.upgrade() {
+                    crate::win::settings::close(&shell, true);
+                }
+                CloseRequestResponse::HideWindow
+            });
+    }
+    {
+        let weak = Rc::downgrade(shell);
+        shell
+            .borrow()
+            .skills_ui
+            .window()
+            .on_close_requested(move || {
+                if let Some(shell) = weak.upgrade() {
+                    crate::win::skills::close(&shell);
+                }
+                CloseRequestResponse::HideWindow
+            });
+    }
+    {
+        let weak = Rc::downgrade(shell);
+        shell.borrow().menu_ui.window().on_close_requested(move || {
+            if let Some(shell) = weak.upgrade() {
+                crate::win::menu::hide(&shell);
+            }
+            CloseRequestResponse::HideWindow
         });
     }
 }
@@ -1079,6 +1151,7 @@ fn startup_mode(shell: &Rc<RefCell<Shell>>, seconds: u64) {
         Mode::Skills => checks::start_skills(shell),
         Mode::Shots => checks::start_shots(shell),
         Mode::Dialogs => checks::start_dialogs(shell),
+        Mode::Close => checks::start_close(shell),
         Mode::SignIn => checks::start_signin(shell),
     }
 }
