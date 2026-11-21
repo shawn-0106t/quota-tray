@@ -161,6 +161,10 @@ export component Panel inherits Window {
     // #root in main.css: opacity 0 + translateY(16px) when hidden.
     in-out property <float> body-opacity: 0;
     in-out property <length> body-lift: 16px;
+    // Resting offset of the hidden state. Enter starts from 16px, exit targets
+    // 12px (src/main.css: `.enter` 16, `.leave` 12); Rust sets this just before
+    // flipping `shown`, so the state animation has the right endpoint.
+    in-out property <length> lift-rest: 16px;
 
     callback request-tab(bool);
     callback action(string);
@@ -212,7 +216,7 @@ export component Panel inherits Window {
             fade-kimi: 1;
             fade-ds: 0;
             body-opacity: 0;
-            body-lift: 12px;
+            body-lift: lift-rest;
             in {
                 animate cell-h { duration: 167ms; easing: cubic-bezier(1.0, 0.0, 1.0, 1.0); }
                 animate fade-kimi { duration: 167ms; easing: cubic-bezier(0.0, 0.0, 0.0, 1.0); }
@@ -226,7 +230,7 @@ export component Panel inherits Window {
             fade-kimi: 0;
             fade-ds: 1;
             body-opacity: 0;
-            body-lift: 12px;
+            body-lift: lift-rest;
             in {
                 animate cell-h { duration: 200ms; easing: cubic-bezier(0.0, 0.0, 0.0, 1.0); }
                 animate fade-kimi { duration: 167ms; easing: cubic-bezier(1.0, 0.0, 1.0, 1.0); }

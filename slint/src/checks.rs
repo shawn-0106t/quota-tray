@@ -315,8 +315,11 @@ fn report_corner(shell: &Rc<RefCell<Shell>>) {
     let scale = s.ui.window().scale_factor() as f64;
     let (_, _, wa_right, wa_bottom) = shell::work_area_phys();
     let visible: Vec<&shell::Sample> = s.checks.samples.iter().filter(|x| x.visible).collect();
-    if visible.is_empty() {
-        println!("corner: verdict=FAIL (no visible samples)");
+    if visible.len() < 50 {
+        println!(
+            "corner: verdict=FAIL (only {} visible samples; the tab switches did not run)",
+            visible.len()
+        );
         return;
     }
     let card_right = |x: &shell::Sample| x.right as f64 - f64::from(MARGIN) * scale;
@@ -375,9 +378,18 @@ pub fn start_active_tab(shell: &Rc<RefCell<Shell>>) {
     ));
     let file = dir.join("settings.json");
     let failures = Rc::new(std::cell::Cell::new(0u32));
+    // The "fresh start" assertion only means something when the check owns a
+    // new profile: a rerun in the same --config-dir starts with the previous
+    // run's tab. Back the file up and restore it at the end.
+    let settings_backup = std::fs::read(&file).ok();
+    let fresh = settings_backup.is_none();
 
     let initial = shell.borrow().data.settings.active_tab.clone();
-    if initial == "kimi" {
+    if !fresh {
+        println!(
+            "active-tab: existing settings.json (ActiveTab={initial:?}) — fresh-start check skipped"
+        );
+    } else if initial == "kimi" {
         println!("active-tab: fresh start reads kimi ok");
     } else {
         failures.set(failures.get() + 1);
@@ -437,6 +449,14 @@ pub fn start_active_tab(shell: &Rc<RefCell<Shell>>) {
             "active-tab: verdict={}",
             if f2.get() == 0 { "PASS" } else { "FAIL" }
         );
+        match settings_backup {
+            Some(bytes) => {
+                let _ = std::fs::write(&file, bytes);
+            }
+            None => {
+                let _ = std::fs::remove_file(&file);
+            }
+        }
         let _ = slint::quit_event_loop();
     });
 }
@@ -521,6 +541,23 @@ pub fn start_tab_anim(shell: &Rc<RefCell<Shell>>) {
         },
     );
     shell.borrow_mut().checks.timers.push(Rc::new(watch));
+
+    // A stuck `switching` flag is exactly what this check exists to catch; the
+    // watcher above would wait forever for it, so bound the whole run.
+    let weak = Rc::downgrade(shell);
+    let guard = Timer::default();
+    guard.start(
+        slint::TimerMode::SingleShot,
+        Duration::from_secs(12),
+        move || {
+            let Some(shell) = weak.upgrade() else { return };
+            if !shell.borrow().checks.reported {
+                println!("tab-anim: verdict=FAIL (timed out waiting for the settle)");
+                let _ = slint::quit_event_loop();
+            }
+        },
+    );
+    shell.borrow_mut().checks.timers.push(Rc::new(guard));
 }
 
 fn finish_tab_anim(shell: &Rc<RefCell<Shell>>) {
@@ -595,11 +632,11 @@ pub fn start_blur(shell: &Rc<RefCell<Shell>>) {
                     if value == u128::MAX {
                         println!("blur: verdict=FAIL (still visible after 2000ms)");
                     } else {
+                        let budget = shell::HIDE_MS as u128 + 60;
                         println!(
-                            "blur: hidden-after={value}ms budget={}ms blur-event={} verdict={}",
-                            shell::HIDE_MS,
+                            "blur: hidden-after={value}ms budget={budget}ms blur-event={} verdict={}",
                             if blur_seen { "seen" } else { "MISSING" },
-                            if value <= shell::HIDE_MS as u128 + 60 {
+                            if blur_seen && value <= budget {
                                 "PASS"
                             } else {
                                 "FAIL"
@@ -872,24 +909,37 @@ pub fn start_windows(shell: &Rc<RefCell<Shell>>) {
 ///   * the sheet is content-sized, centred, and scrolls inside the card when a
 ///     `--max-settings-h` cap forces it.
 pub fn start_settings(shell: &Rc<RefCell<Shell>>) {
+    // Always exercise the 90% cap: without a cap the scroll branch never runs
+    // and the check used to pass while the cap was unverified.
+    if shell.borrow().settings_max_override.is_none() {
+        shell.borrow_mut().settings_max_override = Some(300.0);
+    }
     let dir = quota_core::settings::config_dir();
     let failures = Rc::new(std::cell::Cell::new(0u32));
+    let settings_file = dir.join("settings.json");
+    let fresh = std::fs::read(&settings_file).is_err();
+    SETTINGS_CREDENTIAL_BACKUP.with(|slot| *slot.borrow_mut() = Some(snapshot_credentials()));
+    SETTINGS_JSON_BACKUP.with(|slot| *slot.borrow_mut() = Some(std::fs::read(&settings_file).ok()));
 
     let before = read_settings_child(&dir);
     println!("settings: restart-before {before}");
-    check_line(
-        &failures,
-        &before,
-        "theme=system",
-        "default theme is system",
-    );
-    check_line(&failures, &before, "interval=5", "default interval is 5");
-    check_line(
-        &failures,
-        &before,
-        "autostart=false",
-        "default autostart is off",
-    );
+    if fresh {
+        check_line(
+            &failures,
+            &before,
+            "theme=system",
+            "default theme is system",
+        );
+        check_line(&failures, &before, "interval=5", "default interval is 5");
+        check_line(
+            &failures,
+            &before,
+            "autostart=false",
+            "default autostart is off",
+        );
+    } else {
+        println!("settings: existing settings.json — default-value checks skipped");
+    }
 
     // A seeded credential pair (the documented plaintext escape hatch) so the
     // DeepSeek statuses and Clear have something real to act on.
@@ -915,12 +965,16 @@ pub fn start_settings(shell: &Rc<RefCell<Shell>>) {
                 s.settings_ui.get_content_h(),
             )
         };
-        if theme_i == 0 && interval_i == 1 && !autostart {
+        let loaded = quota_core::settings::load();
+        let want_theme = crate::win::settings::theme_index(&loaded.theme);
+        let want_interval = crate::win::settings::interval_index(loaded.refresh_minutes);
+        if theme_i == want_theme && interval_i == want_interval && autostart == loaded.auto_start {
             println!("settings: backfill theme/interval/autostart ok");
         } else {
             f.set(f.get() + 1);
             println!(
-                "settings: backfill theme={theme_i} interval={interval_i} autostart={autostart} FAIL"
+                "settings: backfill theme={theme_i} interval={interval_i} autostart={autostart} want=({want_theme},{want_interval},{}) FAIL",
+                loaded.auto_start
             );
         }
         println!("settings: content-h={content:.1} natural-h={natural:.1}");
@@ -1071,15 +1125,17 @@ pub fn start_settings(shell: &Rc<RefCell<Shell>>) {
                 .take_snapshot()
                 .ok()
                 .map(|b| frame_hash(&b));
+            let title_top = shell.borrow().settings_ui.get_title_screen_y();
             shell.borrow().settings_ui.set_scroll_y(-120.0);
             let weak = Rc::downgrade(&shell);
             let f = f.clone();
             Timer::single_shot(Duration::from_millis(250), move || {
                 let Some(shell) = weak.upgrade() else { return };
-                let (scroll_y, bottom) = {
+                let (scroll_y, title_bottom, bottom) = {
                     let s = shell.borrow();
                     (
                         s.settings_ui.get_scroll_y(),
+                        s.settings_ui.get_title_screen_y(),
                         s.settings_ui
                             .window()
                             .take_snapshot()
@@ -1088,11 +1144,16 @@ pub fn start_settings(shell: &Rc<RefCell<Shell>>) {
                     )
                 };
                 let differs = matches!((top, bottom), (Some(a), Some(b)) if a != b);
-                if (scroll_y + 120.0).abs() <= 0.5 && differs {
-                    println!("settings: scrolled to {scroll_y:.1}, frame changed ok");
+                let title_fixed = (title_bottom - title_top).abs() <= 0.01;
+                if (scroll_y + 120.0).abs() <= 0.5 && differs && title_fixed {
+                    println!(
+                        "settings: scrolled to {scroll_y:.1}, frame changed, title fixed (y={title_bottom:.1}) ok"
+                    );
                 } else {
                     f.set(f.get() + 1);
-                    println!("settings: scroll-y={scroll_y:.1} frame-changed={differs} FAIL");
+                    println!(
+                        "settings: scroll-y={scroll_y:.1} frame-changed={differs} title-fixed={title_fixed} (y {title_top:.1}->{title_bottom:.1}) FAIL"
+                    );
                 }
                 crate::win::settings::clear(&shell);
             });
@@ -1152,7 +1213,7 @@ pub fn start_settings(shell: &Rc<RefCell<Shell>>) {
             };
             let raw = std::fs::read_to_string(&cred_file).unwrap_or_default();
             if !verifying
-                && note.contains("not saved")
+                && (note.contains("not saved") || note.contains("rate limited"))
                 && key == "Not configured"
                 && !raw.contains("sk-invalid")
             {
@@ -1197,6 +1258,7 @@ pub fn start_settings(shell: &Rc<RefCell<Shell>>) {
                     "settings: verdict={}",
                     if f.get() == 0 { "PASS" } else { "FAIL" }
                 );
+                restore_settings_files();
                 let _ = slint::quit_event_loop();
             });
         });
@@ -1590,6 +1652,7 @@ pub fn start_skills(shell: &Rc<RefCell<Shell>>) {
 /// halves are driven with real window focus, not by calling the handler.
 pub fn start_dialogs(shell: &Rc<RefCell<Shell>>) {
     let failures = Rc::new(std::cell::Cell::new(0u32));
+    let blurs_before_skills = Rc::new(std::cell::Cell::new(0u32));
     shell::show_panel(shell);
 
     let weak = Rc::downgrade(shell);
@@ -1610,21 +1673,27 @@ pub fn start_dialogs(shell: &Rc<RefCell<Shell>>) {
     let f = failures.clone();
     Timer::single_shot(Duration::from_millis(1200), move || {
         let Some(shell) = weak.upgrade() else { return };
-        let (visible, settings_open) = {
+        let (visible, settings_open, blurs) = {
             let s = shell.borrow();
-            (s.visible, s.settings_open)
+            (s.visible, s.settings_open, s.checks.blurs)
         };
-        if visible && settings_open {
-            println!("dialogs: settings open keeps the panel visible ok");
+        // The panel must actually have lost focus at least once: a no-op
+        // SetForegroundWindow would otherwise let this pass without exercising
+        // the suppression branch.
+        if visible && settings_open && blurs > 0 {
+            println!("dialogs: settings open keeps the panel visible (blurs={blurs}) ok");
         } else {
             f.set(f.get() + 1);
-            println!("dialogs: panel-visible={visible} settings-open={settings_open} FAIL");
+            println!(
+                "dialogs: panel-visible={visible} settings-open={settings_open} blurs={blurs} FAIL"
+            );
         }
         crate::win::settings::close_from_ui(&shell);
     });
 
     let weak = Rc::downgrade(shell);
     let f = failures.clone();
+    let before_open = blurs_before_skills.clone();
     Timer::single_shot(Duration::from_millis(1750), move || {
         let Some(shell) = weak.upgrade() else { return };
         let (visible, settings_open) = {
@@ -1651,23 +1720,28 @@ pub fn start_dialogs(shell: &Rc<RefCell<Shell>>) {
         }
         // Same pair for the skills window.
         shell::show_panel(&shell);
+        before_open.set(shell.borrow().checks.blurs);
         crate::win::skills::open(&shell);
         focus_taskbar();
     });
 
     let weak = Rc::downgrade(shell);
     let f = failures.clone();
+    let before_skills = blurs_before_skills.clone();
     Timer::single_shot(Duration::from_millis(2400), move || {
         let Some(shell) = weak.upgrade() else { return };
-        let (visible, skills_open) = {
+        let (visible, skills_open, blurs) = {
             let s = shell.borrow();
-            (s.visible, s.skills_open)
+            (s.visible, s.skills_open, s.checks.blurs)
         };
-        if visible && skills_open {
-            println!("dialogs: skills open keeps the panel visible ok");
+        let new_blur = blurs > before_skills.get();
+        if visible && skills_open && new_blur {
+            println!("dialogs: skills open keeps the panel visible (blurs={blurs}) ok");
         } else {
             f.set(f.get() + 1);
-            println!("dialogs: panel-visible={visible} skills-open={skills_open} FAIL");
+            println!(
+                "dialogs: panel-visible={visible} skills-open={skills_open} new-blur={new_blur} FAIL"
+            );
         }
         crate::win::skills::close(&shell);
     });
@@ -1900,10 +1974,14 @@ pub fn start_signin(shell: &Rc<RefCell<Shell>>) {
     // This check seeds a marker credential and then clears it, so whatever was
     // there has to come back afterwards: `--config-dir` can point at a real
     // profile, and a token destroyed that way is not recoverable.
-    SIGNIN_CREDENTIAL_BACKUP.with(|slot| *slot.borrow_mut() = Some(std::fs::read(&cred_file).ok()));
-    // A marker credential so "no usage token afterwards" is a real change, not
-    // an already-empty file that would pass even if nothing ran.
-    let _ = std::fs::write(&cred_file, r#"{"v":1,"apiKey":"sk-test","userToken":""}"#);
+    SIGNIN_CREDENTIAL_BACKUP.with(|slot| *slot.borrow_mut() = Some(snapshot_credentials()));
+    // A NON-empty marker token: round 1 asserts that the cancelled sign-in left
+    // it alone, and round 2 asserts Clear removed it. An empty seed made both
+    // checks true before and after, so a no-op Clear still passed.
+    let _ = std::fs::write(
+        &cred_file,
+        r#"{"v":1,"apiKey":"sk-test","userToken":"ut-test"}"#,
+    );
 
     let weak = Rc::downgrade(shell);
     let f = failures.clone();
@@ -1918,9 +1996,62 @@ pub fn start_signin(shell: &Rc<RefCell<Shell>>) {
 }
 
 thread_local! {
-    /// The credential file `--test-signin` found before it seeded its marker.
-    /// Restored in `finish_signin`, whatever path the check took.
-    static SIGNIN_CREDENTIAL_BACKUP: RefCell<Option<Option<Vec<u8>>>> = const { RefCell::new(None) };
+    /// The credential files `--test-signin` found before it seeded its marker.
+    /// Both the shared file and the private fallback are restored in
+    /// `finish_signin`, whatever path the check took.
+    static SIGNIN_CREDENTIAL_BACKUP: RefCell<Option<CredentialBackup>> = const { RefCell::new(None) };
+}
+
+type CredentialBackup = Vec<(std::path::PathBuf, Option<Vec<u8>>)>;
+
+thread_local! {
+    /// `--test-settings` seeds credentials and clears them; both files are
+    /// restored at the end. The settings file is restored too, so a real
+    /// `--config-dir` survives the check.
+    static SETTINGS_CREDENTIAL_BACKUP: RefCell<Option<CredentialBackup>> = const { RefCell::new(None) };
+    static SETTINGS_JSON_BACKUP: RefCell<Option<Option<Vec<u8>>>> = const { RefCell::new(None) };
+}
+
+fn restore_settings_files() {
+    let creds = SETTINGS_CREDENTIAL_BACKUP.with(|slot| slot.borrow_mut().take());
+    if let Some(creds) = creds {
+        restore_credentials(&creds);
+    }
+    let file = settings::config_dir().join("settings.json");
+    let json = SETTINGS_JSON_BACKUP.with(|slot| slot.borrow_mut().take());
+    if let Some(json) = json {
+        match json {
+            Some(bytes) => {
+                let _ = std::fs::write(&file, bytes);
+            }
+            None => {
+                let _ = std::fs::remove_file(&file);
+            }
+        }
+    }
+}
+
+fn snapshot_credentials() -> CredentialBackup {
+    quota_core::deepseek::credentials::files()
+        .into_iter()
+        .map(|path| {
+            let bytes = std::fs::read(&path).ok();
+            (path, bytes)
+        })
+        .collect()
+}
+
+fn restore_credentials(backup: &CredentialBackup) {
+    for (path, bytes) in backup {
+        match bytes {
+            Some(bytes) => {
+                let _ = std::fs::write(path, bytes);
+            }
+            None => {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+    }
 }
 
 type SigninStep = Rc<dyn Fn(Rc<RefCell<Shell>>, Rc<std::cell::Cell<u32>>, isize)>;
@@ -2047,14 +2178,16 @@ fn assert_settled(shell: &Rc<RefCell<Shell>>, failures: &Rc<std::cell::Cell<u32>
             s.login.last_code,
         )
     };
-    let token = quota_core::deepseek::credentials::status().user_token;
+    let status = quota_core::deepseek::credentials::status();
+    let token = status.user_token;
     // Exit 3 is "closed by the user" (login_host), which is what WM_CLOSE is.
     // Exit 1 is the fallback `kill_child`: the parent terminated it, and
-    // `settle` reports that as a cancellation too.
+    // `settle` reports that as a cancellation too. The seeded token must still
+    // be there: a cancelled sign-in changed nothing.
     let ok = !running
         && open
         && note.to_lowercase().contains("cancelled")
-        && !token
+        && token
         && matches!(code, Some(Some(3)) | Some(Some(1)));
     println!(
         "signin: round 1: running={running} sheet-open={open} code={code:?} note={note:?} token={token} {}",
@@ -2088,11 +2221,13 @@ fn clear_console(shell: Rc<RefCell<Shell>>, failures: Rc<std::cell::Cell<u32>>, 
     crate::win::settings::clear(&shell);
     let running = crate::login::is_running(&shell);
     let epoch = shell.borrow().cred_epoch.load(Ordering::SeqCst);
-    let token = quota_core::deepseek::credentials::status().user_token;
+    let status = quota_core::deepseek::credentials::status();
+    let token = status.user_token;
+    let api = status.api_key;
     let note = shell.borrow().settings_ui.get_ds_note().to_string();
-    let ok = !running && epoch == before + 1 && !token && !note.is_empty();
+    let ok = !running && epoch == before + 1 && !token && !api && !note.is_empty();
     println!(
-        "signin: round 2: running={running} epoch={before}->{epoch} token={token} note={note:?} {}",
+        "signin: round 2: running={running} epoch={before}->{epoch} token={token} api={api} note={note:?} {}",
         ok_str(ok)
     );
     if !ok {
@@ -2103,11 +2238,13 @@ fn clear_console(shell: Rc<RefCell<Shell>>, failures: Rc<std::cell::Cell<u32>>, 
     Timer::single_shot(Duration::from_millis(1200), move || {
         let Some(shell) = weak.upgrade() else { return };
         let running = crate::login::is_running(&shell);
-        let token = quota_core::deepseek::credentials::status().user_token;
+        let status = quota_core::deepseek::credentials::status();
+        let token = status.user_token;
+        let api = status.api_key;
         let open = shell.borrow().settings_open;
-        let ok = !running && !token && open;
+        let ok = !running && !token && !api && open;
         println!(
-            "signin: round 2: running={running} token={token} sheet-open={open} {}",
+            "signin: round 2: running={running} token={token} api={api} sheet-open={open} {}",
             ok_str(ok)
         );
         if !ok {
@@ -2131,17 +2268,8 @@ fn finish_signin(failures: &Rc<std::cell::Cell<u32>>) {
 fn restore_signin_credentials() {
     let backup = SIGNIN_CREDENTIAL_BACKUP.with(|slot| slot.borrow_mut().take());
     let Some(backup) = backup else { return };
-    let file = settings::config_dir().join("deepseek-credentials.json");
-    match backup {
-        Some(bytes) => {
-            let _ = std::fs::write(&file, bytes);
-            crate::logf("signin: credential file restored");
-        }
-        None => {
-            let _ = std::fs::remove_file(&file);
-            crate::logf("signin: seeded credential file removed");
-        }
-    }
+    restore_credentials(&backup);
+    crate::logf("signin: credential files restored");
 }
 
 fn post_close(hwnd: isize) {

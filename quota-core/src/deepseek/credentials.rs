@@ -25,6 +25,13 @@ fn private_file() -> PathBuf {
     settings::config_dir().join(CRED_FILE)
 }
 
+/// Every file a credential can live in, in read order (shared first). The
+/// sign-in probe hashes all of them: comparing only one path made its
+/// "the file is byte-identical" check vacuous after the shared-dir split.
+pub fn files() -> [PathBuf; 2] {
+    [shared_file(), private_file()]
+}
+
 /// Existence, not parseability: the one-time parent import is gated on "we have
 /// written our file", so a corrupt file must not let it run again (PLAN §5.2).
 fn exists() -> bool {
@@ -172,7 +179,7 @@ pub fn clear() {
 
 /// Write both values, DPAPI-sealed, preserving fields the caller left alone
 /// (including a blob that failed to decrypt and the import provenance).
-pub fn save(api_key: Option<&str>, user_token: Option<&str>, imported_from: Option<&str>) {
+pub fn save(api_key: Option<&str>, user_token: Option<&str>, imported_from: Option<&str>) -> bool {
     let existing = read_raw().unwrap_or_default();
     let file = CredFile {
         v: 1,
@@ -186,7 +193,7 @@ pub fn save(api_key: Option<&str>, user_token: Option<&str>, imported_from: Opti
         },
         imported_from: imported_from.map(str::to_string).or(existing.imported_from),
     };
-    write(&file);
+    write(&file)
 }
 
 fn write(file: &CredFile) -> bool {

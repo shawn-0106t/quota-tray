@@ -114,9 +114,12 @@ fn system_theme() -> &'static str {
 /// The UI's inbox plus everything a window needs to ask for background work.
 pub struct Workers {
     pub rx: Receiver<Msg>,
-    /// Every "Refresh now" / tray-hover prefetch fires this; both poll loops
-    /// wake up and fetch immediately.
-    pub refresh: Arc<Notify>,
+    /// "Refresh now" / tray-hover prefetch: one Notify per provider, with
+    /// `notify_one` so a click that lands while a fetch is running leaves a
+    /// stored permit instead of being lost (`notify_waiters` wakes only the
+    /// waiters registered at that instant).
+    kimi_refresh: Arc<Notify>,
+    ds_refresh: Arc<Notify>,
     tx: Sender<Msg>,
     handle: tokio::runtime::Handle,
     /// Current poll period, re-read after every wait so a Save applies at once.
@@ -141,7 +144,14 @@ impl Workers {
         if let Ok(mut period) = self.period.lock() {
             *period = Duration::from_secs(minutes.clamp(1, 30) as u64 * 60);
         }
-        self.refresh.notify_waiters();
+        self.refresh();
+    }
+
+    /// Ask both pollers to fetch now. `notify_one` stores a permit when a loop
+    /// is inside a fetch, so the request cannot fall between fetch and wait.
+    pub fn refresh(&self) {
+        self.kimi_refresh.notify_one();
+        self.ds_refresh.notify_one();
     }
 
     pub fn set_configured_theme(&self, theme: &str) {
@@ -174,7 +184,8 @@ impl Workers {
 /// the loops off, not the window's buttons dead).
 pub fn start(interval_minutes: i64, poll: bool) -> Workers {
     let (tx, rx) = mpsc::channel();
-    let refresh = Arc::new(Notify::new());
+    let kimi_refresh = Arc::new(Notify::new());
+    let ds_refresh = Arc::new(Notify::new());
     let period = Arc::new(Mutex::new(Duration::from_secs(
         interval_minutes.clamp(1, 30) as u64 * 60,
     )));
@@ -185,12 +196,20 @@ pub fn start(interval_minutes: i64, poll: bool) -> Workers {
         .build()
         .expect("tokio runtime");
     if poll {
-        spawn_pollers(&rt, &tx, &refresh, &period, &configured_theme);
+        spawn_pollers(
+            &rt,
+            &tx,
+            &kimi_refresh,
+            &ds_refresh,
+            &period,
+            &configured_theme,
+        );
     }
 
     Workers {
         rx,
-        refresh,
+        kimi_refresh,
+        ds_refresh,
         tx,
         handle: rt.handle().clone(),
         period,
@@ -202,13 +221,14 @@ pub fn start(interval_minutes: i64, poll: bool) -> Workers {
 fn spawn_pollers(
     rt: &tokio::runtime::Runtime,
     tx: &Sender<Msg>,
-    refresh: &Arc<Notify>,
+    kimi_refresh: &Arc<Notify>,
+    ds_refresh: &Arc<Notify>,
     period: &Arc<Mutex<Duration>>,
     configured_theme: &Arc<Mutex<String>>,
 ) {
     {
         let tx = tx.clone();
-        let refresh = refresh.clone();
+        let refresh = kimi_refresh.clone();
         let period = period.clone();
         rt.spawn(async move {
             let mut last: Option<QuotaResult> = None;
@@ -231,7 +251,7 @@ fn spawn_pollers(
     }
     {
         let tx = tx.clone();
-        let refresh = refresh.clone();
+        let refresh = ds_refresh.clone();
         let period = period.clone();
         rt.spawn(async move {
             let mut last: Option<DeepseekResult> = None;

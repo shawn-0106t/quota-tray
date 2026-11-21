@@ -106,7 +106,9 @@ pub fn status(update: &quota_core::update::UpdateStatus) -> Status {
         }
         ("api-key", _) => ("API key (config.toml)".to_string(), false),
         (_, true) => ("Expired — sign in with the Kimi CLI".to_string(), true),
-        _ => ("Not found — sign in with the Kimi CLI".to_string(), true),
+        // Not configured, not broken: red is reserved for expired/unreadable
+        // (PLAN §3.5); the shipped frontend paints this row muted too.
+        _ => ("Not found — sign in with the Kimi CLI".to_string(), false),
     };
 
     let describe = |configured: bool| -> (String, bool) {
@@ -334,23 +336,28 @@ pub fn save_from_ui(shell: &Rc<RefCell<Shell>>) {
 /// Clear both stored DeepSeek credentials (PLAN §5.2). The file stays, empty,
 /// so the one-time legacy import cannot bring them back.
 pub fn clear(shell: &Rc<RefCell<Shell>>) {
+    // Invalidate any in-flight paste verification BEFORE the wipe: the worker
+    // compares this epoch between verify and save, so bumping it first closes
+    // the window where a verification could write the token back after Clear.
+    shell.borrow().cred_epoch.fetch_add(1, Ordering::SeqCst);
     // An open sign-in window is a live capture channel: kill it before the
     // credential goes, or the console's own session hands the hook a valid
     // token seconds later and the Clear looks like it did nothing (PLAN §4).
     crate::login::cancel(shell);
     deepseek::credentials::clear();
-    // Any verification already in flight must drop its result: the console's
-    // own session would otherwise hand it a valid token seconds later and the
-    // Clear would look like it did nothing (PLAN §4).
-    shell.borrow().cred_epoch.fetch_add(1, Ordering::SeqCst);
+    let env_sourced = deepseek::credentials::status().source == ds_credentials::Source::Env;
     {
         let s = shell.borrow();
         s.settings_ui.set_verifying(false);
         s.settings_ui.set_cred_note("".into());
         s.settings_ui.set_cred_note_bad(false);
         apply_status(&s);
-        s.settings_ui.set_ds_note(CLEAR_NOTE.into());
-        s.workers.refresh.notify_waiters();
+        // Env-sourced credentials survive Clear by design; the env note has to
+        // win over "Cleared." or the sheet claims a removal that did not happen.
+        if !env_sourced {
+            s.settings_ui.set_ds_note(CLEAR_NOTE.into());
+        }
+        s.workers.refresh();
     }
     crate::logf("settings: credentials cleared");
     resize(shell, false);
@@ -466,7 +473,7 @@ pub fn on_checked(
         s.settings_ui.set_cred_note(note.clone().into());
         s.settings_ui.set_cred_note_bad(bad);
         apply_status(&s);
-        s.workers.refresh.notify_waiters();
+        s.workers.refresh();
     }
     crate::logf(format!(
         "settings: verification done saved-api={saved_api} saved-token={saved_token} note={note:?}"

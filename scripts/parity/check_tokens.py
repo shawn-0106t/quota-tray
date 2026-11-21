@@ -50,11 +50,13 @@ def css_tokens() -> dict[str, dict[str, str]]:
     text = CSS.read_text(encoding="utf-8")
     tokens: dict[str, dict[str, str]] = {}
     for theme in THEMES:
-        block = re.search(CSS_BLOCK.format(theme=theme), text, re.S)
-        if not block:
-            raise SystemExit(f"theme block not found: {theme} in {CSS}")
+        blocks = list(re.finditer(CSS_BLOCK.format(theme=theme), text, re.S))
+        if len(blocks) != 1:
+            raise SystemExit(
+                f"expected exactly one {theme} theme block in {CSS}, found {len(blocks)}"
+            )
         found = {}
-        for name, value in CSS_DECL.findall(block.group(1)):
+        for name, value in CSS_DECL.findall(blocks[0].group(1)):
             if name in found:
                 raise SystemExit(f"duplicate token {name} in the {theme} block of {CSS}")
             # Trailing comments are written on their own line in theme.css,
@@ -99,7 +101,10 @@ def slint_shadows() -> list[tuple[str, int, str, str]]:
     found = []
     for path in sorted(SLINT_UI.glob("*.slint")):
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            for key, value in DROP_SHADOW.findall(line):
+            # A commented-out declaration is not a declaration: without this,
+            # `// drop-shadow-…` still counted as a live card shadow.
+            code = line.split("//", 1)[0]
+            for key, value in DROP_SHADOW.findall(code):
                 found.append((path.name, number, key, value.strip()))
     return found
 
@@ -173,9 +178,14 @@ def main() -> int:
             rows.append(("--shadow", geometry["light"][3], geometry["dark"][3], "shadow", "ok"))
 
     shadows = slint_shadows()
-    if not shadows:
+    # The panel card and every other card carry 5 declarations each; a shortfall
+    # means a card lost its shadow (the gate used to compare only what it found).
+    if len(shadows) < 10:
         problems += 1
-        print("no drop-shadow-* declarations found - did the Slint UI move?", file=sys.stderr)
+        print(
+            f"expected at least 10 live drop-shadow-* declarations, found {len(shadows)}",
+            file=sys.stderr,
+        )
     if geometry["light"][:3] != geometry["dark"][:3]:
         problems += 1
         print(

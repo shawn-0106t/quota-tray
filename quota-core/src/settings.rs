@@ -106,7 +106,12 @@ pub fn save(data: &SettingsData) {
     let dir = config_dir();
     let _ = fs::create_dir_all(&dir);
     if let Ok(json) = serde_json::to_string_pretty(data) {
-        let _ = fs::write(file_path(), json);
+        // Temp + rename: a crash mid-write must not leave a truncated file,
+        // which `load` would silently turn into every setting's default.
+        let tmp = dir.join("settings.json.tmp");
+        if fs::write(&tmp, json).is_ok() && fs::rename(&tmp, file_path()).is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
     }
 }
 

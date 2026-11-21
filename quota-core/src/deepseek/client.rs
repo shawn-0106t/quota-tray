@@ -130,6 +130,15 @@ async fn fetch_usage_body(
             return Err(error);
         }
         let body = resp.text().await.map_err(|_| "network-error".to_string())?;
+        // A 2xx is not a success: the platform answers 200 with
+        // `{"code":40003,…,"data":null}` for a dead token (the same envelope
+        // `verify_user_token` rejects at sign-in). Without this check the error
+        // body parses as an all-zero month, overwrites the last-good cache and
+        // pins the failing base — the pane then reads ¥0.00 as if it were real.
+        if !token_accepted(&body) {
+            diag.log(format!("usage/{kind} {url} -> 200 with an error envelope"));
+            return Err("token-expired".to_string());
+        }
         log_top_level_keys(&body, kind, diag);
         if load_usage_base().as_deref() != Some(base.as_str()) {
             save_usage_base(base);

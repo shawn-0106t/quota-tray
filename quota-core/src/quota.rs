@@ -190,18 +190,24 @@ fn number(v: &Value) -> Option<f64> {
     }
 }
 
-/// JSON number-or-string -> f64, missing -> 0.
-fn get_f64(v: &Value, key: &str) -> f64 {
-    v.get(key).and_then(number).unwrap_or(0.0)
-}
-
-/// JSON number-or-string -> i64.
+/// JSON number-or-string -> i64. PLAN §5.1 says the payload numbers are strings
+/// with a numeric fallback, so a float or a decimal-string must not silently
+/// blank the money card: it is rounded to the nearest integer unit.
 fn get_i64(v: &Value) -> Option<i64> {
     match v {
-        Value::Number(n) => n.as_i64(),
-        Value::String(s) => s.trim().parse::<i64>().ok(),
+        Value::Number(n) => n.as_i64().or_else(|| n.as_f64().and_then(round_to_i64)),
+        Value::String(s) => {
+            let text = s.trim();
+            text.parse::<i64>()
+                .ok()
+                .or_else(|| text.parse::<f64>().ok().and_then(round_to_i64))
+        }
         _ => None,
     }
+}
+
+fn round_to_i64(value: f64) -> Option<i64> {
+    value.is_finite().then(|| value.round() as i64)
 }
 
 /// resetTime: RFC3339 first, then the looser shapes DateTimeOffset.TryParse
@@ -231,13 +237,14 @@ fn parse_reset_time(s: &str) -> Option<DateTime<Local>> {
 }
 
 fn parse_segment(v: &Value) -> QuotaSegment {
-    // `used` when the payload has it; otherwise the live shape's integer pair.
-    let used = if v.get("used").is_some() {
-        get_f64(v, "used")
-    } else {
-        (get_f64(v, "limit") - get_f64(v, "remaining")).max(0.0)
-    };
-    let mut limit = get_f64(v, "limit");
+    // `used` when the payload actually carries a number; otherwise the live
+    // shape's integer pair. An explicit `used: null` (or "") must fall through
+    // to `limit - remaining`, not pin the percentage to 0.
+    let mut limit = v.get("limit").and_then(number).unwrap_or(0.0);
+    let used = v
+        .get("used")
+        .and_then(number)
+        .unwrap_or_else(|| (limit - v.get("remaining").and_then(number).unwrap_or(0.0)).max(0.0));
     if limit <= 0.0 {
         limit = 1.0; // guard against division by zero
     }
@@ -443,6 +450,27 @@ mod payload_shape_tests {
         let root = json!({ "usage": { "limit": "40", "remaining": "30" } });
         let week = parse_week(&root).expect("week");
         assert!((week.percent - 25.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn an_explicit_null_used_falls_through_to_the_remaining_pair() {
+        // `used: null` (or "") means "no number here", not "zero used": the
+        // live shape's limit/remaining pair must still drive the percentage.
+        let root = json!({ "usage": { "used": null, "limit": "100", "remaining": "40" } });
+        let week = parse_week(&root).expect("week");
+        assert!((week.percent - 60.0).abs() < 1e-9, "got {}", week.percent);
+    }
+
+    #[test]
+    fn integers_accept_float_and_decimal_string_shapes() {
+        // PLAN §5.1: numbers are modelled as strings with a numeric fallback.
+        assert_eq!(get_i64(&json!(12)), Some(12));
+        assert_eq!(get_i64(&json!(12.0)), Some(12));
+        assert_eq!(get_i64(&json!(12.4)), Some(12));
+        assert_eq!(get_i64(&json!("12.0")), Some(12));
+        assert_eq!(get_i64(&json!("12.6")), Some(13));
+        assert_eq!(get_i64(&json!("NaN")), None);
+        assert_eq!(get_i64(&json!(null)), None);
     }
 
     // The payload carries no window identifier: `limits[0]` is taken as the

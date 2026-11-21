@@ -25,12 +25,12 @@ const push = (label: string, fn: string, arg: unknown, result: string): void => 
 };
 
 for (const cents of [0, 5, 100, 1050, 4952, -150]) push(`fmtYuan(${cents})`, 'fmtYuan', cents, fmtYuan(cents));
-for (const [yuan, cur] of [[45.44, 'CNY'], [0, 'CNY'], [3, 'CNY'], [1.5, 'USD']] as const) {
+for (const [yuan, cur] of [[45.44, 'CNY'], [0, 'CNY'], [3, 'CNY'], [1.5, 'USD'], [0.125, 'CNY'], [0.375, 'USD']] as const) {
   push(`fmtMoney(${yuan},${cur})`, 'fmtMoney', [yuan, cur], fmtMoney(yuan, cur));
 }
-for (const n of [0, 96, 999, 1000, 284000, 1330000, 1000000]) push(`fmtTokens(${n})`, 'fmtTokens', n, fmtTokens(n));
-for (const r of [null, 80, 99.5, 100]) push(`fmtHitRate(${r})`, 'fmtHitRate', r, fmtHitRate(r));
-for (const v of [null, 100, 99.44]) push(`fmtPct(${v})`, 'fmtPct', v, fmtPct(v) ?? '<null>');
+for (const n of [0, 96, 999, 1000, 1250, 284000, 1125000, 1330000, 1000000]) push(`fmtTokens(${n})`, 'fmtTokens', n, fmtTokens(n));
+for (const r of [null, 80, 59.25, 99.5, 100]) push(`fmtHitRate(${r})`, 'fmtHitRate', r, fmtHitRate(r));
+for (const v of [null, 100, 42.25, 99.44]) push(`fmtPct(${v})`, 'fmtPct', v, fmtPct(v) ?? '<null>');
 for (const n of [0, 96, 3097, 1234567, -3097]) push(`fmtCount(${n})`, 'fmtCount', n, fmtCount(n));
 for (const p of [-5, 120, 42.5]) push(`clampPercent(${p})`, 'clampPercent', p, String(clampPercent(p)));
 for (const [total, avail] of [[9.99, true], [10, true], [500, false]] as const) {

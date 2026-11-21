@@ -131,7 +131,7 @@ pub fn on_action(shell: &Rc<RefCell<Shell>>, name: &str) {
     hide(shell);
     match name {
         "open" => shell::toggle(shell, false),
-        "refresh" => shell.borrow().workers.refresh.notify_waiters(),
+        "refresh" => shell.borrow().workers.refresh(),
         "settings" => crate::win::settings::open(shell),
         "skills" => crate::win::skills::open(shell),
         "quit" => {

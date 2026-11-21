@@ -156,6 +156,9 @@ export component SettingsWindow inherits Window {
     in property <length> pane-h: 14px + 12px + 8px + 36px + 18px + 12px + 8px + 36px + 20px + 33px + 18px + 94px + 18px + sect-ds-h + 16px + 34px + 14px;
     out property <length> content-h: 34px + pane-h;
     out property <length> natural-h: content-h + 58px;
+    // The title bar's window-space y: the scroll check asserts it does not
+    // move when the pane scrolls (it lives outside the Flickable).
+    out property <length> title-screen-y: title-bar.absolute-position.y;
     private property <length> card-h: min(content-h + 2px, max-card-h);
 
     callback dismiss();
@@ -183,29 +186,23 @@ export component SettingsWindow inherits Window {
     }
 
     // The card's own scroll area (settings.css `#root { max-height; overflow-y }`):
-    // the content keeps its natural height and scrolls inside the card when the
-    // work-area cap bit.
+    // only the pane scrolls, the title bar stays fixed above it.
     sheet-scroll := Flickable {
         x: 29px;
-        y: 29px;
+        y: 63px;
         width: 346px;
-        height: card-h - 2px;
+        height: card-h - 2px - 34px;
         content-width: self.width;
-        content-height: content-h;
+        content-height: content-h - 34px;
 
         sheet := Rectangle {
+            // The children keep their original coordinates (the title used to
+            // occupy 0..34); shifting the content up by that band puts the pane
+            // at the same screen position below the fixed title bar.
+            y: -34px;
             width: 100%;
             height: content-h;
             background: transparent;
-
-            TitleBar {
-                x: 0;
-                y: 0;
-                width: 346px;
-                title: "Quota Tray Settings";
-                close => { root.dismiss(); }
-                drag => { root.drag(); }
-            }
 
             // ---- General: theme ----
             Lbl { x: 14px; y: 48px; width: 318px; text: "THEME"; }
@@ -478,20 +475,33 @@ export component SettingsWindow inherits Window {
         }
     }
 
+    // The title bar lives OUTSIDE the Flickable: the pane scrolls beneath it
+    // (settings.css keeps the header out of the scroll box; the X and the drag
+    // handle must never leave a no-frame window).
+    title-bar := TitleBar {
+        x: 29px;
+        y: 29px;
+        width: 346px;
+        title: "Quota Tray Settings";
+        close => { root.dismiss(); }
+        drag => { root.drag(); }
+    }
+
     // 4px thumb in an 8px lane at the card's right edge — the CSS
-    // `#root::-webkit-scrollbar` (inset 2px by a transparent border).
-    private property <length> viewport-h: card-h - 2px;
-    private property <float> scroll-ratio: content-h > viewport-h ? viewport-h / content-h : 1;
+    // `#root::-webkit-scrollbar` (inset 2px by a transparent border), starting
+    // below the fixed title bar.
+    private property <length> viewport-h: card-h - 2px - 34px;
+    private property <float> scroll-ratio: content-h - 34px > viewport-h ? viewport-h / (content-h - 34px) : 1;
     private property <length> scroll-bar-h: max(20px, viewport-h * scroll-ratio);
-    private property <length> scroll-bar-y: content-h > viewport-h ? (-scroll-y) * scroll-ratio : 0px;
+    private property <length> scroll-bar-y: content-h - 34px > viewport-h ? (-scroll-y) * scroll-ratio : 0px;
     Rectangle {
         // Card content box is 29..375 in window coords; the CSS lane is its
         // right 8px (367..375) and the 4px thumb sits 2px inside it.
         x: 369px;
-        y: 29px + scroll-bar-y;
+        y: 63px + scroll-bar-y;
         width: 4px;
         height: scroll-bar-h;
-        visible: content-h > card-h - 2px;
+        visible: content-h - 34px > viewport-h;
         border-radius: 2px;
         background: scroll-hover.has-hover ? Tokens.ink3 : Tokens.hair;
         scroll-hover := TouchArea { width: 100%; height: 100%; }

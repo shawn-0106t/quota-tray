@@ -27,6 +27,8 @@ use crate::logf;
 use quota_core::deepseek::{client, credentials};
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tao::dpi::LogicalSize;
 use tao::event::{Event, WindowEvent};
@@ -129,6 +131,10 @@ pub fn run(opts: Options) -> i32 {
     let baseline = digest();
     let mut pending: Option<String> = None;
     let mut verifying = false;
+    // Number of token candidates the page has reported. A transient retry
+    // captures this before its pause and drops itself if a newer candidate
+    // arrived meanwhile (the page never resends a token it already reported).
+    let candidates = Arc::new(AtomicU64::new(0));
     let mut accepted = false;
     let mut refused = false;
     // The candidate a transient failure already re-tried once. Keyed by value
@@ -186,6 +192,7 @@ pub fn run(opts: Options) -> i32 {
                         } else if accepted {
                             return;
                         }
+                        candidates.fetch_add(1, Ordering::SeqCst);
                         if verifying || accepted {
                             pending = Some(value);
                             return;
@@ -202,11 +209,17 @@ pub fn run(opts: Options) -> i32 {
                         if !url.contains("quotatray=probe") {
                             match client::learn_request(&url, &version) {
                                 Some(learned) => logf(format!("login-host: learned {learned}")),
-                                None => logf(format!("login-host: usage request seen {url}")),
+                                None => logf(format!(
+                                    "login-host: usage request seen {}",
+                                    safe_log_text(&url, 160)
+                                )),
                             }
                         }
                     }
-                    other => logf(format!("login-host: unknown capture kind {other}")),
+                    other => logf(format!(
+                        "login-host: unknown capture kind {}",
+                        safe_log_text(other, 32)
+                    )),
                 }
             }
             Event::UserEvent(UserEvent::Verified(result, value)) => {
@@ -219,8 +232,11 @@ pub fn run(opts: Options) -> i32 {
                         rearm(&handler_proxy, &mut pending, &mut verifying);
                     }
                     Ok(()) => {
-                        credentials::save(None, Some(&value), None);
-                        let stored = credentials::status().user_token;
+                        // The write reports its own success: inferring it from
+                        // `status()` would read an OLD token (shared file, env
+                        // or the private fallback) and claim a save that never
+                        // happened.
+                        let stored = credentials::save(None, Some(&value), None);
                         line(format!("login-host: saved={}", u8::from(stored)));
                         if stored {
                             accepted = true;
@@ -243,8 +259,14 @@ pub fn run(opts: Options) -> i32 {
                             // credential is byte-identical to what it was before
                             // the run. A network error proves nothing — an
                             // offline machine must not print a passing probe.
-                            let rejected_by_server = error == "token-expired"
-                                || error.starts_with("http-4");
+                            // Only an explicit token ruling counts. 404/410
+                            // mean the walk exhausted the endpoint candidates
+                            // (PLAN §6.2) and a 403 can be a WAF page; neither
+                            // proves verify-before-save ran.
+                            let rejected_by_server = matches!(
+                                error.as_str(),
+                                "token-expired" | "http-401" | "http-403"
+                            );
                             if !rejected_by_server {
                                 logf(format!(
                                     "login-host: probe verification ended in {error}, not a rejection"
@@ -266,13 +288,20 @@ pub fn run(opts: Options) -> i32 {
                             // The page never resends a token it already
                             // reported (its hook dedupes by `lastToken`), so a
                             // blip on the finished token would cost the whole
-                            // sign-in. Same candidate, once, after a pause.
+                            // sign-in. Same candidate, once, after a pause —
+                            // unless a newer candidate arrives meanwhile.
                             retried = Some(value.clone());
                             verifying = true;
                             let proxy = handler_proxy.clone();
+                            let candidates = candidates.clone();
+                            let generation = candidates.load(Ordering::SeqCst);
                             std::thread::spawn(move || {
                                 std::thread::sleep(Duration::from_millis(800));
-                                let result = runtime().block_on(client::verify_user_token(&value));
+                                let result = if candidates.load(Ordering::SeqCst) == generation {
+                                    runtime().block_on(client::verify_user_token(&value))
+                                } else {
+                                    Err("superseded".to_string())
+                                };
                                 let _ = proxy.send_event(UserEvent::Verified(result, value));
                             });
                             logf("login-host: transient failure, re-trying the same candidate");
@@ -412,27 +441,37 @@ fn ok_str(value: bool) -> &'static str {
 
 /// stdout is line-buffered, but the parent closes the pipe the moment it has the
 /// verdict; flush so a line can never sit in the buffer while the process exits.
+/// Page-controlled text (capture kind, fetched URL) lands in `slint.log`;
+/// strip control characters and cap the length so a hostile page cannot forge
+/// a log line with `%0A`. Same idea as the Tauri shell's sanitiser.
+fn safe_log_text(text: &str, max: usize) -> String {
+    text.chars()
+        .filter(|c| c.is_ascii_graphic() || *c == ' ')
+        .take(max)
+        .collect()
+}
+
 fn line(text: impl Into<String>) {
     println!("{}", text.into());
     let _ = std::io::stdout().flush();
 }
 
-/// Byte digest of the credential file: "missing" until the first sign-in.
+/// Byte digest of every credential file (shared first, then the private
+/// fallback). "missing" for a path that does not exist — the probe's proof is
+/// that the bytes did not change, so it has to read the files the save path
+/// actually writes.
 fn digest() -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    match std::fs::read(credentials_file()) {
-        Ok(bytes) => {
-            let mut hasher = DefaultHasher::new();
-            bytes.hash(&mut hasher);
-            format!("{:016x}", hasher.finish())
+    let mut hasher = DefaultHasher::new();
+    for path in quota_core::deepseek::credentials::files() {
+        path.hash(&mut hasher);
+        match std::fs::read(&path) {
+            Ok(bytes) => bytes.hash(&mut hasher),
+            Err(_) => "missing".hash(&mut hasher),
         }
-        Err(_) => "missing".to_string(),
     }
-}
-
-fn credentials_file() -> PathBuf {
-    quota_core::settings::config_dir().join("deepseek-credentials.json")
+    format!("{:016x}", hasher.finish())
 }
 
 fn center(window: &tao::window::Window) {
@@ -500,8 +539,11 @@ fn explain(error: &str) -> &'static str {
         "rate-limited" => "rate limited, retry in a moment",
         "network-error" => "network error",
         "server-error" => "DeepSeek server error, retry in a moment",
-        "endpoint-moved" => "usage endpoint moved",
-        _ => "token not accepted",
+        "token-expired" => "token not accepted",
+        // Every candidate answering 404/410 is a moved endpoint (PLAN §6.2),
+        // not a bad token — telling the user to sign in again would be a dead
+        // end. Same mapping as the Tauri shell (src-tauri/src/login.rs).
+        _ => "verification failed",
     }
 }
 

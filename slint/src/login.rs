@@ -272,7 +272,7 @@ fn settle(shell: &Rc<RefCell<Shell>>, code: Option<i32>) {
     // registered *right now*, and a poller in the middle of `fetch().await` has
     // not registered yet. `notify_one` leaves a permit behind, so the next wait
     // returns immediately instead of sleeping a whole interval.
-    shell.borrow().workers.refresh.notify_one();
+    shell.borrow().workers.refresh();
 }
 
 /// Write the sheet's DeepSeek note. `apply_status` regenerates the env note,
@@ -424,6 +424,11 @@ fn probe_once(data_dir: &std::path::Path) -> Probe {
         .arg("--probe")
         .arg("--data-dir")
         .arg(data_dir)
+        // The probe child must not outlive an interrupted --test-login: without
+        // this it stays inside WebView2's cold start and keeps the profile
+        // locked for the next run.
+        .arg("--parent-pid")
+        .arg(std::process::id().to_string())
         .stdout(Stdio::piped())
         // The child's own log lines stay visible: a failed build is diagnosed
         // from them, and its file copy goes to the shared slint.log anyway.

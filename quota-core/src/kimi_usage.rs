@@ -55,16 +55,16 @@ struct Bucket {
 
 impl Bucket {
     fn add(&mut self, other: &Bucket) {
-        self.hit += other.hit;
-        self.creation += other.creation;
-        self.other += other.other;
-        self.out += other.out;
-        self.requests += other.requests;
-        self.rate_out += other.rate_out;
+        self.hit = self.hit.saturating_add(other.hit);
+        self.creation = self.creation.saturating_add(other.creation);
+        self.other = self.other.saturating_add(other.other);
+        self.out = self.out.saturating_add(other.out);
+        self.requests = self.requests.saturating_add(other.requests);
+        self.rate_out = self.rate_out.saturating_add(other.rate_out);
         self.decode_ms += other.decode_ms;
         self.first_ms += other.first_ms;
-        self.calls += other.calls;
-        self.first_n += other.first_n;
+        self.calls = self.calls.saturating_add(other.calls);
+        self.first_n = self.first_n.saturating_add(other.first_n);
     }
 }
 
@@ -185,11 +185,11 @@ fn absorb(days: &mut BTreeMap<i32, Bucket>, bytes: &[u8]) -> bool {
     // only `usage.record` / `turn` is counted.
     if line.kind.as_deref() == Some("usage.record") && line.usage_scope.as_deref() == Some("turn") {
         if let Some(c) = line.usage {
-            bucket.hit += c.input_cache_read;
-            bucket.creation += c.input_cache_creation;
-            bucket.other += c.input_other;
-            bucket.out += c.output;
-            bucket.requests += 1;
+            bucket.hit = bucket.hit.saturating_add(c.input_cache_read);
+            bucket.creation = bucket.creation.saturating_add(c.input_cache_creation);
+            bucket.other = bucket.other.saturating_add(c.input_other);
+            bucket.out = bucket.out.saturating_add(c.output);
+            bucket.requests = bucket.requests.saturating_add(1);
             touched = true;
         }
     }
@@ -197,13 +197,13 @@ fn absorb(days: &mut BTreeMap<i32, Bucket>, bytes: &[u8]) -> bool {
     if let Some(event) = line.event {
         if let (Some(c), Some(decode)) = (event.usage, event.llm_server_decode_ms) {
             if decode > 0.0 {
-                bucket.rate_out += c.output;
+                bucket.rate_out = bucket.rate_out.saturating_add(c.output);
                 bucket.decode_ms += decode;
-                bucket.calls += 1;
+                bucket.calls = bucket.calls.saturating_add(1);
                 if let Some(first) = event.llm_server_first_token_ms {
                     if first > 0.0 {
                         bucket.first_ms += first;
-                        bucket.first_n += 1;
+                        bucket.first_n = bucket.first_n.saturating_add(1);
                     }
                 }
                 touched = true;
@@ -246,8 +246,14 @@ fn load_index() -> Index {
 }
 
 fn save_index(index: &Index, today: i32) {
-    let dir = crate::settings::config_dir();
-    let _ = fs::create_dir_all(&dir);
+    // The index is account-side state (`shared_dir()`); the temp file must be
+    // in the SAME directory as the target or the rename is not atomic, and the
+    // directory has to exist before the first Kimi-only profile writes it.
+    let path = index_path();
+    let Some(dir) = path.parent() else {
+        return;
+    };
+    let _ = fs::create_dir_all(dir);
     let mut pruned = Index {
         v: 1,
         files: BTreeMap::new(),
@@ -276,8 +282,8 @@ fn save_index(index: &Index, today: i32) {
     };
     // Temp + rename: a crash must not leave a truncated index behind.
     let tmp = dir.join(format!("{INDEX_FILE}.tmp"));
-    if fs::write(&tmp, json).is_ok() {
-        let _ = fs::rename(&tmp, index_path());
+    if fs::write(&tmp, json).is_ok() && fs::rename(&tmp, &path).is_err() {
+        let _ = fs::remove_file(&tmp);
     }
 }
 

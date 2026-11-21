@@ -114,8 +114,8 @@ Slint 没有「只在创建时居中」的声明式开关；P3 的实现每次 `
 | `--test-windows` / `--test-dialogs` / `--test-menu` / `--test-skills` / `--test-settings` | 全 PASS |
 | `--test-close` | 7 行 `ok`，verdict PASS |
 | `slint` `cargo fmt --check` / `clippy --locked -D warnings` / `test --locked` | 6 passed |
-| `quota-core` / `src-tauri` 测试 | 48 / 5 passed |
-| `check_tokens.py` / `check_contrast.py` / `fmt_parity.py` | 0 mismatch / 18/18 / 45 例全等 |
+| `quota-core` / `src-tauri` 测试 | 51 / 5 passed |
+| `check_tokens.py` / `check_contrast.py` / `fmt_parity.py` | 0 mismatch / 18/18 / 51 例全等 |
 | `demo/ui-demo.html` + README 截图 | 与 `main` 逐字节相同；README 图字节未变 |
 
 P4 的 `--test-login` / `--test-signin` 本轮没有重跑：登录链路代码没有改动，`spike/p4/REPORT.md` 的结论仍然有效。
@@ -134,7 +134,32 @@ PYTHONUTF8=1 python scripts/parity/check_tokens.py
 ./slint/target/debug/quota-tray-slint.exe --test-close --no-poll --config-dir "$(pwd -W)/.shots/p5/close"
 ```
 
-## 9. 文件
+## 9. 2026-11-21 全量 code review 的处置
+
+四个只读 `explore` 子代理（加载 `~/.agents/skills/code-review`）分域审查了 shell/窗口、`quota-core`、登录链路、自检与门禁。1 个 Critical、9 个 Major、若干 Minor，全部核实并修复（清单见 `CHANGELOG.md` 的 `[Unreleased]`）。
+
+**Tauri 版是否也有：**
+
+| 问题 | `main`（Tauri 发布线） | 说明 |
+|---|---|---|
+| Critical：usage 200 错误信封 → 全零 | **有** | `src-tauri/src/deepseek/client.rs` 与 `quota-core` 同源；`main` 需要单独 PR 移植 |
+| `get_i64` 拒绝浮点/十进制字符串 | **有** | `main` 的 `quota.rs` 相同 |
+| `used:null` 挡住 `limit-remaining` 回退 | **有** | 相同 |
+| 聚合计数器溢出 | **有** | `parse.rs` / `kimi_usage.rs` 相同 |
+| `settings.json` 非原子写 | **有** | `settings.rs` 相同 |
+| Clear 先清文件后 bump 计数 | **有** | `main` 的 `clear_credentials` 同样是先清后 `note_clear` |
+| 写盘失败仍报「saved」 | **有（同类）** | Tauri 登录设标题前不检查 `save` 结果 |
+| 设置窗标题栏跟着滚动 | 无 | Tauri 的 `#root > .pane` 只滚 pane |
+| 登录窗 4xx 文案 / 日志注入 | 无 | Tauri 有 `verification failed` 与 `kind` 消毒 |
+| 透明重试忽略新候选 | 无（Tauri 已修） | Slint 子进程是第二份状态机 |
+| Kimi「Not found」红字、`Btn.enabled`、Clear env note、刷新丢失、进场 12px | 无 | Tauri 前端/轮询各自正确 |
+| usage 索引临时文件与目标不同目录 | 无 | `main` 的 `save_index` 用同一 `shared_dir()`；P1 抽取时引入 |
+| tie 舍入与 `toFixed` 不一致 | 无（面板/托盘）；**本分支的 Tauri exe 有** | `main` 的托盘先按分取整、面板用 TS；本分支两壳共用 `quota-core::format`，因此也受影响 |
+| `--test-*` / token 门禁 / CI | 不适用 | 这些是 Slint 分支的测试与门禁 |
+
+结论：共享数据层的 7 个问题需要在 `main` 上同步修（最好按 P4 的 PR 模式单独切分支）；Slint 壳独有的问题已在分支内修掉。`ci-slint.yml` 仍待下一次 push 首跑。
+
+## 10. 文件
 
 ```
 PARITY.md

@@ -48,9 +48,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Setup Rust (stable)
+      - name: Setup Rust (pinned)
         uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
+          # Skia's prebuilt key follows the rustc version; a floating stable can
+          # silently fall back to a source build that needs LLVM. Pin what the
+          # local prebuilt build was verified with.
+          toolchain: 1.97.1
           # the action denies cargo warnings by default; this is a build check, not a lint gate
           build-warnings: warn
           cache: false

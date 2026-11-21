@@ -38,6 +38,31 @@ the English notes first, then the Chinese mirror.
   `WM_CLOSE`) updates the shell's `visible`/`settings_open`/`skills_open` flags
   — without that the tray toggle hid instead of showing and both dialogs
   refused to reopen for the rest of the session.
+- Code review (2026-11-21) fixed the defects it found. The Critical one is the
+  DeepSeek usage fetch: a 2xx carrying the platform's `{"code":40003}` error
+  envelope used to parse as an all-zero month, overwrite the last-good cache and
+  pin the failing base; it now goes through `token_accepted` and reports
+  `token-expired`. The settings sheet keeps its title bar out of the scrolling
+  pane; the sign-in window says "verification failed" for a moved endpoint
+  instead of "token not accepted"; Clear bumps the credential epoch before the
+  wipe; a saved token is reported only when the write succeeded; page-controlled
+  strings are sanitised before they reach `slint.log`; the transient retry drops
+  itself when a newer candidate arrives; and the probe child carries
+  `--parent-pid`. `quota-core` now accepts float / decimal-string numbers, falls
+  through a null `used`, uses saturating counters, writes settings and the usage
+  index atomically (the index temp file lives in its own directory), and rounds
+  exact ties the way `toFixed` does. The refresh signal is a per-provider
+  `notify_one` (a click during a fetch is no longer lost) and the panel enter
+  animation starts at 16px again.
+- Self-checks and gates: `--test-login` hashes both credential files and refuses
+  to pass on a 404/410 "rejection"; `--test-signin` seeds a real token and
+  asserts it survives a cancel and is gone after Clear; `--test-settings` backs
+  up/restores both credential files and the settings file, seeds the 300px cap by
+  default and skips the fresh-profile defaults on a rerun; `--test-active-tab`
+  restores its file; `--test-dialogs` requires an observed blur;
+  `--test-tab-anim` has a 12s watchdog; `--test-blur` cannot pass without a blur
+  event; the token gate strips `//` comments and requires 10 live shadow
+  declarations; `ci-slint.yml` pins Rust 1.97.1.
 
 ### Added
 
@@ -83,6 +108,21 @@ the English notes first, then the Chinese mirror.
   `?from=` 归因；四个窗口设置 OS 标题；skills 窗只在首次打开居中，拖动后的位置
   重开仍在；系统关闭（Alt+F4 / `WM_CLOSE`）同步 `visible`/`settings_open`/
   `skills_open`，否则托盘开合会「点一次没反应」、两个弹窗整场会话拒绝重开。
+- **修复**：2026-11-21 的代码审查处置。**Critical**：DeepSeek usage 抓取把平台
+  `{"code":40003}` 的 200 错误信封解析成「全零月份」，覆盖 last-good 缓存并把失败 base
+  记住；现在走 `token_accepted` 并报 `token-expired`。设置窗标题栏移出滚动区；登录窗对
+  端点搬家显示「verification failed」而不是「token not accepted」；Clear 先 bump epoch
+  再清文件；token 只在真正写盘成功后报 saved；页面可控字符串进 `slint.log` 前先净化；
+  瞬时重试遇到更新的候选会让位；probe 子进程带 `--parent-pid`。`quota-core` 接受浮点/
+  十进制字符串数字、`used:null` 会回退、计数器用饱和加法、settings 与 usage 索引改为
+  原子写（索引临时文件与目标同目录）、精确 tie 按 `toFixed` 的「远离零」舍入。刷新改为
+  每个 provider 一个 `notify_one`（fetch 期间的点击不再丢），面板进场位移恢复 16px。
+- **修复**：自检与门禁——`--test-login` 哈希两份凭证文件、404/410 不再算「服务器拒绝」；
+  `--test-signin` seed 真实 token 并断言 cancel 后仍在、Clear 后消失；`--test-settings`
+  备份/还原两份凭证与 settings 文件、默认跑 300px 上限、重跑时跳过「全新 profile」断言；
+  `--test-active-tab` 还原文件；`--test-dialogs` 要求真的观察到 blur；`--test-tab-anim`
+  有 12s 看门狗；`--test-blur` 没有 blur 事件不能 PASS；token 门禁剥掉 `//` 注释并要求
+  10 条活的 shadow 声明；`ci-slint.yml` 固定 Rust 1.97.1。
 - **新增**：`PARITY.md`——Tauri 壳与 Slint 壳的逐项矩阵（数据、面板、窗口、托盘、
   设置、skills、登录、存储、恢复、门禁），每行带证据或理由，不允许 ❌；写矩阵的过程
   抓出上面四处偏差与缺失的关闭自检。

@@ -121,6 +121,10 @@ pub struct Checks {
     pub last_click_at: Option<Instant>,
     pub reported: bool,
     pub blur_at: Option<Instant>,
+    /// Every blur the panel observed while visible, including the ones the
+    /// dialog suppression deliberately ignores (`--test-dialogs` asserts this
+    /// grew, so a no-op focus steal cannot pass).
+    pub blurs: u32,
     pub timers: Vec<Rc<Timer>>,
 }
 
@@ -372,7 +376,7 @@ fn wire_callbacks(shell: &Rc<RefCell<Shell>>) {
                         ])
                         .spawn();
                 }
-                "refresh" => shell_action.borrow().workers.refresh.notify_waiters(),
+                "refresh" => shell_action.borrow().workers.refresh(),
                 "settings" => settings::open(&shell_action),
                 "exit" => {
                     let _ = slint::quit_event_loop();
@@ -683,6 +687,9 @@ pub fn show_panel(shell: &Rc<RefCell<Shell>>) {
     }
     {
         let mut s = shell.borrow_mut();
+        // Enter starts at 16px (src/main.css `.enter`); the exit endpoint is
+        // 12px, set in start_hide.
+        s.ui.set_lift_rest(16.0);
         s.ui.set_shown(true);
         s.visible = true;
     }
@@ -712,6 +719,7 @@ pub fn start_hide(shell: &Rc<RefCell<Shell>>) {
         s.hiding = true;
         s.hide_run += 1;
         // `shown=false` is the fade-out state; the window is hidden after 170ms.
+        s.ui.set_lift_rest(12.0);
         s.ui.set_shown(false);
         s.hide_run
     };
@@ -752,6 +760,12 @@ pub fn toggle(shell: &Rc<RefCell<Shell>>, from_tray: bool) {
 }
 
 pub fn on_blur(shell: &Rc<RefCell<Shell>>) {
+    {
+        let mut s = shell.borrow_mut();
+        if s.visible {
+            s.checks.blurs = s.checks.blurs.saturating_add(1);
+        }
+    }
     let act = {
         let s = shell.borrow();
         if !s.visible || s.hiding {
@@ -1118,7 +1132,7 @@ fn on_hover(shell: &Rc<RefCell<Shell>>) {
     if fire {
         // Hover prefetch (PLAN §5.3): fire both providers, throttled 10s.
         crate::logf("tray: hover prefetch (throttled 10s)");
-        shell.borrow().workers.refresh.notify_waiters();
+        shell.borrow().workers.refresh();
     }
 }
 

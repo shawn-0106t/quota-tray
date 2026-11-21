@@ -28,22 +28,28 @@ pub fn fmt_yuan(cents: i64) -> String {
 /// rule as `fmt_yuan` (user decision 2026-11-14). `$` for USD, `¥` otherwise.
 pub fn fmt_money(yuan: f64, currency: &str) -> String {
     let symbol = if currency == "USD" { "$" } else { "¥" };
-    format!("{symbol}{yuan:.2}")
+    format!("{symbol}{}", fixed(yuan, 2))
+}
+
+/// `value.toFixed(decimals)` in JS: an exact tie rounds away from zero.
+///
+/// Rust's `{:.N}` breaks a tie to even instead, so `42.25` printed `42.2` here
+/// and `42.3` in the TypeScript frontend. The two shells must show the same
+/// string, so the rounding is done explicitly before formatting.
+fn fixed(value: f64, decimals: usize) -> String {
+    let sign = if value.is_sign_negative() { "-" } else { "" };
+    let scale = 10f64.powi(decimals as i32);
+    let rounded = (value.abs() * scale + 0.5).floor() / scale;
+    format!("{sign}{rounded:.decimals$}")
 }
 
 /// FmtTokens: `1.33M` / `284K` / `96` — two decimals at most, no trailing
 /// zeros.
 pub fn fmt_tokens(tokens: i64) -> String {
     if tokens >= 1_000_000 {
-        format!(
-            "{}M",
-            trim_zeros(&format!("{:.2}", tokens as f64 / 1_000_000.0))
-        )
+        format!("{}M", trim_zeros(&fixed(tokens as f64 / 1_000_000.0, 2)))
     } else if tokens >= 1_000 {
-        format!(
-            "{}K",
-            trim_zeros(&format!("{:.1}", tokens as f64 / 1_000.0))
-        )
+        format!("{}K", trim_zeros(&fixed(tokens as f64 / 1_000.0, 1)))
     } else {
         tokens.to_string()
     }
@@ -179,7 +185,7 @@ fn segment_percent(seg: &Option<QuotaSegment>) -> String {
 
 /// `toFixed(1)` with a trailing `.0` dropped.
 fn one_decimal(value: f64) -> String {
-    let text = format!("{value:.1}");
+    let text = fixed(value, 1);
     text.strip_suffix(".0").unwrap_or(&text).to_string()
 }
 
@@ -332,6 +338,18 @@ mod tests {
             "Updated 11/14 23:59",
             "yesterday's numbers must not read as if fetched today"
         );
+    }
+
+    #[test]
+    fn exact_ties_round_away_from_zero_like_to_fixed() {
+        // `toFixed` picks the larger candidate on a tie; Rust's `{:.N}` picks
+        // even. The two shells must print the same string.
+        assert_eq!(fmt_money(0.125, "CNY"), "¥0.13");
+        assert_eq!(fmt_money(0.375, "USD"), "$0.38");
+        assert_eq!(fmt_tokens(1_250), "1.3K");
+        assert_eq!(fmt_tokens(1_125_000), "1.13M");
+        assert_eq!(fmt_pct(Some(42.25)), Some("42.3".to_string()));
+        assert_eq!(fmt_hit_rate(Some(59.25)), "cache 59.3%");
     }
 
     #[test]

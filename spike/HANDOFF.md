@@ -142,6 +142,7 @@ spike/p0/              # P0 交互 spike：壳的骨架（Anchor / tray-icon / �
 
 - CI：新增 `.github/workflows/ci-slint.yml`——按路径触发（`slint/**`、`quota-core/**`、`src/theme.css`、`src-tauri/icons/**`、`scripts/parity/**`），跑 token 门禁 + `cargo fmt --check` + `clippy --locked -D warnings` + `test --locked`。单独的 workflow 而不是塞进 `ci.yml`，理由是不让无关的前端改动付一次 Skia 构建；壳进入发布线前 branch protection 不强制它。Skia 预编译包在 runner 上直连 GitHub 下载，`SKIA_BINARIES_URL` 镜像仍只是本机网络的办法。
 - 汇总：`spike/p5/REPORT.md`（验收、数字、4 处发现、陷阱、回归、未证明项）。P5 的四项全部完成；`ci-slint.yml` 尚未在 GitHub runner 上跑过，下一次 push 是它的首跑。
+- **2026-11-21 全量 code review**（4 个只读 explore 子代理）：1 Critical + 9 Major + 若干 Minor，全部核实并修复。Critical 是 usage 抓取把平台 `200 + {"code":40003}` 当全零月份、覆盖 last-good；其余包括设置窗标题栏滚动、登录 4xx 文案、`--test-login` 哈希错文件、`--test-settings` 不备份凭证、`--test-signin` 空 seed、token 门禁忽略注释、`--test-dialogs` 不验证 blur、`--test-settings`/`--test-active-tab` 不可重跑。`quota-core` 还修了 tie 舍入、`get_i64` 浮点、`used:null`、索引临时目录、settings 原子写、计数器溢出。共享数据层的 Critical 等 7 条 `main` 也有，需要按 P4 的 PR 模式单独移植；Slint 独有的已修。明细见 `spike/p5/REPORT.md` §9。
 
 ## 6. 陷阱清单（都踩过）
 

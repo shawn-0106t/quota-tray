@@ -20,7 +20,7 @@
 | 双 poller 各自 last-good、首拉 2 s、失败 30 s、间隔 1–30 min | `polling.rs` | `app.rs` 两条 task + 广播 `Notify` | P2 §4；P3/P4 回归 | ✅ |
 | CLI 版本与 Update 徽章 | 启动时查一次 | 启动 + 每 6 h 复查 | `app.rs`；Tauri `lib.rs::check_and_emit` | ⚠️ §11.2 |
 | 系统主题跟随（`AppsUseLightTheme`，3 s） | `theme_watch.rs` | `app.rs` 3 s，四个窗口的 `Tokens` 各自切换 | P3 `--test-settings` | ✅ |
-| 托盘 tooltip 三行（每 provider 自带 fetch failed） | `quota_core::format::tray_tooltip` | 同一个 | `spike/p1/fmt_parity.py` 45 例；P0 | ✅ |
+| 托盘 tooltip 三行（每 provider 自带 fetch failed） | `quota_core::format::tray_tooltip` | 同一个 | `spike/p1/fmt_parity.py` 51 例；P0 | ✅ |
 
 ## 2. 面板
 
@@ -71,7 +71,7 @@
 | 打开时回填持久化值与凭证状态 | `settings-show` 事件 | `apply_controls()` | `--test-settings` / `--test-windows` | ✅ |
 | 手工粘贴：先验证后保存、失败码转文案、按钮恢复 | `save_credential` + `clears` 闸门 | `save_credentials()` + 同一 `cred_epoch`/`clears` 语义 | `--test-settings`（真实 401、不落盘、Clear 作废在途） | ✅ |
 | Clear：写空文件、env 值保留、杀登录子进程、epoch 递增 | `clear_credentials` | `settings::clear` → `login::cancel` → 空文件 | P3；`--test-signin` 第 2 轮 | ✅ |
-| 内容尺寸 + 居中 + 工作区 90% 上限 + 仅 pane 滚动、标题栏固定 | `apply_settings_size` | `win/settings.rs::resize` | `--test-settings --max-settings-h 300`；P3 文本带 | ✅ |
+| 内容尺寸 + 居中 + 工作区 90% 上限 + 仅 pane 滚动、标题栏固定 | `apply_settings_size` | `win/settings.rs::resize` | `--test-settings`（300px 上限默认开启，断言滚动时 `title-screen-y` 不变）；P3 文本带 | ✅ |
 
 ## 6. Skills 窗
 
@@ -120,7 +120,7 @@
 
 | 行为 | Tauri（现版） | Slint | 证据 | 状态 |
 |---|---|---|---|---|
-| 格式化字符串（金额/百分比/tokens/倒计时/时间戳/阈值） | `src/common.ts` | `quota-core::format` | `spike/p1/fmt_parity.py` 45 例逐串相同 | ✅ |
+| 格式化字符串（金额/百分比/tokens/倒计时/时间戳/阈值） | `src/common.ts` | `quota-core::format` | `spike/p1/fmt_parity.py` 51 例逐串相同 | ✅ |
 | 设计 token 一致性 | `src/theme.css` | `slint/ui/tokens.slint` 复刻 | `scripts/parity/check_tokens.py`（15 token + 10 处 shadow） | ✅ |
 | 截图与设计评审产物 | `demo/ui-demo.html` / README shots | 同一生成器 + `--shots` | 本轮重生成，与 `main` 逐字节相同 | ✅ |
 | 诊断 CLI | `--test-fetch/--test-deepseek/--test-usage/--test-update/--test-ui/--test-login` | `--test-heights/-corner/-tab-anim/-blur/-tray-click/-tray/-clamp/-active-tab/-windows/-settings/-menu/-skills/-dialogs/-close/-signin/-login` | 见 §13；两套自检不重叠 | ⚠️ §11.7 |
@@ -154,7 +154,7 @@
 ```bash
 # 构建（每次 cargo 调用都要带 Skia 镜像）
 export SKIA_BINARIES_URL='https://ghproxy.net/https://github.com/rust-skia/skia-binaries/releases/download/{tag}/skia-binaries-{key}.tar.gz'
-(cd slint && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test)
+(cd slint && cargo fmt --check && cargo clippy --all-targets --locked -- -D warnings && cargo test --locked)
 
 EXE=./slint/target/debug/quota-tray-slint.exe
 ABS="$(pwd -W)/.shots/parity"
@@ -171,7 +171,7 @@ $EXE --test-active-tab
 
 # 三个窗口与显隐
 $EXE --test-windows  --no-poll --config-dir "$ABS/windows"
-$EXE --test-settings --no-poll --config-dir "$ABS/settings" --max-settings-h 300
+$EXE --test-settings --no-poll --config-dir "$ABS/settings"   # cap defaults to 300
 $EXE --test-skills   --no-poll --config-dir "$ABS/skills"
 $EXE --test-menu     --no-poll --config-dir "$ABS/menu"
 $EXE --test-dialogs  --no-poll --config-dir "$ABS/dialogs"
@@ -207,3 +207,5 @@ PYTHONUTF8=1 python demo/check_contrast.py
 3. skills 窗每次打开都重新居中，丢掉用户拖动的位置。
 4. 系统关闭（Alt+F4）走 Slint 默认的「隐藏」，但 `visible`/`settings_open`/`skills_open` 不更新——托盘开合与两个弹窗的重开会永久错位。现在四个窗口都接了 `on_close_requested`。
 5. 上述关闭与拖动位置行为没有自检；新增 `--test-close` 逐项证明。
+
+**2026-11-21 全量 code review** 又修了 1 个 Critical（usage 抓取把 200 错误信封当全零、覆盖 last-good）与一批 Major/Minor：设置窗标题栏移出滚动区、登录窗 4xx 文案、`--test-login` 哈希两份凭证、`--test-settings` 备份/还原与重跑可重复、token 门禁剥注释并计数、`--test-dialogs` 断言真的观察到 blur、`quota-core` 的 tie 舍入/浮点回退/原子写/索引目录等。共享数据层的 Critical 与 6 条同类问题 `main` 也有，需要单独 PR 移植；Slint 壳独有的问题已在本分支修掉。明细见 `CHANGELOG.md` 与 `spike/p5/REPORT.md` §9。
