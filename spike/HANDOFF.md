@@ -346,7 +346,14 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 | 从每次 `v*` 发布起跟着挂一个资产，或单独一次手动构建后上传 | 不是默认下载，不替换 `QuotaTray.exe`，不做自动更新 |
 | 版本号跟自己的 crate（现在是 `0.1.0`），资产名里写清 | 不承诺 settings 迁移、不自称稳定 |
 
-实现方式（**2026-11-21 已执行**）：**pre-release `slint-beta-0.1.0` 已发布**（tag 打在 `3b4ae06`），资产 `QuotaTray-Slint-0.1.0-beta.exe`（25,030,144 B）+ `SHA256SUMS.txt`，正文写明「预览、不替代主版本」与 `PARITY.md` §12 的已知缺口。`gh release list` 里 `v1.0.3` 仍是 **Latest**——pre-release 不抢这个标记，这正是要的语义。下一次 beta 仍走「本机构建 + 人工上传」（`SKIA_BINARIES_URL` 必须设）；**beta 资产的构建必须来自打 tag 的那棵树**，否则用户拿到的不是对应版本。要不要把这一步做成 `ci-slint.yml` 的手动触发 job，等第一次现场反馈之后再说。
+实现方式：`ci-slint.yml` 的手动 `workflow_dispatch`（**已验证一次，`run 44913024273` 两个 job 全绿**：artifact `slint-beta-0.1.0` = exe + `SHA256SUMS.txt`，`sha256sum -c` OK；挂 Release 那条 `tag` 分支尚未实跑）。`SKIA_BINARIES_URL` 只有本机需要，runner 直连可下。
+
+**2026-11-21 现场：beta 0.1.0 已撤回，记为实验性、不发版。** 用户跑起来发现两个 shell 级缺陷，代码改一行就能修，但修完需要重新做视觉/DPI 验收，所以按「不发版」处理：
+
+1. **启动弹出终端窗口**：`slint/src/main.rs` 缺 `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`（`src-tauri/src/main.rs` 有），release 产物因此是 console 子系统。`--test-*` 的输出不受影响（管道里 stdout 照传）。
+2. **界面是黑底**：四个窗口在 `.slint` 里写的是 `background: transparent`，但 `slint/src/*.rs` **没有任何 `with_transparent(true)`**——spike 里设置过，搬进 `slint/` 时丢了。窗口表面不透明，透明背景就落在黑底上。
+
+撤回动作：GitHub pre-release `slint-beta-0.1.0` 与同名 tag 均已删除（本地 `kimi\` 目录仍留着 exe，供调试）。**重新实验版之前先修这两条**，再按 `PARITY.md` §12 的验收单走一遍；`v2.0.0` 的七条切点不变。
 
 **beta 的前置条件（2026-11-21 已满足）**：`main` 两轮修掉的 9 条数据层问题 + 登录钩子的 origin 门，已在 `3b4ae06` 镜像到 `quota-core/` 与 `slint/src/login_host.rs`：余额形状校验、非 JSON 的 2xx 不记 base（抓取与校验两条路径）、envelope 拒绝时走完候选、Kimi 空报文算失败、`used_ratio` 溢出、`/models` 的尝试领取、未配置 ≠ 失败（托盘/重试/表头）、过期 token 单独报、`amountLeft` 越界。验证：`quota-core` 57 tests、`slint` 6 tests、两个 crate 的 fmt/clippy 全绿，release exe 用 Skia 构建后 `--test-login` PASS（冷 profile 在 WebView2 初始化里花了 107 s）、`--test-signin` PASS、`--test-heights` 未变。
 
