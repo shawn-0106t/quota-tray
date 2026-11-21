@@ -5,6 +5,41 @@ All notable changes to Quota Tray are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each section carries
 the English notes first, then the Chinese mirror.
 
+## [Unreleased]
+
+### Fixed
+
+- The DeepSeek usage fetch now rejects the platform's HTTP 200 error envelope.
+  A dead token answers `200 {"code":40003,…,"data":null}`; the fetch accepted it,
+  `parse_usage` returned an all-zero month, and the cache overwrote the
+  last-good numbers while the failing base was remembered. Every 2xx body now
+  goes through `token_accepted` before the base is saved.
+- Numbers: `get_i64` accepts a float or a decimal string (the documented numeric
+  fallback), `used: null` falls through to `limit - remaining`, and the
+  aggregation counters saturate instead of overflowing on hostile input.
+- `settings.json` is written through a temp file + rename, so a crash cannot
+  leave a truncated file that silently resets every setting.
+- Clear bumps the login epoch and the clear generation **before** the credential
+  file is wiped; a verification finishing in between can no longer write the
+  token back. `credentials::save` returns whether the write succeeded, and the
+  sign-in window / manual paste report `save-failed` instead of claiming a save
+  that did not happen.
+
+### 中文
+
+- **修复**：DeepSeek usage 抓取现在会拒绝平台的 HTTP 200 错误信封。失效 token 返回
+  `200 {"code":40003,…,"data":null}`，旧代码照单全收，`parse_usage` 得到「全零月份」，
+  缓存覆盖 last-good 数字，还把失败的 base 记住。现在每个 2xx body 先过
+  `token_accepted`，通过后才记住 base。
+- **修复**：数字处理——`get_i64` 接受浮点或十进制字符串（文档承诺的 numeric
+  fallback）；`used: null` 回退到 `limit - remaining`；聚合计数器改为饱和加法，恶意输入
+  不再溢出。
+- **修复**：`settings.json` 改为临时文件 + rename，崩溃不会留下截断文件、把所有设置
+  静默重置为默认值。
+- **修复**：Clear 先 bump 登录 epoch 与 clear 世代，再清凭证文件；期间完成的验证不会
+  把 token 写回。`credentials::save` 返回是否写入成功，登录窗与手工粘贴在失败时报
+  `save-failed`，不再假装保存成功。
+
 ## [1.0.2] — 2026-11-19
 
 ### Fixed

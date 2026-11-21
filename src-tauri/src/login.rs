@@ -34,6 +34,7 @@ const CAPTURE_SCHEME: &str = "quotatray";
 const TITLE: &str = "DeepSeek sign-in";
 const STATUS_VERIFYING: &str = "DeepSeek sign-in — verifying…";
 const STATUS_SAVED: &str = "DeepSeek sign-in — verified, saved";
+const STATUS_NOT_SAVED: &str = "DeepSeek sign-in — verified, not saved";
 
 /// What the settings window calls (PLAN §4).
 pub fn open(app: &AppHandle) {
@@ -235,8 +236,17 @@ async fn verify_and_save(app: &AppHandle, mut token: String, epoch: u64) {
                     recovery::log("login: cleared while verifying, candidate dropped");
                     return;
                 }
+                // The write reports its own success. Inferring it from
+                // `status()` would read an older token and claim a save that
+                // never happened; on failure keep the window open so the user
+                // can try again.
+                if !credentials::save(None, Some(&token), None) {
+                    st.login.verifying.store(false, Ordering::SeqCst);
+                    set_title(app, STATUS_NOT_SAVED);
+                    recovery::log("login: verified but the credential file could not be written");
+                    return;
+                }
                 st.login.accepted.store(true, Ordering::SeqCst);
-                credentials::save(None, Some(&token), None);
                 set_title(app, STATUS_SAVED);
                 recovery::log("login: candidate verified and saved");
                 // The settings section re-reads its status; the panel asks for

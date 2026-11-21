@@ -58,28 +58,29 @@ pub fn parse_usage(amount_json: &str, cost_json: &str) -> Result<UsageInfo, serd
             let n = tokens(amount);
             let m = models.entry(&model);
             match token_type.as_str() {
-                "REQUEST" => m.month_requests += n,
+                "REQUEST" => m.month_requests = m.month_requests.saturating_add(n),
                 "PROMPT_CACHE_HIT_TOKEN" => {
-                    m.month_tokens += n;
-                    hit += n;
+                    m.month_tokens = m.month_tokens.saturating_add(n);
+                    hit = hit.saturating_add(n);
                 }
                 "PROMPT_CACHE_MISS_TOKEN" => {
-                    m.month_tokens += n;
-                    miss += n;
+                    m.month_tokens = m.month_tokens.saturating_add(n);
+                    miss = miss.saturating_add(n);
                 }
                 // RESPONSE_TOKEN / PROMPT_TOKEN / anything new: count as tokens
-                _ => m.month_tokens += n,
+                _ => m.month_tokens = m.month_tokens.saturating_add(n),
             }
         }
         // A model with an empty usage[] is still reported, with no hit rate.
         let m = models.entry(&model);
-        m.cache_hit_rate = if hit + miss > 0 {
-            Some(hit as f64 * 100.0 / (hit + miss) as f64)
+        let calls = hit.saturating_add(miss);
+        m.cache_hit_rate = if calls > 0 {
+            Some(hit as f64 * 100.0 / calls as f64)
         } else {
             None
         };
-        hit_all += hit;
-        miss_all += miss;
+        hit_all = hit_all.saturating_add(hit);
+        miss_all = miss_all.saturating_add(miss);
     }
 
     // Today's tokens: only the days[] row matching the local date.
@@ -88,7 +89,8 @@ pub fn parse_usage(amount_json: &str, cost_json: &str) -> Result<UsageInfo, serd
             if token_type == "REQUEST" {
                 continue;
             }
-            models.entry(&model).today_tokens += tokens(amount);
+            let m = models.entry(&model);
+            m.today_tokens = m.today_tokens.saturating_add(tokens(amount));
         }
     }
 
@@ -128,10 +130,10 @@ pub fn parse_usage(amount_json: &str, cost_json: &str) -> Result<UsageInfo, serd
         m.today_cost = snap_money(m.today_cost);
     }
     for m in &models.list {
-        month_tokens += m.month_tokens;
-        month_requests += m.month_requests;
+        month_tokens = month_tokens.saturating_add(m.month_tokens);
+        month_requests = month_requests.saturating_add(m.month_requests);
         month_cost_units = month_cost_units.saturating_add(money_units(m.month_cost));
-        today_tokens += m.today_tokens;
+        today_tokens = today_tokens.saturating_add(m.today_tokens);
         today_cost_units = today_cost_units.saturating_add(money_units(m.today_cost));
     }
 
