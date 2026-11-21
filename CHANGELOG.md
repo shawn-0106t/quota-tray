@@ -7,6 +7,8 @@ the English notes first, then the Chinese mirror.
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-11-21
+
 ### Fixed
 
 - The DeepSeek usage fetch now rejects the platform's HTTP 200 error envelope.
