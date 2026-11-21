@@ -25,7 +25,7 @@
 | keepalive | 1×1 透明、屏幕外 (-30000,-30000) 的 `Anchor` 窗口常驻 | Slint 隐藏最后一个窗口会 `quit_event_loop()`，托盘应用会在第一次失焦隐藏时退出（实测隐藏后 ~16 ms 进程结束） |
 | tab 动效实现 | 4 个组合 state（tab × 显隐）+ 先放大窗口、16 ms 后翻 state | Slint states 是互斥的，第一个条件为真的 state 生效；两组独立 state 时显隐那组永远不生效 |
 | DPI 测试 | 只能用真实显示缩放，**不要用 `SLINT_SCALE_FACTOR`** | 它改 Slint 逻辑缩放但 winit 仍按系统 DPI 建窗口：225% 下贴角漂 51 px |
-| 发布 | 不动 v1.0.1 线；新壳暂不进五载体门禁 | 它还没成为发布产物 |
+| 发布 | 不动 v1.0.2 线；新壳不进五载体门禁，v2.0.0 的切点见 §9.2 | 它还没成为发布产物 |
 | 新壳目录 | **`slint/`**（crate `quota-tray-slint`，exe `quota-tray-slint.exe`） | 2026-11-15 用户拍板；`spike/p0` 保留为冻结证据 |
 | 面板布局 | **绝对堆叠**：`Metrics` 常量给每个块算 y，`panel.slint` 用同一批常量求和定窗口高度；**panes 不用 layout** | Slint 的 layout 在"兄弟组件里有 repeater"时会静默丢掉后面的兄弟（`spike/p2/REPORT.md` §5.1） |
 | P3 多窗口 | **一个事件循环里 4 个 `Window` 组件 + 屏幕外 `Anchor`**；`win/{settings,skills,menu}.rs` 各管一个窗口 | Slint 的 `Component::show()/hide()` 本来就按组件实例建窗；Tauri 版同样是 4 个常驻窗 + 一个临时登录窗 |
@@ -291,13 +291,50 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 
 ## 8. 给新对话的第一句（可直接粘贴）
 
-> 接手 `..\quota-tray-slint`（分支 `spike/slint-demo`）。先读 `spike/HANDOFF.md`，再读 `spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md`、`spike/p3/REPORT.md`、`spike/p4/REPORT.md` 与 `spike/p5/REPORT.md`。P0–P5 都已完成，新壳代码在 `slint/`（crate `quota-tray-slint`）：面板接 `quota-core` 真实数据、`ActiveTab` 持久化、夹取滚动；设置窗落盘重启生效；skills 懒加载；托盘右键光标处菜单；DeepSeek 登录窗是子进程（`--login-host`，tao + wry），捕获 / fetch 拦截 / 拒收 / Clear 都有自动证据；`PARITY.md` 的 66 行矩阵没有 ❌；token 漂移门禁与 `ci-slint.yml`（fmt/clippy/test `--locked`）已接进 CI。下一步是按 §9 拍板：是否以 Slint 版替代 Tauri 版、发布线怎么切。
+> 接手 `..\quota-tray-slint`（分支 `spike/slint-demo`）。先读 `spike/HANDOFF.md`，再读 `spike/slint-demo/REPORT.md`、`spike/p0/REPORT.md`、`spike/p1/REPORT.md`、`spike/p2/REPORT.md`、`spike/p3/REPORT.md`、`spike/p4/REPORT.md` 与 `spike/p5/REPORT.md`。P0–P5 都已完成，新壳代码在 `slint/`（crate `quota-tray-slint`）：面板接 `quota-core` 真实数据、`ActiveTab` 持久化、夹取滚动；设置窗落盘重启生效；skills 懒加载；托盘右键光标处菜单；DeepSeek 登录窗是子进程（`--login-host`，tao + wry），捕获 / fetch 拦截 / 拒收 / Clear 都有自动证据；`PARITY.md` 的 66 行矩阵没有 ❌；token 漂移门禁与 `ci-slint.yml`（fmt/clippy/test `--locked`）已接进 CI。§9 的两项发布线已拍板（2026-11-21）：`v1.0.3` 从 `main` 切、Slint 壳不立即接 v2.0.0，改走 §9.2 的七条门禁。
 
 ## 9. 待拍板
 
+> **2026-11-21 已拍板两项：v1.0.3 从 `main` 切（§9.1）；Slint 壳不直接接 v2.0.0 发布线，改走七条门禁 + 一个 beta 周期（§9.2）。**
+
 - ~~新壳目录名~~（**已定 2026-11-15：`slint/`**）。
-- 最终是否用 Slint 版替代 Tauri 版（决定 v2.0.0 的发布线怎么切）。
+- ~~最终是否用 Slint 版替代 Tauri 版~~（**已定 2026-11-21：不立即替代，见 §9.2 的门禁与切点**）。
 - ~~`verify_user_token` 的修复要不要打 `v1.0.2`~~（**2026-11-15 已完成**：PR [#4](https://github.com/shawn-0106t/quota-tray/pull/4) squash 合并为 `5d95f1f`，定版提交 `f92748f` 把五个载体升到 1.0.2 并把 `[Unreleased]` 写进 `## [1.0.2] — 2026-11-15`，`check_versions.py` 六项通过、本地四道门禁全绿。**只剩打 `v1.0.2` tag** 才会触发草稿 Release，待点头。修复因为 `main` 上没有 `quota-core/`，是**移植**到 `src-tauri/src/deepseek/client.rs` 的同一份实现 + 单测。）
   两条线收敛时注意：`quota-core` 里那份已经是修好的，`src-tauri` 的副本在抽取完成时应当删除，不要留两份实现。
 - skills 的单行描述：本实现统一预留两行（124 行里 11 行多 15.22 px）。P5 若要严格对齐，要么引入文本测量，要么顺手修 `quota-core::skills` 的折叠 YAML 解析（`description: >` 现在显示成裸 `>`，两个壳都一样）——后者会改现版行为，需要单独决定。
 - 三档 DPI 的真机验证：本机固定 225%，改缩放会动用户的桌面布局；用户已选「算术证明 + 现场 225%，100/150/200% 留人工检查单」。
+
+### 9.1 v1.0.3（已切出，2026-11-21）
+
+`main` 的 `[Unreleased]` 是 PR [#11](https://github.com/shawn-0106t/quota-tray/pull/11) 的七条修复，其中 Critical 是 usage 抓取把 `200 + {"code":40003}` 当全零月份、覆盖 last-good 并把失败 base 记住——账号数字会被写坏。这些都是已合并但未发布的补丁，按 semver 属于 patch，因此定版 `1.0.3`（日期 2026-11-21），五个载体已升、`check_versions.py` 六项 ok。
+
+准备分支 `chore/release-1.0.3`（在 `../kimi-deepseek-quota-dashboard` 里，`main` 是 PR-only）：本地 gates 全绿后**只差** push → PR → 合进 `main` → 打 `v1.0.3` tag。tag 仍要用户点头，因为它会触发草稿 Release。
+
+### 9.2 Slint 是否成为 v2.0.0 主线（已拍板：不立即替代）
+
+**决定：方向采纳，切点后移。** Slint 壳先以「可选 beta 资产」陪跑，v2.0.0 在下列七条全绿时才切发布线。
+
+理由（按证据强度排）：
+
+1. **用户可感知收益目前是零，体积是三倍**：release 体积 Skia 约 21.1 MB，Tauri 便携 exe 7.2 MB（`spike/HANDOFF.md` §3）；启动时间与常驻内存**没有任何一份报告测过**，所以「更轻」目前只是假设。字形 shaping 差 4–11 设备像素（`spike/slint-demo/REPORT.md`），肉眼一致、截图不再一致。换壳的收益是架构性的（四个主窗不再依赖 WebView2、没有 `ProcessFailed` 重建、没有 IPC 面），不是产品性的。
+2. **发布工程还不在壳里**：六个数据探针（`--test-fetch/--test-deepseek/--test-usage/--test-update/--test-ui/--test-login`）只在 Tauri exe 里；五载体门禁指向 `package.json` / `src-tauri`；`release.yml` 构建 `src-tauri`；`make_release_zip.py` 读 `tauri.conf.json`。现在把发布线切过去，等于把维护工具一起丢掉。
+3. **身份迁移没有设计**：`PARITY.md` §11.1 说切发布时互斥量与自启值改回规范名（`QuotaTray.SingleInstance` / `QuotaTray`），但那时会与仍在 `HKCU\...\Run` 里、仍可能常驻的 Tauri 版撞名；`%APPDATA%\QuotaTray-Slint` 要不要并入 `%APPDATA%\QuotaTray` 也没定——并入会读到 Tauri 的 `settings.json` / `webview.log`，不并则 v1.x 用户的主题、刷新间隔、自启状态静默丢失。两个托盘图标、两个单实例不是可发布的升级路径。
+4. **现场缺口里有四条是发布必过的**：100/150/200% DPI、混合 DPI/多屏、IME、成功登录（exit 0）的 settle（`PARITY.md` §12）。Tauri 线已经有三版发布和更长现场。
+5. **构建成本与门禁**：本地每次 cargo 都要 `SKIA_BINARIES_URL`（否则回落源码构建、需要 LLVM），release job 多一次 Skia 下载；`ci-slint.yml` 首跑绿了但**还没进 branch protection**，发布线的唯一门禁仍只有 Tauri 那条。
+6. **两条线结构尚未收敛**：`main` 上**没有 `quota-core/`**（PR #11 是把同一份修复移植进 `src-tauri/src/deepseek/client.rs`），而本分支的 `src-tauri` 依赖仓库根的 `quota-core`。v2.0.0 要么先合并这层结构，要么再维护一轮双实现。
+
+**v2.0.0 的切点（七条，全部可验证）**
+
+| # | 条件 | 落点 |
+|---|---|---|
+| 1 | 六个数据探针在 Slint exe 里可用，输出与 Tauri 版同构（`quota-core` 已有全部逻辑，只差 JSON 外壳；`--test-ui` 的等价物是 `--test-windows`） | `slint/src/checks.rs` |
+| 2 | 版本门禁扩到第六载体（`slint/Cargo.toml` + `slint/Cargo.lock`），`release.yml` 增加 Skia 构建 | `scripts/release/check_versions.py`、`.github/workflows/release.yml` |
+| 3 | 资产切到 Slint exe（`QuotaTray.exe` 名字不变、内容换壳），`make_release_zip.py` 改读 `slint/Cargo.toml`，zip 源文件集仍走 `git ls-files` | `scripts/release/make_release_zip.py` |
+| 4 | 身份迁移写成实现：互斥量 / 自启值改回规范名，状态目录一次性导入（建议「`%APPDATA%\QuotaTray` 有 Tauri settings 且自己无文件则导入，之后不再回读」，`shared` 不动），升级说明写明「旧 Tauri exe 先退出并删掉它的自启值」 | `slint/src/app.rs`、README |
+| 5 | 现场四项各一次：100/150/200% DPI、混合 DPI/双屏、设置窗手工粘贴框的 IME、成功登录（exit 0）的 settle | `PARITY.md` §12 |
+| 6 | 体积与启动的明确结论（接受 / 优化 / 放弃），启动时间与常驻内存实测补进 `PARITY.md` | `PARITY.md` §10 |
+| 7 | `ci-slint.yml` 进 branch protection；`PARITY.md` §10 的两行 ⚠️（§11.7 诊断 CLI、§11.8 发布线）结案 | GitHub 设置 + `PARITY.md` |
+
+**beta 通道（建议，未实现）**：从下一次发布起把 Slint exe 作为**可选**资产挂到 Release（名字带 `-slint` 后缀、不替换默认下载），利用「两应用一账号」的现有设计（独立互斥量、独立状态目录、共用 `shared/`）收第 5 条的现场数据。它不进五载体门禁——门禁只认发布产物。实现它需要一个独立 job 或一次手工构建上传；不做也能走人工把 exe 交给测试者。
+
+**什么会让我改主意**：若目标是「彻底摆脱 WebView2」，那 Slint 只在登录窗里仍依赖它，收益不完整；若目标是体积/内存，当前数据是负收益。这两条任一条被实测推翻（比如启动与内存明显更优），切点可以提前。
