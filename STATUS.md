@@ -1,6 +1,6 @@
 # STATUS — Quota Tray
 
-> 快照：2026-11-21 21:35（**v1.0.3 已打 tag 并生成草稿 Release**，`main` = `ec94c34`，三件资产下载后 `sha256sum -c` 两条 OK、exe `FileVersion=1.0.3`、zip 93 项且关键文件与 tag 逐字节一致；**发布是手动步骤**，所以在点 Publish 之前 Latest 仍是 v1.0.2）。
+> 快照：2026-11-21 21:36（**v1.0.3 已 publish 并标记 Latest**，`main` = `6f10e6f`；发布时刻三件资产下载后 `sha256sum -c` 两条 OK、exe `FileVersion=1.0.3`、zip 93 项且关键文件与 tag 逐字节一致）。
 > 2026-11-19 更新：1.0.2 原本只含「验证后保存」一条；因为一直没打 tag，未发布的改动都并进了这一版——除了 DeepSeek
 > 的「验证后保存」，还包括设置窗标题固定、共享账号目录（`%APPDATA%\QuotaTray\shared`）、
 > Kimi 报文解析修复（`booster_wallet` / 周窗口百分比）以及一批审查 Minor；`[Unreleased]` 已折进
@@ -8,7 +8,7 @@
 > 「验证后保存」这一条在五轮独立只读审查里被磨了五遍（表格见下）：
 > `verify_user_token` 不再把 200 + `{"code":40003}` 的错误信封当成通过（PR #4 → squash `5d95f1f`）；临时性失败对同一个候选重试一次；被拒的 token 优先于其他 base 的错误；epoch 只在真正的窗口边界（`new_session`：建窗 / 关窗 / Clear）移动；重试循环的闸门排在一切副作用之前（被取代的 future 不写标题、不偷队列、不清别人的 `verifying`）。
 > 五载体 1.0.2、`CHANGELOG` 的 `[1.0.2] — 2026-11-19`、`check_versions.py` 六项 ok；`tsc` / `vite build` / `cargo fmt+clippy+test --locked`（31 passed）全绿；`--test-login` 在真机跑过（`verify=ok` + 四窗 OK + 两项捕获 OK）；`main` 的 CI 在 `2d06418`（2m3s）与 `35308af`（2m14s）上 success，CodeQL 仍在结算。
-> **下一步**：① 在 GitHub 上把 `v1.0.3` 的草稿 Release 点 Publish（正文已从 `CHANGELOG.md` 生成，中英都在；三件资产已核对）；② Slint 壳按用户决定走**测试版**通道（`spike/HANDOFF.md` §9.2：七条门禁 + beta 资产，不接 v2.0.0 发布线；beta 前必须先镜像 9 条数据层修复 + 登录钩子的 origin 门）。`main` 上没有已知未修项；Clear 与捕获之间有一个已知的很窄窗口（见 2026-11-21 段）。
+> **下一步**：① ~~在 GitHub 上把 `v1.0.3` 的草稿 Release 点 Publish~~ —— **已完成**，2026-11-21 13:33:33 UTC 发布并标记 Latest；② Slint 壳按用户决定走**测试版**通道（`spike/HANDOFF.md` §9.2：七条门禁 + beta 资产，不接 v2.0.0 发布线；beta 前必须先镜像 9 条数据层修复 + 登录钩子的 origin 门）。`main` 上没有已知未修项；Clear 与捕获之间有一个已知的很窄窗口（见 2026-11-21 段）。
 > **本轮收尾（2026-11-20）**：`demo/heights.py` 默认量产品页（`--demos` 保留 A–E 历史表，读 `ui-demo.html` 的 `#m-product` 读数）；`demo/check_contrast.py` 改成解析 `theme.css`——当场抓出 `--ink-3` 只有 2.11/2.34（已提到 3.21/3.35，`PLAN.md` §3.2 同步），把 `--seg-ring` 改坏会真的 FAIL；`expires_at` 秒/毫秒归一；`limits[0]` 被当作 5h 写进 PLAN 并有测试钉住；`MODELS_REFETCHED` 每进程一次仍是 PLAN 的设计，不是缺陷。
 > 本文件是**进度快照**，不是契约。契约在 `PLAN.md`，代理规则在 `AGENTS.md`。
 > 用途：换新对话 / 换 agent 时，读这一份就能接手，不需要历史对话。
@@ -181,7 +181,7 @@
 - `%APPDATA%\QuotaTray`：credentials / endpoints / models / cache / kimi-usage / `settings.json`（`Theme=system`、`RefreshMinutes=5`、`AutoStart=false`、`ActiveTab=kimi`）/ `webview.log`。
 - 仓库根留三件本地构建的产物（gitignored）：`QuotaTray.exe`（1.0.0）、`QuotaTray-v1.0.0.zip`、`SHA256SUMS.txt`；哈希与 Release 里 runner 构建的那份不同（正常，两台机器/两次构建）。
 - 本机已无常驻托盘进程：为验证关掉了 `trae_projects\kimi\quota-tray.exe`（旧副本，会抢 `QuotaTray.SingleInstance`）。要用就双击 `src-tauri/target/release/quota-tray.exe`（1.0.3 本地构建）或下载 Release 里的 `QuotaTray.exe`；那个旧副本建议删掉，否则还会抢单实例。
-- git：`main` 干净并与 `origin/main` 同步（`ec94c34`）；tag `v0.1.0` / `v1.0.0` / `v1.0.1` / `v1.0.2` / `v1.0.3`；**v1.0.3 的草稿 Release 已生成，等手动 Publish**。
+- git：`main` 干净并与 `origin/main` 同步（`6f10e6f`）；tag `v0.1.0` / `v1.0.0` / `v1.0.1` / `v1.0.2` / `v1.0.3`；**v1.0.3 已发布并标记 Latest**（2026-11-21 13:33:33 UTC）。
 
 ## 新对话开场建议
 
