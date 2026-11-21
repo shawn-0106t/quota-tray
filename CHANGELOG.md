@@ -7,6 +7,29 @@ the English notes first, then the Chinese mirror.
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-11-21
+
+### Fixed
+
+- Fetches are single-flight per provider. The poll loop, the tray's hover
+  prefetch, the manual Refresh and the credential/sign-in refreshes could each
+  start one, so two ran at once: the slower won the write, and the pane could
+  settle on an older sample than the one it had already drawn. A success that
+  started earlier could also overwrite a newer failure, leaving the status line
+  claiming nothing had failed. A refresh that arrives while one is in flight now
+  keeps the last-good result and returns; it does not queue, because the
+  in-flight fetch lands with a newer sample anyway and a queue would starve the
+  poll loop (the hover prefetch fires every 10 s while one DeepSeek fetch can
+  take ~90 s).
+
+### 中文
+
+- **修复**：抓取按 provider 单飞。轮询循环、托盘悬停预取、手动刷新，以及凭证变更/登录成功后的
+  刷新各自都会发起抓取，于是两次可能并发：慢的那次赢得写入，面板可能停在比已经画过的更旧的样本
+  上；更早开始的成功还可能覆盖更晚的失败，状态行于是声称什么都没失败。抓取进行中到达的刷新现在
+  直接返回 last-good，不排队——进行中的那次本来就会带回更新的样本，而排队会饿死轮询循环（悬停
+  每 10 秒一次，而 DeepSeek 一次抓取最坏约 90 秒）。
+
 ## [1.0.3] — 2026-11-21
 
 ### Fixed

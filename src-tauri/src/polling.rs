@@ -23,8 +23,28 @@ fn period(app: &AppHandle) -> Duration {
 }
 
 pub async fn safe_refresh(app: &AppHandle) -> QuotaResult {
-    let mut r = quota::fetch().await;
+    // Single flight, never a queue (PLAN §5.3). The callers are the poll loop,
+    // the tray's hover prefetch, the manual Refresh and the post-sign-in /
+    // post-credential refreshes; two of them used to run at once, and the slower
+    // one won the write, so the pane could settle on an older sample than the one
+    // already drawn and an earlier success could mask a newer failure.
+    //
+    // A caller that arrives while a fetch is in flight returns the last-good
+    // result instead of stacking behind it: the in-flight fetch lands with a
+    // newer sample anyway, and a queue would starve the poll loop — the hover
+    // prefetch fires every 10 s while one DeepSeek fetch can take ~90 s.
     let st = app.state::<AppState>();
+    let mut r = {
+        let Ok(_gate) = st.quota_gate.try_lock() else {
+            return st
+                .last_quota
+                .read()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(QuotaResult::idle);
+        };
+        quota::fetch().await
+    };
     if r.error.is_some() {
         let last = st.last_quota.read().unwrap().clone();
         if let Some(l) = &last {
@@ -49,8 +69,16 @@ pub async fn safe_refresh(app: &AppHandle) -> QuotaResult {
 /// DeepSeek counterpart of `safe_refresh`. Same failure semantics, separate
 /// last-good slot: the two providers never overwrite each other (PLAN §5.3).
 pub async fn safe_refresh_deepseek(app: &AppHandle) -> DeepseekResult {
-    let mut r = deepseek::fetch().await;
+    // Same rule as its Kimi counterpart, on its own provider: the fetch is
+    // single-flight, and a caller that arrives during one keeps the last-good
+    // result rather than queueing behind it.
     let st = app.state::<AppState>();
+    let mut r = {
+        let Ok(_gate) = st.deepseek_gate.try_lock() else {
+            return st.last_deepseek.read().unwrap().clone().unwrap_or_default();
+        };
+        deepseek::fetch().await
+    };
     if r.has_error() {
         let last = st.last_deepseek.read().unwrap().clone();
         if let Some(l) = &last {

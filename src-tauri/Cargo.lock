@@ -2866,7 +2866,7 @@ dependencies = [
 
 [[package]]
 name = "quota-tray"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "base64 0.23.1",
  "chrono",
