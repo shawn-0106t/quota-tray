@@ -108,6 +108,9 @@ async fn fetch_usage_body(
 ) -> Result<String, String> {
     let bases = candidate_bases();
     let mut last_error = "server-error".to_string();
+    // A base answering with the platform's refusal is recorded, not returned:
+    // the answer that matters is whether *any* base accepted the token.
+    let mut refused = false;
     for base in &bases {
         let Some(client) = client() else {
             return Err("network-error".to_string());
@@ -132,10 +135,17 @@ async fn fetch_usage_body(
         let body = resp.text().await.map_err(|_| "network-error".to_string())?;
         // A 2xx is not a success: the platform answers 200 with
         // `{"code":40003,…,"data":null}` for a dead token, which parses as an
-        // all-zero month if accepted. Reject it before the base is remembered.
+        // all-zero month if accepted. Reject it before this base is remembered
+        // — but do not stop the walk. A remembered endpoint can go stale and
+        // answer with its own envelope; `verify_user_token` keeps walking for
+        // exactly that reason, and stopping here would pin a dead base and fail
+        // every poll until the user signs in again.
         if !token_accepted(&body) {
-            diag.log(format!("usage/{kind} {url} -> 200 with an error envelope"));
-            return Err("token-expired".to_string());
+            diag.log(format!(
+                "usage/{kind} {url} -> 200 with an error envelope, next candidate"
+            ));
+            refused = true;
+            continue;
         }
         log_top_level_keys(&body, kind, diag);
         if load_usage_base().as_deref() != Some(base.as_str()) {
@@ -143,6 +153,11 @@ async fn fetch_usage_body(
             diag.log(format!("usage/{kind} endpoint remembered: {base}"));
         }
         return Ok(body);
+    }
+    // A refusal from any base is the more useful answer than the last 404: it
+    // is the one the pane renders as "sign in again".
+    if refused {
+        return Err("token-expired".to_string());
     }
     Err(last_error)
 }

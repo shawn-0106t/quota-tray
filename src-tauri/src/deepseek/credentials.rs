@@ -198,8 +198,11 @@ pub fn save(api_key: Option<&str>, user_token: Option<&str>, imported_from: Opti
     let mut wrote = write(&file);
     if !wrote && private_file() != shared_file() {
         // Keep what the user just verified rather than losing it to a failed
-        // shared write; the read path checks both locations.
-        wrote = write_to(&private_file(), &file);
+        // shared write. Report success only if the read path will actually see
+        // it: `read_raw` prefers the shared file, so a surviving shared copy
+        // would shadow this one and every later read would return the old
+        // token — the "verified, saved" lie this release is fixing.
+        wrote = write_to(&private_file(), &file) && !shared_file().exists();
     }
     wrote
 }

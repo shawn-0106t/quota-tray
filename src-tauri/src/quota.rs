@@ -218,7 +218,12 @@ fn get_i64(v: &Value) -> Option<i64> {
 }
 
 fn round_to_i64(value: f64) -> Option<i64> {
-    value.is_finite().then(|| value.round() as i64)
+    // `as i64` saturates, so a hostile `amountLeft` of 1e300 would arrive as
+    // i64::MAX and the wallet would render as a ¥92bn balance instead of
+    // "Not configured". Out of range means "no number", the same answer a
+    // missing field gets; no real payload comes near the bound.
+    const LIMIT: f64 = i64::MAX as f64;
+    (value.is_finite() && value.abs() <= LIMIT).then(|| value.round() as i64)
 }
 
 /// resetTime: RFC3339 first, then the looser shapes DateTimeOffset.TryParse
@@ -265,7 +270,7 @@ fn parse_segment(v: &Value) -> QuotaSegment {
         .get("resetTime")
         .and_then(|x| x.as_str())
         .and_then(parse_reset_time);
-    // get_f64 can yield inf/NaN from hostile strings ("1e999", "NaN"); keep
+    // `number` can yield inf/NaN from hostile strings ("1e999", "NaN"); keep
     // percent finite so serialization never emits a non-finite double
     let percent = used / limit * 100.0;
     QuotaSegment {
@@ -435,6 +440,16 @@ mod tests {
         assert_eq!(get_i64(&json!("12.6")), Some(13));
         assert_eq!(get_i64(&json!("NaN")), None);
         assert_eq!(get_i64(&json!(null)), None);
+    }
+
+    #[test]
+    fn out_of_range_numbers_read_as_missing_not_saturated() {
+        // `as i64` saturates: without the range guard a hostile 1e300 arrives
+        // as i64::MAX and the wallet renders a ¥92bn balance instead of
+        // "Not configured". No real payload comes near the bound.
+        assert_eq!(get_i64(&json!(1e300)), None);
+        assert_eq!(get_i64(&json!("-1e300")), None);
+        assert_eq!(get_i64(&json!(1e18)), Some(1_000_000_000_000_000_000));
     }
 
     #[test]

@@ -23,9 +23,25 @@ the English notes first, then the Chinese mirror.
   leave a truncated file that silently resets every setting.
 - Clear bumps the login epoch and the clear generation **before** the credential
   file is wiped; a verification finishing in between can no longer write the
-  token back. `credentials::save` returns whether the write succeeded, and the
-  sign-in window / manual paste report `save-failed` instead of claiming a save
-  that did not happen.
+  token back. `credentials::save` returns whether the write landed, and both
+  paths stop claiming a save that did not happen: the sign-in window says
+  `verified, not saved`, the paste field `save-failed`.
+- The hovered scrollbar thumb is legible now. `--ink-3` measured 2.11:1 light /
+  2.34:1 dark against the paper, and that thumb is the only affordance telling
+  you a pane scrolls (WCAG 1.4.11 asks for 3:1). It is 3.21:1 / 3.35:1, and
+  `demo/check_contrast.py` reads the values out of `src/theme.css`, so the pair
+  cannot drift from the gate again.
+- A millisecond `expires_at` is divided by 1000 instead of being read as
+  seconds. A millisecond stamp looked valid until the year 5138, so an expired
+  Kimi token kept being sent and the pane said `Fetch failed` where it should
+  say `Expired — sign in with the Kimi CLI`.
+- The DeepSeek usage fetch no longer gives up on the first base that answers
+  with the platform's error envelope: a remembered endpoint that went stale used
+  to pin itself and fail every poll until the next sign-in. It walks the
+  candidates the way verification does, and reports `token-expired` only when no
+  base accepts the token.
+- An out-of-range number reads as missing instead of saturating: a hostile
+  `amountLeft` used to arrive as `i64::MAX` and render a ¥92bn wallet.
 
 ### 中文
 
@@ -39,8 +55,20 @@ the English notes first, then the Chinese mirror.
 - **修复**：`settings.json` 改为临时文件 + rename，崩溃不会留下截断文件、把所有设置
   静默重置为默认值。
 - **修复**：Clear 先 bump 登录 epoch 与 clear 世代，再清凭证文件；期间完成的验证不会
-  把 token 写回。`credentials::save` 返回是否写入成功，登录窗与手工粘贴在失败时报
-  `save-failed`，不再假装保存成功。
+  把 token 写回。`credentials::save` 返回是否真正写盘成功，两条路径都不再假装保存成功：
+  登录窗显示 `verified, not saved`，手工粘贴显示 `save-failed`。
+- **修复**：悬停时的滚动条拇指看得清了。`--ink-3` 在纸色上实测 2.11:1（浅）/
+  2.34:1（深），而它正是「这一格能滚」的唯一提示（WCAG 1.4.11 要求 3:1）。现在
+  3.21:1 / 3.35:1，且 `demo/check_contrast.py` 直接解析 `src/theme.css`，两边不会再
+  各自漂移。
+- **修复**：毫秒版 `expires_at` 先除 1000，不再被读成「有效到 5138 年」——过期 token
+  会一直被拿去请求，面板显示 `Fetch failed` 而不是 `Expired — sign in with the Kimi
+  CLI`。
+- **修复**：DeepSeek usage 抓取不再在第一个返回错误信封的 base 上放弃：被记住的端点
+  一旦失效，以前会把自己钉死、之后每次轮询都失败，直到用户重新登录。现在按校验路径
+  同样的方式走完候选，只有没有任何 base 接受该 token 时才报 `token-expired`。
+- **修复**：越界数字按「缺失」处理，不再饱和：恶意的 `amountLeft` 以前会变成
+  `i64::MAX`，钱包显示成 922 亿。
 
 ## [1.0.2] — 2026-11-19
 

@@ -480,7 +480,12 @@ pub fn scan_known() -> KimiUsage {
 }
 
 fn window_of(bucket: &Bucket) -> CacheWindow {
-    let prompt = bucket.hit + bucket.creation + bucket.other;
+    // Both counters are saturated on the way in; the sum has to match, or a
+    // hostile pair wraps negative and the whole window reads as "no data".
+    let prompt = bucket
+        .hit
+        .saturating_add(bucket.creation)
+        .saturating_add(bucket.other);
     let hit_rate = if prompt > 0 {
         Some(bucket.hit as f64 / prompt as f64 * 100.0)
     } else {
