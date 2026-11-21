@@ -135,7 +135,7 @@ fn kimi_line(last: Option<&QuotaResult>) -> String {
         None => "Kimi --".to_string(),
         Some(l) => {
             let mut text = format!("Kimi 5h {} · week {}", pct(&l.five_hour), pct(&l.week));
-            if l.error.is_some() {
+            if l.is_failure() {
                 text.push_str(" (fetch failed)");
             }
             text
@@ -151,7 +151,7 @@ fn deepseek_line(last: Option<&DeepseekResult>) -> String {
                 Some(b) => format!("DeepSeek {}", money(b.total, &b.currency)),
                 None => "DeepSeek --".to_string(),
             };
-            if r.has_error() {
+            if r.is_failure() {
                 text.push_str(" (fetch failed)");
             }
             text

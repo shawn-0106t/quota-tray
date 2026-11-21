@@ -158,9 +158,17 @@ export function applyTheme(theme: string): void {
     Subscription first: `get_state` is an IPC round trip, and a theme change that
     lands during it would be lost (a WebView2 rebuild re-runs this path). */
 export async function initTheme(): Promise<AppStateDto> {
-  const subscription = listen<string>('theme-changed', (e) => applyTheme(e.payload));
+  let live = false;
+  const subscription = listen<string>('theme-changed', (e) => {
+    live = true;
+    applyTheme(e.payload);
+  });
   const state = await invoke<AppStateDto>('get_state');
-  applyTheme(state.theme);
+  // Apply the snapshot only if no live event has landed: `get_state` is a round
+  // trip, and `theme_watch` emits on change only, so overwriting a newer event
+  // with this stale value would park the window on the wrong theme until the OS
+  // flipped again.
+  if (!live) applyTheme(state.theme);
   await subscription;
   return state;
 }

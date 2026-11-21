@@ -37,7 +37,7 @@ pub async fn safe_refresh(app: &AppHandle) -> QuotaResult {
     // Every refresh (scheduled, manual, or hover) moves the next scheduled
     // tick: 30s after a failure, one period after a success (SPEC 16.5 step 3,
     // mirrors _timer.Change in QuotaService.SafeRefresh)
-    let delay = if r.error.is_some() {
+    let delay = if r.is_failure() {
         Duration::from_secs(30)
     } else {
         period(app)
@@ -65,7 +65,7 @@ pub async fn safe_refresh_deepseek(app: &AppHandle) -> DeepseekResult {
     // The tooltip carries both providers (PLAN §5.3), so either refresh renews
     // it; the last-good slot just written is what it reads.
     tray::update_tooltip(app);
-    let delay = if r.has_error() {
+    let delay = if r.is_failure() {
         Duration::from_secs(30)
     } else {
         period(app)

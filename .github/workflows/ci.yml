@@ -53,6 +53,12 @@ jobs:
       - name: Version carriers agree
         run: python scripts/release/check_versions.py
 
+      # The contrast pairs the panel relies on live in src/theme.css, and the
+      # --ink-3 raise (2.11:1 -> 3.21:1, WCAG 1.4.11) is the one that proved a
+      # token can be quietly regressed. Parses the CSS; needs only Python.
+      - name: Design contrast pairs pass
+        run: python demo/check_contrast.py
+
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:

@@ -388,6 +388,11 @@ const HOOK_JS: &str = r#"
   var lastToken = '';
   var deliver = function (value) {
     try {
+      // Only the console's own document may hand us a token. The script runs in
+      // EVERY document this window loads, and an SSO / help / ad page carries
+      // its own `Authorization: Bearer …`: sending that to DeepSeek would leak
+      // a third party's credential and, if it verified, replace the user's.
+      if (location.origin !== 'https://platform.deepseek.com') return;
       var token = value == null ? '' : String(value);
       if (token.length < 20 || token === lastToken) return;
       lastToken = token;

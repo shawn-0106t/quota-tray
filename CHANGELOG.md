@@ -42,6 +42,51 @@ the English notes first, then the Chinese mirror.
   base accepts the token.
 - An out-of-range number reads as missing instead of saturating: a hostile
   `amountLeft` used to arrive as `i64::MAX` and render a ¥92bn wallet.
+- The balance endpoint's reply is checked before it is believed. A 200 carrying
+  the platform's error envelope (or a gateway page) used to parse as "¥0.00,
+  unavailable": it overwrote the good numbers under a fresh timestamp and, since
+  the manual paste field verifies a key with this same call, a refused key could
+  be saved. Such a body is a `parse-error` now and the last-good numbers stay.
+- The sign-in window's capture hook only accepts a token from
+  `platform.deepseek.com`. The hook runs in every document that window loads,
+  and an SSO or help page carries its own `Bearer` header — that token was being
+  sent to DeepSeek for verification.
+- A usage endpoint that answers 2xx with a body that is not JSON is no longer
+  remembered as the endpoint. It used to be saved, fail to parse, and then be
+  retried on every poll forever, with re-signing in unable to clear it.
+- A Kimi reply whose keys nothing recognises is a failed fetch, not an empty
+  account: it reported `--` on both cards and "Not activated" on Extra while the
+  header claimed a fresh `Updated`, and it replaced the last-good numbers.
+- Official model names refresh again. The `/models` guard was "once per
+  process", set before the request, so one failure at startup — or the cache
+  simply turning 24 h old in a long-running tray icon — froze the names for the
+  rest of the session, which is the one path PLAN §6.1 relies on for a vendor
+  rename to arrive without a release.
+- An unconfigured provider reads as `Not configured` instead of `(fetch failed)`
+  and no longer re-polls every 30 s: `no-token` / `no-api-key` / `no-user-token`
+  are states the user fixes, not failures. The stamp also keeps `Updated HH:MM`
+  while the balance is live and only the usage token is missing.
+- Closing the settings sheet with Alt+F4 now runs the panel's collapse check,
+  like the in-page X does. Before, the panel's blur had been suppressed while
+  the sheet was open and no new one arrived, so an always-on-top panel stayed
+  parked at the tray corner until the user clicked some other window.
+- A panel-hide that never gets its acknowledgement no longer disables hiding for
+  the rest of the session: the re-entry guard is released when the emit fails and
+  by a watchdog, instead of latching on.
+- The header stamp cannot flip to the incoming provider before its pane does: a
+  quota event that lands inside the 200 ms switch used to print the new
+  provider's timestamp over the old body. It is re-rendered at the cross-fade and
+  again when the switch settles.
+- A persisted DeepSeek tab is applied before the first height report, so the
+  window is not briefly sized for the Kimi card on startup.
+- A theme change that arrives during the `get_state` round trip is no longer
+  overwritten by that (stale) snapshot; `theme_watch` only emits on change, so
+  the window used to sit on the wrong theme until the OS flipped again.
+- The skills list's hovered scrollbar thumb steps up to `--ink-3` like the panel
+  and settings panes, instead of staying at `--hair` (≈1.35:1) on the app's
+  longest scroll area.
+- CI runs `demo/check_contrast.py`, so a token edit can no longer walk the
+  contrast pairs back while every other gate stays green.
 
 ### 中文
 
@@ -69,6 +114,38 @@ the English notes first, then the Chinese mirror.
   同样的方式走完候选，只有没有任何 base 接受该 token 时才报 `token-expired`。
 - **修复**：越界数字按「缺失」处理，不再饱和：恶意的 `amountLeft` 以前会变成
   `i64::MAX`，钱包显示成 922 亿。
+- **修复**：余额响应先验形状再采信。带平台错误信封（或网关页面）的 200 以前会被解析成
+  「¥0.00 不可用」：它用一个新时间戳覆盖掉好数字，而且手工粘贴框正是用这次调用校验
+  API key，所以被平台拒绝的 key 也能存下来。现在这种 body 一律 `parse-error`，保留
+  last-good 数字。
+- **修复**：登录窗的捕获钩子只接受来自 `platform.deepseek.com` 的 token。钩子在这个窗口
+  加载的每一个文档里都会运行，而 SSO / 帮助页自带 `Bearer` 头——那个 token 以前会被送去
+  DeepSeek 做校验。
+- **修复**：返回 2xx 但 body 不是 JSON 的 usage 端点不再被记成可用端点。以前它会被保存、
+  解析失败，然后每次轮询都重试同一个端点，重新登录也救不回来。
+- **修复**：Kimi 响应里没有任何一个已知键时算抓取失败，而不是空账户：以前两张卡显示
+  `--`、Extra 显示「Not activated」，表头却写着新的 `Updated`，还把 last-good 数字换掉。
+- **修复**：官方模型名恢复刷新。`/models` 的守卫是「每进程一次」且在请求前置位，所以启动时
+  一次失败——或者托盘常驻超过 24 小时后缓存自然过期——都会把名字冻结到进程结束；而
+  PLAN §6.1 承诺的正是「厂商改名 24 小时内到面板、不需要发版」。
+- **修复**：未配置的 provider 显示 `Not configured` 而不是 `(fetch failed)`，也不再每 30 秒
+  重轮询：`no-token` / `no-api-key` / `no-user-token` 是需要用户处理的状态，不是失败。余额
+  正常、只缺 usage token 时，表头保持 `Updated HH:MM`。
+- **修复**：用 Alt+F4 关闭设置窗现在也会跑面板的收起判定，和页面内的 X 一致。以前设置窗
+  在时面板的失焦被抑制，关窗又不会产生新的 blur，于是一个 always-on-top 面板会一直停在
+  托盘角，直到用户去点别的窗口。
+- **修复**：一次没有等到确认的 `panel-hide` 不再让本场会话再也无法隐藏面板：发射失败时
+  释放重入守卫，另有看门狗兜底。
+- **修复**：表头不会在 pane 之前翻到新 provider：切换的 200 ms 里落地的额度事件，以前会在
+  旧内容上打出新的时间戳。现在在交叉淡入处翻一次，切换收尾时再补一次。
+- **修复**：持久化的 DeepSeek tab 在第一次高度上报之前就生效，启动时不会再被短暂量成
+  Kimi 卡片的高度。
+- **修复**：`get_state` 往返期间到达的主题变更不再被那份（可能过期的）快照覆盖；
+  `theme_watch` 只在变化时发射，所以窗口以前会一直停在旧主题，直到系统再切一次。
+- **修复**：skills 列表悬停时的滚动条拇指跟面板、设置窗一样抬到 `--ink-3`，不再停在
+  `--hair`（约 1.35:1）——那是全应用最长的滚动区。
+- **门禁**：CI 新增 `demo/check_contrast.py`，token 改动不能再悄悄把对比度退回去而其它门禁
+  全绿。
 
 ## [1.0.2] — 2026-11-19
 
