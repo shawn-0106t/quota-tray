@@ -98,7 +98,8 @@
 - 参考图采样：**rect dump 与截图必须同为 DPR=2**。DPR 不一致时 Chrome 对 `line-height: normal` 的取整不同，每块文本差 0.5–1 px，叠起来 3 px。
 - 目标：文本带 Δy = 0；整窗像素差 Kimi ≈ 2.5%、DeepSeek ≈ 3.5% 是当前下界。
 - P0：底边/右边漂移 **0 px**（30 次连点、186 采样）；失焦隐藏 **171–174 ms**；最后一次 shrink 的 cell 到位 **185–195 ms**（167 ms 曲线 + 16 ms 预放大一帧）；面板 424×560 / 424×601，cell 361.5 / 402.5（差 41）；225% DPI 下窗口 954×1260 物理。
-- 体积：femtovg 14.6 MB / Skia 21.1 MB；依赖树 751 crate（Tauri 版 7.2 MB / 498）。
+- 体积：Skia release **25.0 MB**（P0 时记的 21.1 MB 是更早的构建）；依赖树 751 crate（Tauri 版 7.2 MB / 498）。
+- 运行时内存（2026-11-21，225% DPI，`spike/p5/mem_footprint.ps1`）：Slint 空闲 **81–82 MB** 私有 / 1 进程（面板画过 122 MB）；Tauri 1.0.4 空闲 **147–205 MB** / 10 进程（WebView2 会 trim）。
 - 版本与 features：`slint = "=1.18.1"`、`slint-build = "=1.18.1"`，features = `renderer-skia` + `renderer-femtovg-wgpu`（后备）+ `unstable-winit-030`（`WinitWindowAccessor` 拿 `skip_taskbar` / 焦点事件）+ 默认的 `system-tray`。
 
 ## 4. 目标架构
@@ -318,7 +319,7 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 
 理由（按证据强度排）：
 
-1. **用户可感知收益目前是零，体积是三倍**：release 体积 Skia 约 21.1 MB，Tauri 便携 exe 7.2 MB（`spike/HANDOFF.md` §3）；启动时间与常驻内存**没有任何一份报告测过**，所以「更轻」目前只是假设。字形 shaping 差 4–11 设备像素（`spike/slint-demo/REPORT.md`），肉眼一致、截图不再一致。换壳的收益是架构性的（四个主窗不再依赖 WebView2、没有 `ProcessFailed` 重建、没有 IPC 面），不是产品性的。
+1. **收益要分开说：内存是正的，体积是负的**：release 体积 Skia 约 25.0 MB，Tauri 便携 exe 7.2 MB（§3）；但常驻内存反过来——空闲态（面板还没画过）Slint **81.1–81.3 MB 私有工作集、1 个进程**（同一协议三次复现），面板画过之后 **121.8 MB**；Tauri 1.0.4 同一时段 **147–205 MB、10 个进程**（其中 9 个是 WebView2，占 130–185 MB，且会随空闲自行 trim，所以是个区间）。启动时间仍未测。口径与脚本：`spike/p5/mem_footprint.ps1`、`PARITY.md` §10。字形 shaping 差 4–11 设备像素（`spike/slint-demo/REPORT.md`），肉眼一致、截图不再一致。换壳的收益是架构性的（四个主窗不再依赖 WebView2、没有 `ProcessFailed` 重建、没有 IPC 面），不是产品性的。
 2. **发布工程还不在壳里**：六个数据探针（`--test-fetch/--test-deepseek/--test-usage/--test-update/--test-ui/--test-login`）只在 Tauri exe 里；五载体门禁指向 `package.json` / `src-tauri`；`release.yml` 构建 `src-tauri`；`make_release_zip.py` 读 `tauri.conf.json`。现在把发布线切过去，等于把维护工具一起丢掉。
 3. **身份迁移没有设计**：`PARITY.md` §11.1 说切发布时互斥量与自启值改回规范名（`QuotaTray.SingleInstance` / `QuotaTray`），但那时会与仍在 `HKCU\...\Run` 里、仍可能常驻的 Tauri 版撞名；`%APPDATA%\QuotaTray-Slint` 要不要并入 `%APPDATA%\QuotaTray` 也没定——并入会读到 Tauri 的 `settings.json` / `webview.log`，不并则 v1.x 用户的主题、刷新间隔、自启状态静默丢失。两个托盘图标、两个单实例不是可发布的升级路径。
 4. **现场缺口里有四条是发布必过的**：100/150/200% DPI、混合 DPI/多屏、IME、成功登录（exit 0）的 settle（`PARITY.md` §12）。Tauri 线已经有三版发布和更长现场。

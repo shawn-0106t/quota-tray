@@ -125,6 +125,7 @@
 | 截图与设计评审产物 | `demo/ui-demo.html` / README shots | 同一生成器 + `--shots` | 本轮重生成，与 `main` 逐字节相同 | ✅ |
 | 诊断 CLI | `--test-fetch/--test-deepseek/--test-usage/--test-update/--test-ui/--test-login` | `--test-heights/-corner/-tab-anim/-blur/-tray-click/-tray/-clamp/-active-tab/-windows/-settings/-menu/-skills/-dialogs/-close/-signin/-login` | 见 §13；两套自检不重叠 | ⚠️ §11.7 |
 | 发布线 | 五载体版本门禁 + 便携 exe | 尚未进发布线（本分支 `1.0.1`，crate `0.1.0`） | `check_versions.py`；`release.yml` | ⚠️ §11.8 |
+| 运行时内存（空闲，225% DPI） | 10 进程 / **147–205 MB** 私有（其中 9 个 WebView2 占 130–185 MB） | 1 进程 / **81–82 MB**；面板画过之后 122 MB | `spike/p5/mem_footprint.ps1`，2026-11-21 三次同协议实测 | ✅ |
 
 ## 11. 刻意差异（每条都有理由）
 
