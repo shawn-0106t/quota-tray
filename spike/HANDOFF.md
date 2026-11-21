@@ -308,7 +308,7 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 
 `main` 的 `[Unreleased]` 是 PR [#11](https://github.com/shawn-0106t/quota-tray/pull/11) 的七条修复，其中 Critical 是 usage 抓取把 `200 + {"code":40003}` 当全零月份、覆盖 last-good 并把失败 base 记住——账号数字会被写坏。这些都是已合并但未发布的补丁，按 semver 属于 patch，因此定版 `1.0.3`（日期 2026-11-21），五个载体已升、`check_versions.py` 六项 ok。
 
-准备分支 `chore/release-1.0.3`（在 `../kimi-deepseek-quota-dashboard` 里，`main` 是 PR-only）：本地 gates 全绿后**只差** push → PR → 合进 `main` → 打 `v1.0.3` tag。tag 仍要用户点头，因为它会触发草稿 Release。
+准备分支 `chore/release-1.0.3` 已作为 [PR #13](https://github.com/shawn-0106t/quota-tray/pull/13) 合并（`4150e19`，2026-11-21）：`main` 的五载体是 1.0.3、`main` 的 CI 绿、远端 0 个 open PR。合并前先把两个 Dependabot PR（#9 npm、#10 cargo）squash 合并，分支 rebase 到新 `main` 后用 `npm ci` + 全量 gates 重验（`main` 上 `tauri` 已到 2.12.6、`@tauri-apps/api` 2.12.5；release exe 7,204,864 B、`FileVersion=1.0.3`、`--test-ui` 四窗 OK、`--test-deepseek` 打到真实接口）。**只剩打 `v1.0.3` tag**（annotated；`release.yml` 以 `--tag` 校验五载体并开草稿 Release，发布仍手动）——这一步等用户点头。
 
 ### 9.2 Slint 是否成为 v2.0.0 主线（已拍板：不立即替代）
 
