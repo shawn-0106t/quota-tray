@@ -38,20 +38,20 @@
 
 **第二轮（审上面这批修复本身）**：又派了两个只读审查（Rust / 前端+CI），抓到 4 条真问题并已修——① 看门狗没有代次，`hide #1` 的看门狗会误清 `hide #2` 的闩，导致第二次 hide 的 `finish_hide` 变成过期回调、窗口不消失（现在 `panel_hide_gen` 对代，且超时直接**完成**这次 hide 而不是只清标志）；② Kimi CLI token **过期**被并进「未配置」，托盘会把旧百分比长期显示且不再 30 秒重试（现在 `describe().expired` → `token-expired`，真机 `--test-fetch` 已从 `no-token` 变成 `token-expired`）；③ 「未配置」被画成红字，违反「红只表示失败」（现在中性色，`PLAN.md` §5.2/§5.3 同步为实际规则）；④ 校验路径仍会把非 JSON 的 2xx 记成 usage base（现在跳过该 base）。另外 `/models` 的尝试改成原子领取（并发的两次 fetch 不会各发一次请求），并补了 pin 住 wire 错误码的测试（**55 tests**）。复审还指出 `no-user-token` 的表头行为与 PLAN 不符——按仓库规矩**改 PLAN**（新规则更诚实：余额仍是实时的，就写 `Updated`），不是把行为改回去。
 
-**已知未修（按风险排序，需要单独决定）**：
+**已知未修（按风险排序，需要单独决定）**：下面每条都标了归属——这些是**对 Tauri 构建做全量审查**时发现的（`【仅 Tauri】`），`【两壳】` 表示 Slint 壳通过同一份 `quota-core` 代码共享同一个缺口。
 
-1. **两个 fetch 没有 single-flight**：悬停预取与手动 Refresh 可并发，后到的旧样本会覆盖新的，且失败可能被成功样本吞掉（`polling.rs`）。要修得加每个 provider 的互斥或队列。
-2. **rebuild 批次期间到达的 `ProcessFailed` 被丢弃**，SPEC 22.4 要求排队合并（`recovery.rs:664`）。只有当两个窗口在同一秒内崩才触发。
-3. **`ProcessFailedKind()` 读失败 → `LogOnly` 且不标 dead**：真崩会被当成已知良性项，白屏窗口照常 show。
-4. **`verifying` 有一条 µs 级保持 true 的路径**（`login.rs` 的 pending 分支在 epoch 检查之后又置 true）；命中后本次会话的候选只进队列不校验。
-5. **`kimi_usage` 的增量索引只认「文件变小」**：被重写成**更大**的同一路径会从旧偏移续读并重复计数。
-6. **`line.time` 没有量纲校验**：秒级时间戳会落进 1970 桶并被索引永久剪掉。
-7. **`credentials.rs` 只有 1 个测试**：30 秒余量、TOML 正则、`describe()` 与 `resolve()` 的一致性全靠 `--test-fetch` 现场验证。
-8. **`home_dir()?` 挡在 `KIMI_CODE_HOME` 之前**：服务/计划任务上下文里没有 `USERPROFILE` 时会误报未配置。
-9. **`work_area_phys` 忽略 `SystemParametersInfoW` 的返回值**：失败时整个 `RECT` 为 0，窗口会算到屏幕外。
-10. **自启只在 Settings 保存时对账**：settings 说开、注册表值丢了，只能靠用户再点一次 Save。
-11. **capability 只覆盖 `core:default`**：应用自身命令不受 ACL 约束（四个本地窗口共享命令面），且 `core:default` 含 `tray:allow-remove-by-id` 等前端用不到的权限。已在 `SECURITY.md` 写清实际边界。
-12. **打包脚本在两次 rename 之间被杀**会留下新 checksum 配旧 zip（`release.yml` 的 timeout 或 runner 取消）；`fmtTokens` 见上。
+1. 【仅 Tauri】**两个 fetch 没有 single-flight**：悬停预取与手动 Refresh 可并发，后到的旧样本会覆盖新的，且失败可能被成功样本吞掉（`polling.rs`）。要修得加每个 provider 的互斥或队列。
+2. 【仅 Tauri】**rebuild 批次期间到达的 `ProcessFailed` 被丢弃**，SPEC 22.4 要求排队合并（`recovery.rs:664`）。只有当两个窗口在同一秒内崩才触发。
+3. 【仅 Tauri】**`ProcessFailedKind()` 读失败 → `LogOnly` 且不标 dead**：真崩会被当成已知良性项，白屏窗口照常 show。
+4. 【仅 Tauri】**`verifying` 有一条 µs 级保持 true 的路径**（`login.rs` 的 pending 分支在 epoch 检查之后又置 true）；命中后本次会话的候选只进队列不校验。
+5. 【两壳】**`kimi_usage` 的增量索引只认「文件变小」**：被重写成**更大**的同一路径会从旧偏移续读并重复计数。
+6. 【两壳】**`line.time` 没有量纲校验**：秒级时间戳会落进 1970 桶并被索引永久剪掉。
+7. 【两壳】**`credentials.rs` 只有 1 个测试**：30 秒余量、TOML 正则、`describe()` 与 `resolve()` 的一致性全靠 `--test-fetch` 现场验证。
+8. 【两壳】**`home_dir()?` 挡在 `KIMI_CODE_HOME` 之前**：服务/计划任务上下文里没有 `USERPROFILE` 时会误报未配置。
+9. 【仅 Tauri】**`work_area_phys` 忽略 `SystemParametersInfoW` 的返回值**：失败时整个 `RECT` 为 0，窗口会算到屏幕外。
+10. 【两壳】**自启只在 Settings 保存时对账**：settings 说开、注册表值丢了，只能靠用户再点一次 Save。
+11. 【仅 Tauri】**capability 只覆盖 `core:default`**：应用自身命令不受 ACL 约束（四个本地窗口共享命令面），且 `core:default` 含 `tray:allow-remove-by-id` 等前端用不到的权限。已在 `SECURITY.md` 写清实际边界。
+12. 【仓库】**打包脚本在两次 rename 之间被杀**会留下新 checksum 配旧 zip（`release.yml` 的 timeout 或 runner 取消）；`fmtTokens` 见上。
 
 ## v1.0.2 的四轮审查与处置（2026-11-15）
 
