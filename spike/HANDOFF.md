@@ -308,7 +308,7 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 
 `main` 的 `[Unreleased]` 是 PR [#11](https://github.com/shawn-0106t/quota-tray/pull/11) 的七条修复，其中 Critical 是 usage 抓取把 `200 + {"code":40003}` 当全零月份、覆盖 last-good 并把失败 base 记住——账号数字会被写坏。这些都是已合并但未发布的补丁，按 semver 属于 patch，因此定版 `1.0.3`（日期 2026-11-21），五个载体已升、`check_versions.py` 六项 ok。
 
-准备分支 `chore/release-1.0.3` 已作为 [PR #13](https://github.com/shawn-0106t/quota-tray/pull/13) 合并（`4150e19`，2026-11-21）：`main` 的五载体是 1.0.3、`main` 的 CI 绿、远端 0 个 open PR。合并前先把两个 Dependabot PR（#9 npm、#10 cargo）squash 合并，分支 rebase 到新 `main` 后用 `npm ci` + 全量 gates 重验（`main` 上 `tauri` 已到 2.12.6、`@tauri-apps/api` 2.12.5；release exe 7,204,864 B、`FileVersion=1.0.3`、`--test-ui` 四窗 OK、`--test-deepseek` 打到真实接口）。**只剩打 `v1.0.3` tag**（annotated；`release.yml` 以 `--tag` 校验五载体并开草稿 Release，发布仍手动）——这一步等用户点头。
+准备分支 `chore/release-1.0.3` 已作为 [PR #13](https://github.com/shawn-0106t/quota-tray/pull/13) 合并（`4150e19`，2026-11-21）：`main` 的五载体是 1.0.3、`main` 的 CI 绿、远端 0 个 open PR。合并前先把两个 Dependabot PR（#9 npm、#10 cargo）squash 合并，分支 rebase 到新 `main` 后用 `npm ci` + 全量 gates 重验（`main` 上 `tauri` 已到 2.12.6、`@tauri-apps/api` 2.12.5；release exe 7,204,864 B、`FileVersion=1.0.3`、`--test-ui` 四窗 OK、`--test-deepseek` 打到真实接口）。**`v1.0.3` 已于 2026-11-21 13:33 UTC 发布并标记 Latest**，其后 [PR #15](https://github.com/shawn-0106t/quota-tray/pull/15)（全量审查）与 [PR #20](https://github.com/shawn-0106t/quota-tray/pull/20)（抓取单飞）又出了 **`v1.0.4`**（15:19 UTC，当前 Latest）。两条都在 `main` 上，与本分支无关；本分支的 `src-tauri` 若也要抓取单飞，需要单独镜像——不过 Slint 壳每个 provider 只有一条轮询循环，本身就不存在并发抓取。
 
 ### 9.2 Slint 成为 v2.0.0 主线（已拍板：不立即替代，先做测试版）
 
