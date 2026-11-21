@@ -240,7 +240,7 @@ fn spawn_pollers(
                         result.fill_missing_from(previous);
                     }
                 }
-                let failed = result.error.is_some();
+                let failed = result.is_failure();
                 last = Some(result.clone());
                 if tx.send(Msg::Quota(result)).is_err() {
                     return;
@@ -266,7 +266,7 @@ fn spawn_pollers(
                 if result.balance.is_some() || result.usage.is_some() {
                     deepseek::save_cache(&result);
                 }
-                let failed = result.has_error();
+                let failed = result.is_failure();
                 last = Some(result.clone());
                 if tx.send(Msg::Deepseek(result)).is_err() {
                     return;

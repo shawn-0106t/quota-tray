@@ -152,7 +152,7 @@ fn kimi_tooltip_line(last: Option<&QuotaResult>) -> String {
                 segment_percent(&l.five_hour),
                 segment_percent(&l.week)
             );
-            if l.error.is_some() {
+            if l.is_failure() {
                 text.push_str(" (fetch failed)");
             }
             text
@@ -168,7 +168,7 @@ fn deepseek_tooltip_line(last: Option<&DeepseekResult>) -> String {
                 Some(b) => format!("DeepSeek {}", fmt_money(b.total, &b.currency)),
                 None => "DeepSeek --".to_string(),
             };
-            if r.has_error() {
+            if r.is_failure() {
                 text.push_str(" (fetch failed)");
             }
             text
@@ -389,6 +389,20 @@ mod tests {
         assert_eq!(
             tray_tooltip(Some(&quota(0.0, None)), None),
             "Quota Tray\nKimi 5h 0% · week 0%\nDeepSeek --"
+        );
+        // "Not configured" is not a failure: the markers are reserved for
+        // fetches that actually broke (PLAN §5.3).
+        assert_eq!(
+            tray_tooltip(
+                Some(&quota(31.0, Some("no-token"))),
+                Some(&deepseek(45.44, "CNY", Some("no-api-key")))
+            ),
+            "Quota Tray\nKimi 5h 31% · week 16%\nDeepSeek ¥45.44"
+        );
+        // An expired CLI token is one, though: it leaves stale numbers on screen.
+        assert_eq!(
+            tray_tooltip(Some(&quota(31.0, Some("token-expired"))), None),
+            "Quota Tray\nKimi 5h 31% · week 16% (fetch failed)\nDeepSeek --"
         );
     }
 }

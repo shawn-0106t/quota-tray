@@ -23,6 +23,10 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 /// Without an API key nothing can work, so that one reads as configuration
 /// rather than as a failed fetch; every other code is a failure (PLAN §5.2).
 const NO_API_KEY: &str = "no-api-key";
+/// The DeepSeek usage token's counterpart, and the Kimi credential's: an
+/// unconfigured provider must not read as broken (PLAN §5.2 / §5.3).
+const NO_USER_TOKEN: &str = "no-user-token";
+const NO_TOKEN: &str = "no-token";
 
 pub fn apply(ui: &Panel, data: &Data) {
     let now = Local::now();
@@ -331,8 +335,10 @@ pub fn apply_theme(shell: &std::rc::Rc<std::cell::RefCell<crate::shell::Shell>>)
 fn apply_stamps(ui: &Panel, data: &Data, now: DateTime<Local>) {
     let (kimi_text, kimi_bad) = match data.quota.as_ref() {
         None => (String::new(), false),
-        Some(q) => match q.error {
-            // "Fetch failed", not "Update failed": this is the quota fetch; the
+        Some(q) => match q.error.as_deref() {
+            // Never configured: configuration, not a fault — red is reserved for
+            // failures (PLAN §3.5 / §5.2).
+            Some(NO_TOKEN) => ("Not configured".to_string(), false), // "Fetch failed", not "Update failed": this is the quota fetch; the
             // CLI version check is a separate path (PLAN §5.3).
             Some(_) => ("Fetch failed".to_string(), true),
             None => (fmt_updated(q.fetched_at, now), false),
@@ -344,7 +350,11 @@ fn apply_stamps(ui: &Panel, data: &Data, now: DateTime<Local>) {
     let (ds_text, ds_bad) = match data.deepseek.as_ref() {
         None => (String::new(), false),
         Some(r) => match (r.balance_error.as_deref(), r.usage_error.as_deref()) {
-            (Some(NO_API_KEY), _) => ("Not configured".to_string(), true),
+            // Nothing works without a key, so this is configuration too.
+            (Some(NO_API_KEY), _) => ("Not configured".to_string(), false),
+            // A missing usage token leaves the balance live: the stamp keeps the
+            // honest timestamp and the usage block carries its own hint.
+            (None, Some(NO_USER_TOKEN)) => (fmt_updated(r.fetched_at, now), false),
             (None, None) => (fmt_updated(r.fetched_at, now), false),
             _ => ("Fetch failed".to_string(), true),
         },

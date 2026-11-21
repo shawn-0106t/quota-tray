@@ -118,6 +118,15 @@ impl DeepseekResult {
         self.balance_error.is_some() || self.usage_error.is_some()
     }
 
+    /// An error the user cannot fix by editing settings: a real fetch failure.
+    /// `no-api-key` / `no-user-token` mean "not configured", which must not
+    /// paint "(fetch failed)" forever or retry every 30 s (PLAN §5.3).
+    pub fn is_failure(&self) -> bool {
+        let failed = |e: &Option<String>| e.as_deref().is_some_and(|s| s != "no-api-key");
+        let failed_token = |e: &Option<String>| e.as_deref().is_some_and(|s| s != "no-user-token");
+        failed(&self.balance_error) || failed_token(&self.usage_error)
+    }
+
     /// Keep the last-known-good half on failure (PLAN §5.3): the status line
     /// reports the failure, the numbers stay put.
     pub fn fill_missing_from(&mut self, last: &DeepseekResult) {

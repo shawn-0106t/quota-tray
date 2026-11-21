@@ -15,7 +15,16 @@ use std::collections::HashMap;
 
 /// {"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"100.00"}]}
 pub fn parse_balance(json: &str) -> Result<BalanceInfo, serde_json::Error> {
+    use serde::de::Error as _;
     let root: Value = serde_json::from_str(json)?;
+    // A 200 is not a balance. An error envelope (`{"code":40003,…}`), a gateway
+    // page or a renamed field would otherwise parse as "¥0.00, unavailable" —
+    // which overwrites the last-good cache, prints a red `Insufficient balance`
+    // under a fresh timestamp, and (because the paste field verifies the API key
+    // with this same call) accepts a key the platform refused.
+    if root.get("is_available").is_none() && root.get("balance_infos").is_none() {
+        return Err(serde_json::Error::custom("not a balance payload"));
+    }
     let mut info = BalanceInfo::default();
     if root.get("is_available").and_then(Value::as_bool) == Some(true) {
         info.is_available = true;
@@ -413,6 +422,28 @@ mod tests {
         assert_eq!(b.total, 100.00);
         assert_eq!(b.granted, 50.00);
         assert_eq!(b.topped_up, 50.00);
+    }
+
+    #[test]
+    fn a_200_that_is_not_a_balance_is_a_parse_error() {
+        // The platform answers 200 with its error envelope; a gateway can answer
+        // 200 with anything. Both used to parse as "¥0.00, unavailable", which
+        // overwrote the cache and let a refused API key pass verification.
+        for body in [
+            r#"{"code":40003,"msg":"Authorization Failed","data":null}"#,
+            r#"{"error":{"message":"Authentication Fails"}}"#,
+            "{}",
+        ] {
+            assert!(
+                parse_balance(body).is_err(),
+                "accepted a non-balance body: {body}"
+            );
+        }
+        // An account with no balance block at all still parses: the platform
+        // always sends `is_available`, and that is what decides the card.
+        let empty = parse_balance(r#"{"is_available":false}"#).expect("shape is a balance");
+        assert!(!empty.is_available);
+        assert_eq!(empty.total, 0.0);
     }
 
     #[test]

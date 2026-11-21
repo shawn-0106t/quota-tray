@@ -60,6 +60,14 @@ impl QuotaResult {
         }
     }
 
+    /// Is this a *failure* (retry in 30 s, red status) rather than a state the
+    /// user has to fix (`no-token`)? Conflating the two paints "(fetch failed)"
+    /// on a provider that was never configured and re-polls it every 30 s
+    /// (PLAN §5.3).
+    pub fn is_failure(&self) -> bool {
+        self.error.as_deref().is_some_and(|e| e != "no-token")
+    }
+
     /// On failure keep last-known-good data: fill null fields from `last`
     /// (SPEC 16.5 step 2; the UI only shows the failure hint in the status line).
     pub fn fill_missing_from(&mut self, last: &QuotaResult) {
@@ -89,7 +97,11 @@ fn http_client() -> Option<&'static Client> {
 
 pub async fn fetch() -> QuotaResult {
     let Some(token) = credentials::load_token() else {
-        return QuotaResult::failed("no-token");
+        // Two different states land here: nothing configured, and a CLI token
+        // that lapsed. `describe()` knows which, and an expired token must read
+        // as a failure — otherwise the tray keeps printing the last good
+        // percentages with no marker and the poll drops to the slow interval.
+        return QuotaResult::failed(no_token_error(credentials::describe().expired));
     };
     let Some(client) = http_client() else {
         return QuotaResult::failed("HttpRequestException");
@@ -119,16 +131,48 @@ pub async fn fetch() -> QuotaResult {
         Err(_) => return QuotaResult::failed("JsonException"),
     };
 
-    let mut r = QuotaResult {
-        five_hour: parse_five_hour(&root),
-        week: None,
-        extra: None,
+    quota_from_root(&root)
+}
+
+/// Wire code for "the fetch had no credential". Kept as one function so the
+/// `no-token` / `token-expired` split is testable without HTTP, and pinned by a
+/// test because the frontend / Slint view matches these strings.
+fn no_token_error(expired: bool) -> &'static str {
+    if expired {
+        "token-expired"
+    } else {
+        "no-token"
+    }
+}
+
+/// The payload -> card model. A 200 whose keys nothing recognised is a *failed
+/// fetch*, not an empty account: returning an empty success here would print
+/// `--` on both cards and "Not activated" on Extra while the header says
+/// `Updated HH:MM`, and the poller would overwrite the last-good numbers with it
+/// (PLAN §5.3).
+///
+/// Presence, not parse success: a brand-new account can legitimately answer
+/// with an empty `limits` array, and that is still a real answer.
+fn quota_from_root(root: &Value) -> QuotaResult {
+    let recognised = [
+        "limits",
+        "usage",
+        "usages",
+        "booster_wallet",
+        "boosterWallet",
+    ]
+    .iter()
+    .any(|key| root.get(*key).is_some());
+    if !recognised {
+        return QuotaResult::failed("parse-error");
+    }
+    QuotaResult {
+        five_hour: parse_five_hour(root),
+        week: parse_week(root),
+        extra: Some(parse_extra_from_root(root)),
         fetched_at: Local::now(),
         error: None,
-    };
-    r.week = parse_week(&root);
-    r.extra = Some(parse_extra_from_root(&root));
-    r
+    }
 }
 
 /// 5-hour window: `limits[0].detail` (PLAN §5.1). The payload carries no window
@@ -155,7 +199,11 @@ fn parse_week(root: &Value) -> Option<QuotaSegment> {
         .and_then(|v| v.get("used_ratio"))
         .and_then(number)
         .filter(|r| r.is_finite())
-        .map(|r| r * 100.0);
+        // `r` finite is not enough: `r * 100.0` can still overflow to infinity,
+        // which serialises as `null` (a 0-width bar) and saturates to
+        // i64::MAX in the tray tooltip. Filter the product, not the input.
+        .map(|r| r * 100.0)
+        .filter(|percent| percent.is_finite());
     match (root.get("usage").filter(|u| u.is_object()), ratio) {
         (Some(usage), ratio) => {
             let mut seg = parse_segment(usage);
@@ -207,7 +255,12 @@ fn get_i64(v: &Value) -> Option<i64> {
 }
 
 fn round_to_i64(value: f64) -> Option<i64> {
-    value.is_finite().then(|| value.round() as i64)
+    // `as i64` saturates, so a hostile `amountLeft` of 1e300 would arrive as
+    // i64::MAX and the wallet would render as a ¥92bn balance instead of
+    // "Not configured". Out of range means "no number", the same answer a
+    // missing field gets; no real payload comes near the bound.
+    const LIMIT: f64 = i64::MAX as f64;
+    (value.is_finite() && value.abs() <= LIMIT).then(|| value.round() as i64)
 }
 
 /// resetTime: RFC3339 first, then the looser shapes DateTimeOffset.TryParse
@@ -471,6 +524,64 @@ mod payload_shape_tests {
         assert_eq!(get_i64(&json!("12.6")), Some(13));
         assert_eq!(get_i64(&json!("NaN")), None);
         assert_eq!(get_i64(&json!(null)), None);
+    }
+
+    #[test]
+    fn out_of_range_numbers_read_as_missing_not_saturated() {
+        // `as i64` saturates: without the range guard a hostile 1e300 arrives
+        // as i64::MAX and the wallet renders a ¥92bn balance instead of
+        // "Not configured". No real payload comes near the bound.
+        assert_eq!(get_i64(&json!(1e300)), None);
+        assert_eq!(get_i64(&json!("-1e300")), None);
+        assert_eq!(get_i64(&json!(1e18)), Some(1_000_000_000_000_000_000));
+    }
+
+    #[test]
+    fn a_payload_that_parses_to_nothing_is_a_failed_fetch() {
+        // A renamed key must not look like an empty account: that printed `--`
+        // on both cards and "Not activated" on Extra while claiming a fresh
+        // timestamp, and it overwrote the last-good numbers.
+        let result = quota_from_root(&json!({ "unexpected": true }));
+        assert_eq!(result.error.as_deref(), Some("parse-error"));
+        assert!(result.is_failure());
+        assert!(result.five_hour.is_none() && result.week.is_none());
+        // An empty but recognised payload is still an answer: a new account
+        // can carry `limits: []`, and that must not read as a broken fetch.
+        let empty = quota_from_root(&json!({ "limits": [] }));
+        assert!(empty.error.is_none());
+        assert!(empty.five_hour.is_none());
+    }
+
+    #[test]
+    fn an_overflowing_used_ratio_is_dropped_not_infinite() {
+        // 1e307 is finite, so the input filter passes it; the product is not.
+        let root = json!({
+            "usages": { "limit_7d": { "used_ratio": 1e307 } },
+            "usage": { "used": "10", "limit": "20" }
+        });
+        let week = parse_week(&root).expect("week");
+        assert!(week.percent.is_finite(), "got {}", week.percent);
+        assert!((week.percent - 50.0).abs() < 1e-9, "got {}", week.percent);
+    }
+
+    #[test]
+    fn unconfigured_is_not_a_failure() {
+        // `no-token` is a state the user fixes by signing in, not a fetch
+        // failure: it must not paint "(fetch failed)" or retry every 30 s.
+        assert!(!QuotaResult::failed("no-token").is_failure());
+        assert!(QuotaResult::failed("HttpRequestException").is_failure());
+        assert!(QuotaResult::failed("parse-error").is_failure());
+    }
+
+    #[test]
+    fn an_expired_cli_token_is_a_failure_not_an_unconfigured_provider() {
+        // Both reach `fetch` as "no token in hand". The tray and the retry
+        // schedule must tell them apart: an expired token leaves stale numbers
+        // on screen, so it has to carry the failure marker.
+        assert_eq!(no_token_error(false), "no-token");
+        assert_eq!(no_token_error(true), "token-expired");
+        assert!(!QuotaResult::failed(no_token_error(false)).is_failure());
+        assert!(QuotaResult::failed(no_token_error(true)).is_failure());
     }
 
     // The payload carries no window identifier: `limits[0]` is taken as the

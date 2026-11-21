@@ -15,7 +15,6 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 const BALANCE_URL: &str = "https://api.deepseek.com/user/balance";
@@ -38,9 +37,42 @@ const ENDPOINTS_FILE: &str = "deepseek-endpoints.json";
 const MODELS_FILE: &str = "deepseek-models.json";
 const MODELS_TTL_HOURS: i64 = 24;
 
-/// At most one refreshing `/models` request per process: an id the endpoint
-/// does not know must not trigger a request on every poll (PLAN §6.1).
-static MODELS_REFETCHED: AtomicBool = AtomicBool::new(false);
+/// Claim the next `/models` attempt, atomically: a successful refresh is good
+/// for the cache TTL, a failed one retries after an hour, and two concurrent
+/// fetches cannot both issue it. The old "once per process" flag either froze
+/// the official names for the session (a startup blip) or, after the first 24 h,
+/// for good — PLAN §6.1 promises a vendor rename reaches the panel within a day.
+static MODELS_ATTEMPT: std::sync::Mutex<Option<(std::time::Instant, bool)>> =
+    std::sync::Mutex::new(None);
+
+fn claim_models_attempt() -> bool {
+    // A poisoned lock would mean a panic inside the critical section, which
+    // cannot happen here (no panicking calls); recover instead of taking the
+    // poller down with it.
+    let mut guard = match MODELS_ATTEMPT.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some((at, landed)) = *guard {
+        let wait = if landed {
+            std::time::Duration::from_secs(MODELS_TTL_HOURS as u64 * 3600)
+        } else {
+            std::time::Duration::from_secs(3600)
+        };
+        if at.elapsed() < wait {
+            return false;
+        }
+    }
+    // Pessimistic stamp: a panic or an early return still counts as an attempt.
+    *guard = Some((std::time::Instant::now(), false));
+    true
+}
+
+fn note_models_landed() {
+    if let Ok(mut guard) = MODELS_ATTEMPT.lock() {
+        *guard = Some((std::time::Instant::now(), true));
+    }
+}
 
 fn client() -> Option<&'static Client> {
     static CLIENT: OnceLock<Option<Client>> = OnceLock::new();
@@ -108,6 +140,9 @@ async fn fetch_usage_body(
 ) -> Result<String, String> {
     let bases = candidate_bases();
     let mut last_error = "server-error".to_string();
+    // A base answering with the platform's refusal is recorded, not returned:
+    // the answer that matters is whether *any* base accepted the token.
+    let mut refused = false;
     for base in &bases {
         let Some(client) = client() else {
             return Err("network-error".to_string());
@@ -130,14 +165,32 @@ async fn fetch_usage_body(
             return Err(error);
         }
         let body = resp.text().await.map_err(|_| "network-error".to_string())?;
+        // A 2xx body that is not JSON at all (a proxy page, a truncated
+        // response) is useless, and remembering it as this month's endpoint
+        // would pin the app to it: parsing fails, the next poll hits the same
+        // remembered base, and only deleting the file recovers.
+        if serde_json::from_str::<Value>(&body).is_err() {
+            diag.log(format!(
+                "usage/{kind} {url} -> 200 that is not JSON, next candidate"
+            ));
+            last_error = "parse-error".to_string();
+            continue;
+        }
         // A 2xx is not a success: the platform answers 200 with
         // `{"code":40003,…,"data":null}` for a dead token (the same envelope
         // `verify_user_token` rejects at sign-in). Without this check the error
         // body parses as an all-zero month, overwrites the last-good cache and
         // pins the failing base — the pane then reads ¥0.00 as if it were real.
+        //
+        // Do not stop the walk on it: a remembered endpoint can go stale and
+        // answer with its own envelope, and returning here would pin that base
+        // and fail every poll until the next sign-in.
         if !token_accepted(&body) {
-            diag.log(format!("usage/{kind} {url} -> 200 with an error envelope"));
-            return Err("token-expired".to_string());
+            diag.log(format!(
+                "usage/{kind} {url} -> 200 with an error envelope, next candidate"
+            ));
+            refused = true;
+            continue;
         }
         log_top_level_keys(&body, kind, diag);
         if load_usage_base().as_deref() != Some(base.as_str()) {
@@ -145,6 +198,11 @@ async fn fetch_usage_body(
             diag.log(format!("usage/{kind} endpoint remembered: {base}"));
         }
         return Ok(body);
+    }
+    // A refusal from any base is the more useful answer than the last 404: it
+    // is the one the pane renders as "sign in again".
+    if refused {
+        return Err("token-expired".to_string());
     }
     Err(last_error)
 }
@@ -215,6 +273,15 @@ pub async fn verify_user_token(token: &str) -> Result<(), String> {
             // a token the pane then cannot use shows up as `Fetch failed`, and
             // the next sign-in overwrites it.
             let body = resp.text().await.map_err(|_| "network-error".to_string())?;
+            // A non-empty body that is not JSON is not the platform answering —
+            // a proxy or an interstitial returned 200. That says nothing about
+            // the candidate, so walk on, and do not remember this base: doing so
+            // is what pinned the app to a page it could never parse.
+            let trimmed = body.trim();
+            if !trimmed.is_empty() && serde_json::from_str::<Value>(trimmed).is_err() {
+                last_error = "parse-error".to_string();
+                continue;
+            }
             if !token_accepted(&body) {
                 // This base answers 200 with an error envelope, but the token
                 // may still be fine on the next candidate (a dead base can be
@@ -513,11 +580,12 @@ pub async fn apply_display_names(usage: &mut UsageInfo, api_key: Option<&str>, d
     ));
     if want {
         if let Some(key) = api_key {
-            if !MODELS_REFETCHED.swap(true, Ordering::SeqCst) {
+            if claim_models_attempt() {
                 if let Some(names) = fetch_models(key, diag).await {
                     cache.names = names;
                     cache.fetched_at = Some(Local::now());
                     save_models(&cache);
+                    note_models_landed();
                 }
             }
         }
