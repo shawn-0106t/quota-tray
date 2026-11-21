@@ -295,7 +295,7 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 
 ## 9. 待拍板
 
-> **2026-11-21 已拍板两项：v1.0.3 从 `main` 切（§9.1）；Slint 壳不直接接 v2.0.0 发布线，改走七条门禁 + 一个 beta 周期（§9.2）。**
+> **2026-11-21 已拍板两项：v1.0.3 从 `main` 切（§9.1）；Slint 壳作为测试版陪跑，不接 v2.0.0 发布线，切点见 §9.2 的七条门禁。**
 
 - ~~新壳目录名~~（**已定 2026-11-15：`slint/`**）。
 - ~~最终是否用 Slint 版替代 Tauri 版~~（**已定 2026-11-21：不立即替代，见 §9.2 的门禁与切点**）。
@@ -310,9 +310,11 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 
 准备分支 `chore/release-1.0.3` 已作为 [PR #13](https://github.com/shawn-0106t/quota-tray/pull/13) 合并（`4150e19`，2026-11-21）：`main` 的五载体是 1.0.3、`main` 的 CI 绿、远端 0 个 open PR。合并前先把两个 Dependabot PR（#9 npm、#10 cargo）squash 合并，分支 rebase 到新 `main` 后用 `npm ci` + 全量 gates 重验（`main` 上 `tauri` 已到 2.12.6、`@tauri-apps/api` 2.12.5；release exe 7,204,864 B、`FileVersion=1.0.3`、`--test-ui` 四窗 OK、`--test-deepseek` 打到真实接口）。**只剩打 `v1.0.3` tag**（annotated；`release.yml` 以 `--tag` 校验五载体并开草稿 Release，发布仍手动）——这一步等用户点头。
 
-### 9.2 Slint 是否成为 v2.0.0 主线（已拍板：不立即替代）
+### 9.2 Slint 成为 v2.0.0 主线（已拍板：不立即替代，先做测试版）
 
-**决定：方向采纳，切点后移。** Slint 壳先以「可选 beta 资产」陪跑，v2.0.0 在下列七条全绿时才切发布线。
+> **2026-11-21 用户决定：Slint 作为测试版。** 不是 v2.0.0 发布线，是带着「可选 beta 资产」身份陪跑，用真实使用收现场数据；v2.0.0 在下面七条全绿时才切。
+
+**决定：方向采纳，切点后移。**
 
 理由（按证据强度排）：
 
@@ -335,6 +337,15 @@ pwsh -NoProfile -File spike/p4/list_webview_procs.ps1 -Filter quota-tray-slint
 | 6 | 体积与启动的明确结论（接受 / 优化 / 放弃），启动时间与常驻内存实测补进 `PARITY.md` | `PARITY.md` §10 |
 | 7 | `ci-slint.yml` 进 branch protection；`PARITY.md` §10 的两行 ⚠️（§11.7 诊断 CLI、§11.8 发布线）结案 | GitHub 设置 + `PARITY.md` |
 
-**beta 通道（建议，未实现）**：从下一次发布起把 Slint exe 作为**可选**资产挂到 Release（名字带 `-slint` 后缀、不替换默认下载），利用「两应用一账号」的现有设计（独立互斥量、独立状态目录、共用 `shared/`）收第 5 条的现场数据。它不进五载体门禁——门禁只认发布产物。实现它需要一个独立 job 或一次手工构建上传；不做也能走人工把 exe 交给测试者。
+**测试版 = 什么、不是什么（2026-11-21 已定）**
+
+| 是 | 不是 |
+|---|---|
+| 可选下载的 `QuotaTray-Slint-<ver>-beta.exe`，名字带 `-beta`，描述里写明「预览版，不替代主版本」 | 不是 v2.0.0，不改 `QuotaTray.SingleInstance` / `QuotaTray` 自启名 / `%APPDATA%\QuotaTray-Slint` 状态目录 |
+| 用现有的「两应用一账号」隔离跑：独立互斥量、独立状态目录、共用 `%APPDATA%\QuotaTray\shared` 的账号文件 | 不进五载体门禁（门禁只认发布产物），不动 `release.yml` 的构建目标 |
+| 从每次 `v*` 发布起跟着挂一个资产，或单独一次手动构建后上传 | 不是默认下载，不替换 `QuotaTray.exe`，不做自动更新 |
+| 版本号跟自己的 crate（现在是 `0.1.0`），资产名里写清 | 不承诺 settings 迁移、不自称稳定 |
+
+实现方式（下一步，二选一）：① 在 `ci-slint.yml` 加一个手动触发的 job，产出 exe 并以 `gh release upload` 挂到指定 tag；② 本机构建一次（`SKIA_BINARIES_URL` 必须设）、人工上传。② 就是第一次 beta 的最小路径；① 值得在第一次之后补上，免得每次发版都要手动构建。无论哪种，**beta 资产的构建必须来自打 tag 的那棵树**，否则用户拿到的不是对应版本。
 
 **什么会让我改主意**：若目标是「彻底摆脱 WebView2」，那 Slint 只在登录窗里仍依赖它，收益不完整；若目标是体积/内存，当前数据是负收益。这两条任一条被实测推翻（比如启动与内存明显更优），切点可以提前。
