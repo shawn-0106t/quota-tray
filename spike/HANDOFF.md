@@ -125,6 +125,14 @@ spike/p0/              # P0 交互 spike：壳的骨架（Anchor / tray-icon / �
 | **P4 登录完整链路（已完成 2026-11-15）** | 子进程 `--login-host` + `--test-login` + `--test-signin`；接上设置窗的「Sign in…」与 Clear 的 cancel/epoch；结果见 `spike/p4/REPORT.md` | 四项探针全 PASS；用户关窗后设置窗还原；Clear 杀子进程且不被回写；`quota-core` 41 测试 |
 | P5 对齐矩阵与门禁（3–4 天） | `PARITY.md`、token 漂移门禁、截图重生成、CI job | 矩阵无 ❌（`quota-core` 的 fmt/clippy/test 已在 P1 接入 CI，且不阻塞现版） |
 
+**P5 进行中（2026-11-21）**：先做了「镜像漂移 + token 门禁」这一刀。
+
+- 漂移来源：本分支比 `origin/main` 少 `940e789`（PR #8，2026-11-20）。已镜像：`--ink-3` 提到 `#00000070` / `#ffffff5c`（悬停滚动条拇指 ≥3:1，WCAG 1.4.11）、`expires_at` 毫秒戳归一（`quota-core::credentials::unix_seconds` + 单测）、5 小时窗口固定 `limits[0]` 的 `parse_five_hour` 抽取 + 单测、`demo/{heights,check_contrast,build_ui_demo}.py` 三件工具（heights 默认量产物的 `#m-product`，contrast 直接解析 theme.css，`--demos` 保留冻结历史）、`demo/shot.sh` 的 `LOCALAPPDATA` 兜底与图标页对比度文案。`src/theme.css`、三个 demo 脚本与 `demo/ui-demo.html` 现在与 `main` 逐字节相同。
+- 门禁：`scripts/parity/check_tokens.py` 逐个比对 `src/theme.css` 的 15 个颜色 token（两主题）与 `slint/ui/tokens.slint`，并检查所有 `drop-shadow-*` 的 `0/8/18/0` 几何；多余 token、缺 token、单边改动一律失败。已验证能抓到旧的 `--ink-3`（`#0000004d` vs `#00000070`）和 blur 20px，修好后 0 mismatch。CI 在 `Version carriers agree` 之后新增 `Design tokens agree` 一步。
+- 同时删掉了 `Tokens.stage`：它在 Slint 侧无任何引用（demo 舞台色只在 `panel-demo-e.html`），门禁把多余 token 记为失败，留着会挡住第一轮。
+- 回归：`quota-core` 48 tests、`slint` 6 tests、两 crate 的 fmt/clippy 全绿；`heights_ref.py --compare` 17 个变体仍 Δ=0.00；`check_contrast.py` 18/18；`fmt_parity.py` 45 例 TS==Rust；README 截图重生成后字节未变。
+- 仍待做：`PARITY.md` 矩阵、`slint` 的 CI job（fmt 便宜；clippy/test 要下 Skia 预编译包，需要拍板）、截图/证据的整轮重跑放到矩阵之后。
+
 ## 6. 陷阱清单（都踩过）
 
 1. **demo 的绝对坐标不能直接搬进产品**。它证明的是「渲染器能对上」，不是「布局引擎能对上」；真实数据是 1–4 行模型，必须换成 Slint layout，再用同一套对比脚本验高度。

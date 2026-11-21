@@ -14,7 +14,10 @@
   --paper: #fbfaf9;
   --ink-1: #000000e6;
   --ink-2: #00000099;
-  --ink-3: #0000004d;
+  /* 44%: the only consumer is the hovered scrollbar thumb, which is the one
+     affordance telling you the pane scrolls — WCAG 1.4.11 wants 3:1 for it
+     (30% measured 2.11:1). check_contrast.py enforces this pair. */
+  --ink-3: #00000070;
   --hair: #00000021;
   --hair-soft: #00000012;
   --accent: #8c74b1;
@@ -37,7 +40,8 @@
   --paper: #181817;
   --ink-1: #ffffffd6;
   --ink-2: #ffffff8f;
-  --ink-3: #ffffff42;
+  /* 36%: same 3:1 rule, dark paper (26% measured 2.34:1). */
+  --ink-3: #ffffff5c;
   --hair: #ffffff1f;
   --hair-soft: #ffffff12;
   --accent: #9d88bc;

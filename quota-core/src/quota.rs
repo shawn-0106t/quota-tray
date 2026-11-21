@@ -120,24 +120,27 @@ pub async fn fetch() -> QuotaResult {
     };
 
     let mut r = QuotaResult {
-        five_hour: None,
+        five_hour: parse_five_hour(&root),
         week: None,
         extra: None,
         fetched_at: Local::now(),
         error: None,
     };
-    // 5-hour segment: root.limits[0].detail
-    if let Some(detail) = root
-        .get("limits")
-        .and_then(|l| l.as_array())
-        .and_then(|a| a.first())
-        .and_then(|first| first.get("detail"))
-    {
-        r.five_hour = Some(parse_segment(detail));
-    }
     r.week = parse_week(&root);
     r.extra = Some(parse_extra_from_root(&root));
     r
+}
+
+/// 5-hour window: `limits[0].detail` (PLAN §5.1). The payload carries no window
+/// identifier, so array order is the only handle; a non-object detail (the
+/// failure shapes) yields `None` rather than a zeroed segment.
+fn parse_five_hour(root: &Value) -> Option<QuotaSegment> {
+    root.get("limits")
+        .and_then(|l| l.as_array())
+        .and_then(|a| a.first())
+        .and_then(|first| first.get("detail"))
+        .filter(|d| d.is_object())
+        .map(parse_segment)
 }
 
 /// Weekly window. Three sources, in order of authority (PLAN §5.1; payload
@@ -440,5 +443,20 @@ mod payload_shape_tests {
         let root = json!({ "usage": { "limit": "40", "remaining": "30" } });
         let week = parse_week(&root).expect("week");
         assert!((week.percent - 25.0).abs() < 1e-9);
+    }
+
+    // The payload carries no window identifier: `limits[0]` is taken as the
+    // 5-hour window (PLAN §5.1). This pins that, and proves a second entry is
+    // ignored rather than averaged in.
+    #[test]
+    fn the_five_hour_window_is_the_first_limit_entry() {
+        let root = json!({
+            "limits": [
+                { "detail": { "used": "1", "limit": "100" } },
+                { "detail": { "used": "60", "limit": "100" } }
+            ]
+        });
+        let seg = parse_five_hour(&root).expect("first entry");
+        assert!((seg.percent - 1.0).abs() < 1e-9, "got {}", seg.percent);
     }
 }

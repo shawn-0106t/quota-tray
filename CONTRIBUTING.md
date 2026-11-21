@@ -54,6 +54,7 @@ Run the same commands locally before opening a PR:
 |---|---|
 | Secrets | gitleaks over the full commit history (CI) |
 | Version carriers | `python scripts/release/check_versions.py` — `package.json`, `package-lock.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock` must agree |
+| Design tokens | `python scripts/parity/check_tokens.py` — `src/theme.css` and `slint/ui/tokens.slint` must agree, token by token, shadow geometry included |
 | Rust format | `cargo fmt --check` (in `src-tauri` and `quota-core`) |
 | Rust lints | `cargo clippy --all-targets --locked -- -D warnings` (in `src-tauri`); `cargo clippy --all-targets -- -D warnings` (in `quota-core`, no `--locked`: its lockfile is generated) |
 | Rust tests | `cargo test --locked` (in `src-tauri`) and `cargo test` (in `quota-core`) — the shared data layer holds most of the suite |
@@ -75,7 +76,8 @@ derived artifacts and keep them in the same PR:
 ```sh
 PYTHONUTF8=1 python demo/build_ui_demo.py     # all windows on one page
 PYTHONUTF8=1 python demo/make_readme_shots.py # docs/screenshot-*.png
-PYTHONUTF8=1 python demo/check_contrast.py    # token pairs must stay all-pass
+PYTHONUTF8=1 python demo/check_contrast.py    # parses theme.css; every pair must pass
+PYTHONUTF8=1 python scripts/parity/check_tokens.py  # theme.css vs slint/ui/tokens.slint
 ```
 
 `demo/ui-demo.html` and `docs/screenshot-*.png` are generated — never hand-edit them. The
@@ -158,6 +160,7 @@ CI（`.github/workflows/ci.yml`）必须全绿，branch protection 要求构建 
 |---|---|
 | 敏感信息 | gitleaks 扫全历史（CI） |
 | 版本号一致 | `python scripts/release/check_versions.py`——`package.json`、`package-lock.json`、`tauri.conf.json`、`Cargo.toml`、`Cargo.lock` 必须相同 |
+| 设计 token | `python scripts/parity/check_tokens.py`——`src/theme.css` 与 `slint/ui/tokens.slint` 必须逐项一致，含投影几何 |
 | Rust 格式 | `cargo fmt --check`（在 `src-tauri` 与 `quota-core`） |
 | Rust lint | `cargo clippy --all-targets --locked -- -D warnings`（在 `src-tauri`）；`cargo clippy --all-targets -- -D warnings`（在 `quota-core`，不带 `--locked`：它的锁文件是生成的） |
 | Rust 测试 | `cargo test --locked`（在 `src-tauri`）与 `cargo test`（在 `quota-core`）——共享数据层承载大部分测试 |
@@ -177,7 +180,8 @@ GitHub 的 secret scanning **push protection** 是开着的：diff 里带被识�
 ```sh
 PYTHONUTF8=1 python demo/build_ui_demo.py     # 所有窗口一页
 PYTHONUTF8=1 python demo/make_readme_shots.py # docs/screenshot-*.png
-PYTHONUTF8=1 python demo/check_contrast.py    # token 对比度必须全过
+PYTHONUTF8=1 python demo/check_contrast.py    # 读 theme.css；所有对必须通过
+PYTHONUTF8=1 python scripts/parity/check_tokens.py  # theme.css 与 slint/ui/tokens.slint
 ```
 
 `demo/ui-demo.html` 与 `docs/screenshot-*.png` 是生成物，**不要手改**。冻结的 demo

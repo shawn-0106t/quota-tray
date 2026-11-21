@@ -23,6 +23,23 @@ the English notes first, then the Chinese mirror.
   index live in `%APPDATA%\QuotaTray\shared` — configured once, used by both
   builds. A total DeepSeek failure no longer re-stamps the cache's timestamp, and
   the settings sheet / panel bootstrap fixes from `main` are mirrored as well.
+- Mirrored from `main` (2026-11-20): `--ink-3` is raised to 3.22:1 / 3.35:1 —
+  the hovered scrollbar thumb is the only affordance telling you a pane scrolls,
+  and WCAG 1.4.11 wants 3:1 for it; a millisecond `expires_at` is divided by 1000
+  instead of reading as "valid until 5138", so an expired Kimi token finally
+  reports `Expired` rather than `Fetch failed`; the 5-hour window is pinned to
+  `limits[0]` with a test; `demo/heights.py` measures the shipped windows by
+  default (`--demos` keeps the frozen history) and `demo/check_contrast.py`
+  parses `src/theme.css` instead of a transcribed table.
+
+### Added
+
+- `scripts/parity/check_tokens.py`: the Slint shell cannot read CSS custom
+  properties, so `slint/ui/tokens.slint` re-declares every colour token. The
+  gate compares all 15 tokens in both themes plus every `drop-shadow-*`
+  declaration against `src/theme.css`, and fails CI on a mismatch. The
+  `--ink-3` contrast fix that landed in one file only is the drift it exists to
+  catch.
 
 ### 中文
 
@@ -36,6 +53,16 @@ the English notes first, then the Chinese mirror.
   `%APPDATA%\QuotaTray-Slint`、自启值 `QuotaTray.Slint`；DeepSeek 凭证、端点、
   模型名缓存与用量扫描索引放在 `%APPDATA%\QuotaTray\shared`，配一次两个构建都能用。
   DeepSeek 全失败不再刷新缓存时间戳；设置窗与面板的初始化修复也一并镜像。
+- **修复**：镜像 `main` 的 2026-11-20 修复——`--ink-3` 提到 3.22:1 / 3.35:1
+  （悬停滚动条拇指是「这一格能滚」的唯一提示，WCAG 1.4.11 要 3:1）；毫秒版
+  `expires_at` 先除 1000，不再被读成「有效到 5138 年」，过期的 Kimi token 终于显示
+  `Expired` 而不是 `Fetch failed`；5 小时窗口固定取 `limits[0]` 并有单测；
+  `demo/heights.py` 默认量发布产物（`--demos` 保留冻结历史），
+  `demo/check_contrast.py` 改为直接解析 `src/theme.css`。
+- **新增**：`scripts/parity/check_tokens.py`——Slint 读不到 CSS 自定义属性，
+  `slint/ui/tokens.slint` 只能复刻全部颜色 token。门禁按两种主题逐个比对 15 个
+  token 与所有 `drop-shadow-*` 声明，任一不一致 CI 直接失败；`--ink-3` 只改了一边
+  正是它要拦的漂移。
 
 ## [1.0.2] — 2026-11-15
 

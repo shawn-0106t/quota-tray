@@ -47,7 +47,10 @@
   --paper: #fbfaf9;
   --ink-1: #000000e6;
   --ink-2: #00000099;
-  --ink-3: #0000004d;
+  /* 44%: the only consumer is the hovered scrollbar thumb, which is the one
+     affordance telling you the pane scrolls — WCAG 1.4.11 wants 3:1 for it
+     (30% measured 2.11:1). check_contrast.py enforces this pair. */
+  --ink-3: #00000070;
   --hair: #00000021;
   --hair-soft: #00000012;
   --accent: #8c74b1;
@@ -70,7 +73,8 @@
   --paper: #181817;
   --ink-1: #ffffffd6;
   --ink-2: #ffffff8f;
-  --ink-3: #ffffff42;
+  /* 36%: same 3:1 rule, dark paper (26% measured 2.34:1). */
+  --ink-3: #ffffff5c;
   --hair: #ffffff1f;
   --hair-soft: #ffffff12;
   --accent: #9d88bc;
@@ -539,34 +543,44 @@ body {
 
     /* ---------- settings.css ---------- */
     .win-settings .root{
+  display: flex;
+  flex-direction: column;
   max-height: calc(100vh - 56px);
+}
+.win-settings .root > .pane{
   overflow-y: auto;
 }
-.win-settings .root::-webkit-scrollbar{
+.win-settings .root > .pane::-webkit-scrollbar{
   width: 8px;
   height: 8px;
 }
-.win-settings .root::-webkit-scrollbar-track{
+.win-settings .root > .pane::-webkit-scrollbar-track{
   background: transparent;
 }
-.win-settings .root::-webkit-scrollbar-thumb{
+.win-settings .root > .pane::-webkit-scrollbar-thumb{
   background: var(--hair);
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
 }
-.win-settings .root:hover::-webkit-scrollbar-thumb{
+.win-settings .root > .pane:hover::-webkit-scrollbar-thumb{
   background: var(--ink-3);
   background-clip: padding-box;
 }
 .win-settings #titlebar{
   cursor: default;
+  flex: none;
+  padding-bottom: 14px;
 }
 .win-settings .pane{
   display: flex;
   flex-direction: column;
-  padding-top: 14px;
+  min-height: 0;
+  padding-top: 0;
   padding-bottom: 14px;
+}
+.win-settings .pane > *{
+  flex: none;
 }
 .win-settings .pane .seg{
   margin-top: 8px;
@@ -695,7 +709,7 @@ body {
 }
 .win-settings .cred-field input::placeholder{
   color: var(--ink-2);
-  opacity: 0.75;
+  opacity: 1;
 }
 .win-settings .cred-field input:focus-visible{
   outline: 2px solid var(--accent-bar);
@@ -1564,6 +1578,29 @@ body {
             list.append(item);
           }
         }
+
+        // Machine-readable card/window heights for demo/heights.py: the review
+        // page is built from the shipped CSS, so its heights are the product's.
+        // `window` adds the 56px shadow room the app reports to its backend.
+        // A <script type="application/json"> keeps the page's layout untouched.
+        const heights = {};
+        for (const [key, sel] of [
+          ['main-kimi', '.win-kimi'],
+          ['main-deepseek', '.win-deepseek'],
+          ['settings', '.win-settings'],
+          ['skills', '.win-skills'],
+          ['menu', '.win-menu'],
+        ]) {
+          const card = document.querySelector(sel + ' .root');
+          if (!card) continue;
+          const h = Math.round(card.getBoundingClientRect().height);
+          heights[key] = { card: h, window: h + 56 };
+        }
+        const readout = document.createElement('script');
+        readout.type = 'application/json';
+        readout.id = 'm-product';
+        readout.textContent = JSON.stringify(heights);
+        document.body.append(readout);
       })();
     </script>
     

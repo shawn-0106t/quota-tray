@@ -53,6 +53,13 @@ jobs:
       - name: Version carriers agree
         run: python scripts/release/check_versions.py
 
+      # The Slint shell cannot read CSS custom properties, so it re-declares
+      # every colour token in slint/ui/tokens.slint. The --ink-3 contrast fix
+      # (2026-11-20) landed in theme.css and the copy lagged until a review
+      # caught it; this gate is the automated version of that catch.
+      - name: Design tokens agree
+        run: python scripts/parity/check_tokens.py
+
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:

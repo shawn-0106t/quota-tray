@@ -1,13 +1,13 @@
 // Design tokens mirroring src/theme.css (PLAN.md §3.2). Values are the ones
-// the pixel-verified demo uses; `dark` is the only switch.
+// the pixel-verified demo uses; `dark` is the only switch. `scripts/parity/
+// check_tokens.py` fails when the two files disagree, so edit them together.
 export global Tokens {
     in property <bool> dark: false;
 
-    out property <color> stage: dark ? #0f0f12 : #e7e7e4;
     out property <color> paper: dark ? #181817 : #fbfaf9;
     out property <color> ink1: dark ? #ffffffd6 : #000000e6;
     out property <color> ink2: dark ? #ffffff8f : #00000099;
-    out property <color> ink3: dark ? #ffffff42 : #0000004d;
+    out property <color> ink3: dark ? #ffffff5c : #00000070;
     out property <color> hair: dark ? #ffffff1f : #00000021;
     out property <color> hair-soft: dark ? #ffffff12 : #00000012;
     out property <color> accent: dark ? #9d88bc : #8c74b1;
