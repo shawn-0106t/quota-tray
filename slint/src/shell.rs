@@ -338,6 +338,11 @@ fn select_backend() -> Result<(), Box<dyn std::error::Error>> {
     slint::BackendSelector::new()
         .with_winit_window_attributes_hook(|attrs| {
             attrs
+                // Slint only toggles transparency at runtime on macOS; on
+                // Windows the surface is created opaque unless the attribute
+                // asks for alpha, and then every transparent pixel in the
+                // scene (the 28px shadow room) composites as black.
+                .with_transparent(true)
                 .with_skip_taskbar(true)
                 .with_window_level(WindowLevel::AlwaysOnTop)
                 .with_resizable(false)

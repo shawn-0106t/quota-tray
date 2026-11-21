@@ -1,3 +1,9 @@
+// A GUI subsystem binary: without this the release build is a console
+// process and Windows opens a terminal behind the panel. The `--test-*`
+// modes still print when their stdout is a pipe (a shell, CI), which is
+// the only place their output is read.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 // Quota Tray — Slint shell (P2 panel + P3 settings/skills/menu).
 //
 // The data layer is `quota-core`; this crate is only the shell: four
